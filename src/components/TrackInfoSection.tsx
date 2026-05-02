@@ -1,5 +1,4 @@
 import React, { useState, useId } from 'react';
-import { supabase } from '@/lib/supabase';
 import { CAR_CLASSES } from '@/lib/classConfigs';
 
 interface TrackInfoProps {
@@ -14,6 +13,13 @@ interface TrackInfoProps {
   onChange: (field: string, value: string) => void;
 }
 
+// 16-point compass from a degrees-from-north value.
+const degreesToCompass = (deg: number): string => {
+  const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  const idx = Math.round(((deg % 360) / 22.5)) % 16;
+  return dirs[idx];
+};
+
 const TrackInfoSection: React.FC<TrackInfoProps> = ({
   trackName, raceDate, raceClass, trackCondition,
   temperature, humidity, windSpeed, windDirection,
@@ -27,14 +33,27 @@ const TrackInfoSection: React.FC<TrackInfoProps> = ({
   const handleGPS = async () => {
     setGpsLoading(true);
     setGpsStatus('Getting location...');
+
+    if (!('geolocation' in navigator)) {
+      setGpsStatus('This browser does not support geolocation.');
+      setGpsLoading(false);
+      return;
+    }
+
     try {
       const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          timeout: 15000,
+          enableHighAccuracy: false,
+          maximumAge: 60000,
+        });
       });
       const { latitude, longitude } = pos.coords;
       onChange('latitude', latitude.toString());
       onChange('longitude', longitude.toString());
+      setGpsStatus('Location found. Looking up track + weather...');
 
+      // Reverse-geocode the track name (best effort, never blocks weather).
       try {
         const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`);
         const data = await res.json();
@@ -43,30 +62,73 @@ const TrackInfoSection: React.FC<TrackInfoProps> = ({
           const name = parts.slice(0, 2).join(',').trim();
           onChange('trackName', name);
         }
-      } catch {}
+      } catch (geoErr) {
+        // eslint-disable-next-line no-console
+        console.warn('[TrackInfo] reverse-geocode failed (non-fatal):', geoErr);
+      }
 
+      // Fetch weather DIRECTLY from Open-Meteo.
+      // Open-Meteo is free, requires no API key, and supports CORS — so we
+      // don't need an edge function at all for this. (The previous
+      // get-weather edge function was just a thin proxy; calling Open-Meteo
+      // straight from the browser removes the deploy-the-function step
+      // entirely and is what was actually failing with "Failed to send a
+      // request to the Edge Function".)
       setWeatherLoading(true);
       try {
-        const { data, error } = await supabase.functions.invoke('get-weather', {
-          body: { latitude, longitude }
-        });
-        if (data && !error) {
-          if (data.temperature) onChange('temperature', data.temperature.toString());
-          if (data.humidity) onChange('humidity', data.humidity.toString());
-          if (data.wind_speed) onChange('windSpeed', data.wind_speed.toString());
-          if (data.wind_direction) onChange('windDirection', data.wind_direction);
+        const url =
+          `https://api.open-meteo.com/v1/forecast` +
+          `?latitude=${latitude}&longitude=${longitude}` +
+          `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m` +
+          `&temperature_unit=fahrenheit&wind_speed_unit=mph`;
+        const res = await fetch(url);
+        if (!res.ok) {
+          const txt = await res.text().catch(() => '');
+          throw new Error(`Open-Meteo HTTP ${res.status}${txt ? `: ${txt.slice(0, 120)}` : ''}`);
         }
-      } catch {}
+        const json = await res.json();
+        const cur = json?.current;
+        if (!cur) {
+          throw new Error('Open-Meteo returned no current weather');
+        }
+        if (cur.temperature_2m != null) {
+          onChange('temperature', String(Math.round(cur.temperature_2m)));
+        }
+        if (cur.relative_humidity_2m != null) {
+          onChange('humidity', String(Math.round(cur.relative_humidity_2m)));
+        }
+        if (cur.wind_speed_10m != null) {
+          onChange('windSpeed', String(Math.round(cur.wind_speed_10m)));
+        }
+        if (cur.wind_direction_10m != null) {
+          onChange('windDirection', degreesToCompass(Number(cur.wind_direction_10m)));
+        }
+        setGpsStatus('Location and weather filled in!');
+        setTimeout(() => setGpsStatus(''), 3000);
+      } catch (e: any) {
+        // eslint-disable-next-line no-console
+        console.error('[weather] Open-Meteo direct fetch failed:', e);
+        setGpsStatus(`Weather lookup failed: ${e?.message || 'network error'}. Coordinates were saved — enter weather manually.`);
+      }
       setWeatherLoading(false);
-
-      setGpsStatus('Location found!');
-      setTimeout(() => setGpsStatus(''), 3000);
     } catch (err: any) {
-      setGpsStatus('Location unavailable');
+      // GeolocationPositionError has a numeric `code`: 1=denied, 2=unavailable, 3=timeout
+      const code = err?.code;
+      const msg =
+        code === 1 ? 'Location permission denied. Allow location access in your browser to use GPS autofill.'
+        : code === 2 ? 'Location unavailable on this device right now.'
+        : code === 3 ? 'Location request timed out. Try again with a clear view of the sky.'
+        : (err?.message || 'Location unavailable');
+      // eslint-disable-next-line no-console
+      console.error('[TrackInfo] geolocation failed:', err);
+      setGpsStatus(msg);
     } finally {
       setGpsLoading(false);
     }
   };
+
+
+
 
   const inputClass = "w-full px-3 py-2.5 border border-[#E5E7EB] rounded-lg focus:ring-2 focus:ring-[#00A8E8] focus:border-[#00A8E8] outline-none transition-all text-[#1A1B23] bg-[#F9FAFB] text-sm placeholder-[#9CA3AF]";
   const labelClass = "block text-xs font-semibold text-[#4B5563] uppercase tracking-wider mb-1";

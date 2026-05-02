@@ -33,6 +33,80 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
   const totalFields = importantFields.length;
   const completionPct = Math.round((filledCount / totalFields) * 100);
 
+  // Try to extract a useful, user-visible error message from a
+  // supabase.functions.invoke() failure. The real backend message is buried
+  // on `error.context` (a Response) — we await its body to surface it.
+  // We ALSO recognise the generic client-side "Failed to send a request to
+  // the Edge Function" message, which the supabase-js SDK throws whenever it
+  // can't reach the function at all (overwhelmingly: function isn't deployed
+  // to your project, hence a 404 on the OPTIONS preflight or POST).
+  const describeInvokeError = async (
+    error: any
+  ): Promise<{ detail: string; likelyNotDeployed: boolean; status?: number }> => {
+    let detail = error?.message || 'Unknown error';
+    let status: number | undefined;
+    try {
+      const ctx = error?.context;
+      if (ctx) {
+        if (typeof ctx.status === 'number') status = ctx.status;
+        if (typeof ctx.text === 'function') {
+          const txt = await ctx.text();
+          try {
+            const parsed = JSON.parse(txt);
+            if (parsed?.error) detail = String(parsed.error);
+            else if (txt) detail = txt.slice(0, 300);
+          } catch {
+            if (txt) detail = txt.slice(0, 300);
+          }
+        }
+      }
+    } catch { /* ignore */ }
+
+    const msg = String(detail).toLowerCase();
+    const likelyNotDeployed =
+      status === 404 ||
+      msg.includes('failed to send a request') ||
+      msg.includes('failed to fetch') ||
+      msg.includes('function not found') ||
+      msg.includes('not found');
+
+    return { detail, likelyNotDeployed, status };
+  };
+
+  const buildErrorMessage = (
+    diag: { detail: string; likelyNotDeployed: boolean; status?: number }
+  ) => {
+    const head = diag.likelyNotDeployed
+      ? 'Setup Assist can\'t reach the AI service because the get-suggestions edge function does not appear to be deployed to your database project yet.'
+      : 'Setup Assist could not reach the AI service.';
+    const lines = [
+      head,
+      '',
+      `Details: ${diag.detail}${diag.status ? ` (HTTP ${diag.status})` : ''}`,
+      '',
+    ];
+    if (diag.likelyNotDeployed) {
+      lines.push(
+        'To fix this — full step-by-step is in DEPLOY_AI_FUNCTION.md at the project root.',
+        '',
+        'Quick version:',
+        '1. Open https://supabase.com/dashboard/project/thpyjvwtfvfxiufchrxn/functions',
+        '2. Deploy a new function named exactly "get-suggestions" (Verify JWT: OFF)',
+        '3. Paste the code from DEPLOY_AI_FUNCTION.md (or docs/edge-functions/get-suggestions.ts)',
+        '4. Project Settings → Edge Functions → Secrets → add OPENAI_API_KEY',
+        '',
+        'Note: GPS / weather autofill no longer needs an edge function — it now calls Open-Meteo directly from the browser.'
+      );
+
+    } else {
+      lines.push(
+        'If this says "OPENAI_API_KEY is not configured", add the secret in your database project: Project Settings → Edge Functions → Secrets → OPENAI_API_KEY.',
+        'If this says the OpenAI request failed, check that your OPENAI_API_KEY has credits and access to gpt-4o-mini.'
+      );
+    }
+    return lines.join('\n');
+  };
+
   const getSuggestions = async () => {
     setLoading(true);
     setSuggestions('');
@@ -49,10 +123,18 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
       if (data?.suggestion) {
         setSuggestions(data.suggestion);
       } else if (error) {
-        setSuggestions('Unable to get suggestions at this time. Check your handling feedback and try again.');
+        const diag = await describeInvokeError(error);
+        // eslint-disable-next-line no-console
+        console.error('[get-suggestions] invoke failed:', error, diag);
+        setSuggestions(buildErrorMessage(diag));
+      } else {
+        setSuggestions('No response from the suggestion service. Please try again.');
       }
-    } catch {
-      setSuggestions('Unable to connect to the suggestion service.');
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.error('[get-suggestions] threw:', e);
+      const diag = await describeInvokeError(e);
+      setSuggestions(buildErrorMessage(diag));
     }
     setLoading(false);
   };
@@ -75,13 +157,23 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
       if (data?.suggestion) {
         setWhatIfResponse(data.suggestion);
       } else if (error) {
-        setWhatIfResponse('Unable to process your question at this time. Please try again.');
+        const diag = await describeInvokeError(error);
+        // eslint-disable-next-line no-console
+        console.error('[get-suggestions what-if] invoke failed:', error, diag);
+        setWhatIfResponse(buildErrorMessage(diag));
+      } else {
+        setWhatIfResponse('No response from the suggestion service. Please try again.');
       }
-    } catch {
-      setWhatIfResponse('Unable to connect to the suggestion service.');
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.error('[get-suggestions what-if] threw:', e);
+      const diag = await describeInvokeError(e);
+      setWhatIfResponse(buildErrorMessage(diag));
     }
     setWhatIfLoading(false);
   };
+
+
 
   const renderMarkdown = (text: string) => {
     return text.split('\n').map((line, i) => {
