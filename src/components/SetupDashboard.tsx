@@ -12,6 +12,9 @@ import ShareSetupModal from './ShareSetupModal';
 import SaveSetupModal from './SaveSetupModal';
 import CreateBaseSetupView from './CreateBaseSetupView';
 import BaseTemplatePicker from './BaseTemplatePicker';
+import TodoList from './TodoList';
+import ScanTimingScreen from './ScanTimingScreen';
+import PartsReference from './PartsReference';
 import {
   enqueue as enqueuePending,
   readQueue as readPendingQueue,
@@ -68,6 +71,8 @@ const emptySetup = (): SetupState => ({
   exit_handling: '',
   session_fastest_lap: '',
   session_slowest_lap: '',
+  session_started: '',
+  session_finished: '',
   top_wing_angle: '', top_wing_offset: '', nose_wing_angle: '',
   side_boards: '', nerf_bar_height: '',
   front_sprocket: '', rear_sprocket: '', chain_tension: '',
@@ -76,6 +81,7 @@ const emptySetup = (): SetupState => ({
   lead_location: '', lead_weight: '',
   setup_name: '',
 });
+
 
 const TAB_ORDER: SetupType[] = ['base', 'heat', 'main'];
 const AUTOSAVE_MS = 5 * 60 * 1000; // 5 minutes
@@ -103,7 +109,8 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   const [saveMessage, setSaveMessage] = useState('');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [baseTemplateRefresh, setBaseTemplateRefresh] = useState(0);
-  const [activeView, setActiveView] = useState<'setup' | 'saved' | 'compare' | 'create-base'>('setup');
+  const [activeView, setActiveView] = useState<'setup' | 'saved' | 'compare' | 'create-base' | 'todo' | 'parts'>('setup');
+
   const [savedSetupsList, setSavedSetupsList] = useState<any[]>([]);
   const [showCopyFromPast, setShowCopyFromPast] = useState(false);
   const [shareModalSetup, setShareModalSetup] = useState<any>(null);
@@ -290,7 +297,64 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, stateLoaded]);
 
+  // Listen for hamburger-menu selections from Header
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (!detail || !detail.action) return;
+      const a = detail.action;
+      if (a === 'setup' || a === 'saved' || a === 'compare' || a === 'create-base' || a === 'todo' || a === 'parts') {
+        setActiveView(a);
+      }
+    };
+    window.addEventListener('onlyfast-menu', handler);
+    return () => window.removeEventListener('onlyfast-menu', handler);
+  }, []);
 
+  // Broadcast view changes so Header's menu highlights the right item
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('onlyfast-view-changed', { detail: { view: activeView } }));
+  }, [activeView]);
+
+  // Carry-forward: when switching to heat/main, if that tab is essentially empty
+  // (no chassis data), pre-fill it from the previous session (base→heat, heat→main).
+  useEffect(() => {
+    if (!stateLoaded) return;
+    if (activeTab === 'base') return;
+    const sourceTab: SetupType = activeTab === 'heat' ? 'base' : 'heat';
+    const target = setups[activeTab];
+    const source = setups[sourceTab];
+    if (!source || !tabHasData(source)) return;
+    // Consider chassis-relevant fields only — ignore handling/lap/finish fields so
+    // we don't re-carry data after the user already used the tab.
+    const ignoreKeys = new Set([
+      'trackName', 'raceDate', 'raceClass', 'trackCondition',
+      'latitude', 'longitude', 'temperature', 'humidity', 'windSpeed', 'windDirection',
+      'entry_handling', 'mid_handling', 'exit_handling',
+      'session_fastest_lap', 'session_slowest_lap',
+      'session_started', 'session_finished',
+      'notes', 'setup_name',
+    ]);
+    const targetHasChassis = Object.entries(target).some(([k, v]) => !ignoreKeys.has(k) && String(v || '').trim() !== '');
+    if (targetHasChassis) return;
+    setSetups(prev => ({
+      ...prev,
+      [activeTab]: {
+        ...source,
+        // Reset session-specific fields for the new session
+        entry_handling: '',
+        mid_handling: '',
+        exit_handling: '',
+        notes: prev[activeTab].notes || '',
+        session_fastest_lap: '',
+        session_slowest_lap: '',
+        session_started: '',
+        session_finished: '',
+        setup_name: prev[activeTab].setup_name,
+      },
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, stateLoaded]);
 
 
   const handleChange = useCallback((field: string, value: string) => {
@@ -945,27 +1009,8 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
                 New Setup
               </span>
             </button>
-            <button
-              role="tab"
-              aria-selected={activeView === 'saved'}
-              onClick={() => setActiveView('saved')}
-              className={`px-2 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8] ${
-                activeView === 'saved' ? 'bg-[#00A8E8] text-white' : 'text-[#6B7280] hover:text-[#1A1B23] hover:bg-[#F5F5F7]'
-              }`}
-            >
-              Saved
-            </button>
-            <button
-              role="tab"
-              aria-selected={activeView === 'create-base'}
-              onClick={() => setActiveView('create-base')}
-              className={`px-2 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8] ${
-                activeView === 'create-base' ? 'bg-[#00A8E8] text-white' : 'text-[#6B7280] hover:text-[#1A1B23] hover:bg-[#F5F5F7]'
-              }`}
-            >
-              <span className="hidden sm:inline">Create Base Setup</span>
-              <span className="sm:hidden">Base</span>
-            </button>
+            {/* Saved Setups and Create Base Setup moved to the main hamburger menu */}
+
             <button
               role="tab"
               aria-selected={activeView === 'compare'}
@@ -1015,6 +1060,10 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
           <SetupComparison user={user} onSignInClick={onSignInClick} />
         ) : activeView === 'saved' ? (
           <SavedSetups user={user} onLoad={handleLoadSetup} refreshTrigger={refreshTrigger} />
+        ) : activeView === 'todo' ? (
+          <TodoList variant="page" />
+        ) : activeView === 'parts' ? (
+          <PartsReference user={user} onSignInClick={onSignInClick} />
         ) : activeView === 'create-base' ? (
           <CreateBaseSetupView
             user={user}
@@ -1025,6 +1074,8 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
             onTemplatesChange={() => setBaseTemplateRefresh(prev => prev + 1)}
           />
         ) : (
+
+
 
           <div
             ref={contentRef}
@@ -1261,42 +1312,15 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
                 onToggle={() => setCustomFieldsOpen(!customFieldsOpen)}
               />
 
-              <section className="bg-white rounded-2xl border border-[#E5E7EB] p-6 shadow-sm" aria-labelledby="lap-times-heading">
-                <h3 id="lap-times-heading" className="text-base font-bold text-[#1A1B23] mb-3 flex items-center gap-2">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00A8E8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-                  </svg>
-                  Session Lap Times
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-                    <label htmlFor={`${prefix}-fastest`} className="block text-xs font-semibold text-green-700 uppercase tracking-wider mb-2">
-                      Session Fastest Lap
-                    </label>
-                    <input
-                      id={`${prefix}-fastest`}
-                      type="text"
-                      value={currentSetup.session_fastest_lap || ''}
-                      onChange={(e) => handleChange('session_fastest_lap', e.target.value)}
-                      className="w-full px-4 py-3 border border-green-200 rounded-lg focus:ring-2 focus:ring-green-400 focus:border-green-400 outline-none transition-all text-green-800 bg-white text-lg font-bold placeholder-green-300"
-                      placeholder="e.g. 14.523"
-                    />
-                  </div>
-                  <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                    <label htmlFor={`${prefix}-slowest`} className="block text-xs font-semibold text-red-700 uppercase tracking-wider mb-2">
-                      Session Slowest Lap
-                    </label>
-                    <input
-                      id={`${prefix}-slowest`}
-                      type="text"
-                      value={currentSetup.session_slowest_lap || ''}
-                      onChange={(e) => handleChange('session_slowest_lap', e.target.value)}
-                      className="w-full px-4 py-3 border border-red-200 rounded-lg focus:ring-2 focus:ring-red-400 focus:border-red-400 outline-none transition-all text-red-800 bg-white text-lg font-bold placeholder-red-300"
-                      placeholder="e.g. 16.891"
-                    />
-                  </div>
-                </div>
-              </section>
+              <ScanTimingScreen
+                user={user}
+                currentSetupName={savedMeta.name}
+                currentSetupId={savedMeta.ids[activeTab]}
+                currentSetupType={activeTab}
+                onSignInClick={onSignInClick}
+              />
+
+
 
               <HandlingFeedback
                 entryHandling={currentSetup.entry_handling}

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import SettingsModal from './SettingsModal';
+import AppMenu, { MenuAction } from './AppMenu';
 
 interface HeaderProps {
   user: User | null;
@@ -13,9 +14,6 @@ interface HeaderProps {
 const getNickname = (user: User | null, override?: string): string => {
   if (!user) return '';
   if (override) return override;
-  // Check localStorage override first — this is the most recent value the user
-  // saved in Settings, and it may be ahead of what's in user_metadata if the
-  // gateway write lagged.
   try {
     const local = localStorage.getItem(`nickname_override_${user.id}`);
     if (local && local.trim()) return local;
@@ -27,6 +25,8 @@ const getNickname = (user: User | null, override?: string): string => {
 const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBackToCarSelect }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [activeView, setActiveView] = useState<string>('setup');
   const [nicknameOverride, setNicknameOverride] = useState<string>('');
   const dropdownRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -36,8 +36,6 @@ const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBac
     setShowDropdown(false);
   };
 
-  // Listen for nickname updates fired by SettingsModal so the header re-renders
-  // instantly without waiting for an auth state change event.
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
@@ -48,6 +46,16 @@ const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBac
     window.addEventListener('nickname-updated', handler);
     return () => window.removeEventListener('nickname-updated', handler);
   }, [user]);
+
+  // Listen for view changes from SetupDashboard so the menu shows the right active item
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && detail.view) setActiveView(detail.view);
+    };
+    window.addEventListener('onlyfast-view-changed', handler);
+    return () => window.removeEventListener('onlyfast-view-changed', handler);
+  }, []);
 
   useEffect(() => {
     if (!showDropdown) return;
@@ -61,18 +69,35 @@ const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBac
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [showDropdown]);
 
+  const handleMenuSelect = (action: MenuAction) => {
+    // Dispatch a global event that SetupDashboard listens for
+    window.dispatchEvent(new CustomEvent('onlyfast-menu', { detail: { action } }));
+    setActiveView(action);
+  };
+
   const nickname = getNickname(user, nicknameOverride);
   const meta: any = user?.user_metadata || {};
   const subscription = meta.subscription === 'premium' ? 'premium' : 'basic';
-
 
   return (
     <>
       <header role="banner" className="sticky top-0 z-50 bg-white border-b border-[#E5E7EB] shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <nav aria-label="Main navigation" className="flex items-center justify-between h-16">
-            {/* Logo */}
-            <div className="flex items-center gap-3">
+            {/* Left - Hamburger + Logo */}
+            <div className="flex items-center gap-2 sm:gap-3">
+              <button
+                onClick={() => setMenuOpen(true)}
+                aria-label="Open menu"
+                aria-expanded={menuOpen}
+                className="w-10 h-10 rounded-lg hover:bg-[#F5F5F7] border border-transparent hover:border-[#E5E7EB] flex items-center justify-center text-[#1A1B23] transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="3" y1="6" x2="21" y2="6" />
+                  <line x1="3" y1="12" x2="21" y2="12" />
+                  <line x1="3" y1="18" x2="21" y2="18" />
+                </svg>
+              </button>
               <img
                 src="https://d64gsuwffb70l.cloudfront.net/688263e7085fd34dcdf7f46a_1775752881652_48fe46d9.png"
                 alt="OnlyFast Setup Assist - Home"
@@ -164,7 +189,6 @@ const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBac
                     )}
                   </div>
 
-                  {/* Settings gear button */}
                   <button
                     onClick={() => setSettingsOpen(true)}
                     aria-label="Open settings"
@@ -198,6 +222,13 @@ const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBac
           </nav>
         </div>
       </header>
+
+      <AppMenu
+        isOpen={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        onSelect={handleMenuSelect}
+        activeView={activeView}
+      />
 
       {user && <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} user={user} />}
     </>

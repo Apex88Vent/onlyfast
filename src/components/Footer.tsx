@@ -36,11 +36,12 @@ const Footer: React.FC<FooterProps> = ({ onPrivacyClick, onTermsClick }) => {
               Terms of Service
             </button>
             <a
-              href="mailto:admin@onlyfast.ai"
+              href="mailto:admin@onlyfast.app"
               className="text-xs text-[#6B7280] hover:text-[#00A8E8] transition-colors underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2 rounded"
             >
               Contact Support
             </a>
+
           </nav>
         </div>
         <div className="mt-4 pt-4 border-t border-[#F0F0F2]">
