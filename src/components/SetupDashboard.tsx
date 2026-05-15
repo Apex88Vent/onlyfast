@@ -14,7 +14,9 @@ import CreateBaseSetupView from './CreateBaseSetupView';
 import BaseTemplatePicker from './BaseTemplatePicker';
 import TodoList from './TodoList';
 import ScanTimingScreen from './ScanTimingScreen';
+import TimingDataDisplay, { TimingData } from './TimingDataDisplay';
 import PartsReference from './PartsReference';
+
 import {
   enqueue as enqueuePending,
   readQueue as readPendingQueue,
@@ -102,7 +104,11 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   });
   // Unified: one file name covers all three tabs, with DB ids stored per tab
   const [savedMeta, setSavedMeta] = useState<UnifiedSavedMeta>({ name: undefined, ids: {} });
+  // Timing data (jsonb on race_setups) keyed by tab. Populated when a setup is
+  // loaded, and refreshed when ScanTimingScreen finishes saving via onSaved.
+  const [timingDataByTab, setTimingDataByTab] = useState<Partial<Record<SetupType, TimingData | null>>>({});
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
+
   const [customFieldsOpen, setCustomFieldsOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -268,6 +274,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
           main: emptySetup(),
         };
         const newIds: Partial<Record<SetupType, string>> = {};
+        const newTiming: Partial<Record<SetupType, TimingData | null>> = {};
 
         // Siblings = all rows from the same list that share this name
         const siblings = rows.filter((r: any) => r.setup_name === name);
@@ -277,14 +284,17 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
           if (newIds[t]) continue; // prefer most recent per type
           newSetups[t] = loadSetupIntoState(row);
           newIds[t] = row.id;
+          newTiming[t] = row.timing_data ?? null;
         }
 
         if (cancelled) return;
         setSetups(newSetups);
         setSavedMeta({ name, ids: newIds });
+        setTimingDataByTab(newTiming);
         setActiveTab(newIds.base ? 'base' : newIds.heat ? 'heat' : 'main');
         setActiveView('setup');
         setResumedBanner(name);
+
       } catch {
         // Network/unreachable — silently skip auto-resume so the user can still
         // use the app. SavedSetups view will surface a clearer error.
@@ -784,11 +794,13 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       main: emptySetup(),
     };
     const newIds: Partial<Record<SetupType, string>> = {};
+    const newTiming: Partial<Record<SetupType, TimingData | null>> = {};
 
     // Seed at least the clicked row
     const clickedType = (setup.setup_type || 'base') as SetupType;
     newSetups[clickedType] = loadSetupIntoState(setup);
     newIds[clickedType] = setup.id;
+    newTiming[clickedType] = setup.timing_data ?? null;
 
     // Try to fetch sibling rows (same user, same setup_name) for the other two tabs
     if (user && name) {
@@ -806,6 +818,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
             if (newIds[t]) continue; // prefer most recent per type
             newSetups[t] = loadSetupIntoState(row);
             newIds[t] = row.id;
+            newTiming[t] = row.timing_data ?? null;
           }
         }
       } catch {}
@@ -823,9 +836,22 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
     setSetups(newSetups);
     setSavedMeta({ name, ids: newIds });
+    setTimingDataByTab(newTiming);
     setActiveTab(clickedType);
     setActiveView('setup');
   };
+
+  // Called by ScanTimingScreen after it successfully writes timing_data
+  // back to race_setups. Refreshes the visible TimingDataDisplay card for the
+  // tab whose setup row was just updated.
+  const handleTimingDataSaved = useCallback((setupId: string, timingData: any) => {
+    // Find which tab corresponds to this setup id
+    const tab = (Object.keys(savedMeta.ids) as SetupType[])
+      .find(t => savedMeta.ids[t] === setupId);
+    if (!tab) return;
+    setTimingDataByTab(prev => ({ ...prev, [tab]: timingData ?? null }));
+  }, [savedMeta.ids]);
+
 
   const handleCopyLastSetup = () => {
     const sourceTab: SetupType = activeTab === 'heat' ? 'base' : activeTab === 'main' ? 'heat' : 'base';
@@ -920,9 +946,11 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       main: { ...emptySetup(), raceClass: selectedCar, raceDate: today },
     });
     setSavedMeta({ name: undefined, ids: {} });
+    setTimingDataByTab({});
     setActiveTab('base');
     setActiveView('setup');
   };
+
 
   // Does the current workspace have any data worth prompting to save?
   const workspaceHasData = (): boolean => {
@@ -1318,7 +1346,15 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
                 currentSetupId={savedMeta.ids[activeTab]}
                 currentSetupType={activeTab}
                 onSignInClick={onSignInClick}
+                onSaved={handleTimingDataSaved}
               />
+
+              <TimingDataDisplay
+                timingData={timingDataByTab[activeTab] ?? null}
+                setupType={activeTab}
+              />
+
+
 
 
 

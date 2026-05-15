@@ -1,18 +1,23 @@
-# Edge Functions for your database project
+# Edge Functions for your Supabase project
 
-The frontend calls two edge functions:
+The frontend calls three edge functions on Supabase project
+`thpyjvwtfvfxiufchrxn`:
 
-- `database.functions.invoke('get-weather', ...)`
-- `database.functions.invoke('get-suggestions', ...)`
-
-Because you've switched the app to your own database project
-(`thpyjvwtfvfxiufchrxn`), you must deploy these on **your** project. The
-old Famous-managed copies are not reachable from your new client.
+- `supabase.functions.invoke('get-weather', ...)`
+- `supabase.functions.invoke('get-suggestions', ...)`
+- `supabase.functions.invoke('scan-timing-screen', ...)`  ← **must be redeployed**
+  whenever the source file changes. The current required version is
+  **`scan-v3-testmode`** — the frontend now displays a loud
+  "stale-deployment" error if Test Mode does not see that version string in
+  the response.
 
 The full source code lives next to this README:
 
 - `docs/edge-functions/get-weather.ts`
 - `docs/edge-functions/get-suggestions.ts`
+- `docs/edge-functions/scan-timing-screen.ts`  ← deploy this for the
+  Scan Timing Screen feature. The file itself contains step-by-step
+  dashboard + CLI deploy instructions in its header comment.
 
 ---
 
