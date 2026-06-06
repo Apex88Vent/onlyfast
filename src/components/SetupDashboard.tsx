@@ -16,6 +16,7 @@ import TodoList from './TodoList';
 import ScanTimingScreen from './ScanTimingScreen';
 import TimingDataDisplay, { TimingData } from './TimingDataDisplay';
 import PartsReference from './PartsReference';
+import RaceSchedule from './RaceSchedule';
 
 import {
   enqueue as enqueuePending,
@@ -115,7 +116,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   const [saveMessage, setSaveMessage] = useState('');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [baseTemplateRefresh, setBaseTemplateRefresh] = useState(0);
-  const [activeView, setActiveView] = useState<'setup' | 'saved' | 'compare' | 'create-base' | 'todo' | 'parts'>('setup');
+  const [activeView, setActiveView] = useState<'setup' | 'saved' | 'compare' | 'create-base' | 'todo' | 'parts' | 'schedule'>('setup');
 
   const [savedSetupsList, setSavedSetupsList] = useState<any[]>([]);
   const [showCopyFromPast, setShowCopyFromPast] = useState(false);
@@ -313,7 +314,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       const detail = (e as CustomEvent).detail;
       if (!detail || !detail.action) return;
       const a = detail.action;
-      if (a === 'setup' || a === 'saved' || a === 'compare' || a === 'create-base' || a === 'todo' || a === 'parts') {
+      if (a === 'setup' || a === 'saved' || a === 'compare' || a === 'create-base' || a === 'todo' || a === 'parts' || a === 'schedule') {
         setActiveView(a);
       }
     };
@@ -1092,6 +1093,8 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
           <TodoList variant="page" />
         ) : activeView === 'parts' ? (
           <PartsReference user={user} onSignInClick={onSignInClick} />
+        ) : activeView === 'schedule' ? (
+          <RaceSchedule user={user} onSignInClick={onSignInClick} />
         ) : activeView === 'create-base' ? (
           <CreateBaseSetupView
             user={user}

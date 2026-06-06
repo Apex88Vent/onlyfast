@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+import { readMembership } from '@/lib/membership';
+
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -82,6 +84,9 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           setLoading(false);
           return;
         }
+        // Carry over the plan/promo the user picked during onboarding so it
+        // persists on the account across logout/login & devices.
+        const membership = readMembership();
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -90,9 +95,11 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               plan: 'full_access',
               nickname: nickname.trim(),
               subscription: 'basic',
+              ...membership,
             },
           },
         });
+
         if (error) throw error;
 
         // If a session was returned immediately (email confirmation disabled), the

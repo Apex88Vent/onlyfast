@@ -1,11 +1,20 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { CAR_CLASSES, CLASS_CONFIGS } from '@/lib/classConfigs';
+import PlanSelection from './PlanSelection';
+import type { MembershipState } from '@/lib/membership';
 
 interface OnboardingFlowProps {
   onComplete: (car: string) => void;
 }
 
-const ENABLED_CLASSES = ['Dwarf Cars', 'Sport Mod'];
+// Lightning Sprints & Non-Wing Sprint Cars are now fully usable classes.
+const ENABLED_CLASSES = [
+  'Dwarf Cars',
+  'Sport Mod',
+  'Lightning Sprints',
+  'Non-Wing Sprint Cars',
+];
+
 
 const carIcons: Record<string, React.ReactNode> = {
   'Dwarf Cars': (
@@ -176,12 +185,24 @@ const disciplines = [
 ];
 
 const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [pendingCar, setPendingCar] = useState<string>('');
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
     headingRef.current?.focus();
   }, [step]);
+
+  const handlePlanComplete = (_state: MembershipState) => {
+    // Membership already persisted inside PlanSelection.saveMembership().
+    onComplete(pendingCar);
+  };
+
+  const steps = [
+    { num: 1, label: 'Discipline' },
+    { num: 2, label: 'Car' },
+    { num: 3, label: 'Plan' },
+  ];
 
   return (
     <div className="min-h-screen bg-[#F5F5F7] flex items-center justify-center p-4" role="main">
@@ -198,22 +219,22 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
 
         {/* Progress */}
         <nav aria-label="Onboarding progress" className="flex items-center justify-center gap-3 mb-8">
-          <div
-            className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-              step >= 1 ? 'bg-[#00A8E8] text-white' : 'bg-white text-[#9CA3AF] border border-[#E5E7EB]'
-            }`}
-            aria-current={step === 1 ? 'step' : undefined}
-            aria-label={`Step 1: Select discipline${step >= 1 ? ' (completed)' : ''}`}
-          >1</div>
-          <div className={`w-16 h-1 rounded-full transition-all ${step >= 2 ? 'bg-[#00A8E8]' : 'bg-[#E5E7EB]'}`} aria-hidden="true" />
-          <div
-            className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-              step >= 2 ? 'bg-[#00A8E8] text-white' : 'bg-white text-[#9CA3AF] border border-[#E5E7EB]'
-            }`}
-            aria-current={step === 2 ? 'step' : undefined}
-            aria-label={`Step 2: Select car${step >= 2 ? ' (current)' : ''}`}
-          >2</div>
+          {steps.map((s, i) => (
+            <React.Fragment key={s.num}>
+              {i > 0 && (
+                <div className={`w-12 h-1 rounded-full transition-all ${step >= s.num ? 'bg-[#00A8E8]' : 'bg-[#E5E7EB]'}`} aria-hidden="true" />
+              )}
+              <div
+                className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
+                  step >= s.num ? 'bg-[#00A8E8] text-white' : 'bg-white text-[#9CA3AF] border border-[#E5E7EB]'
+                }`}
+                aria-current={step === s.num ? 'step' : undefined}
+                aria-label={`Step ${s.num}: Select ${s.label}${step === s.num ? ' (current)' : step > s.num ? ' (completed)' : ''}`}
+              >{s.num}</div>
+            </React.Fragment>
+          ))}
         </nav>
+
 
         {/* Step 1: Discipline */}
         {step === 1 && (
@@ -313,7 +334,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
                   return (
                     <button
                       key={className}
-                      onClick={() => onComplete(className)}
+                      onClick={() => { setPendingCar(className); setStep(3); }}
                       className="bg-white rounded-2xl border-2 border-[#E5E7EB] hover:border-[#00A8E8] p-6 transition-all group shadow-sm hover:shadow-lg hover:shadow-[#00A8E8]/10 text-left focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
                       aria-label={`${className} - ${config?.description || ''}`}
                     >
@@ -361,6 +382,16 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
               })}
             </div>
           </section>
+        )}
+
+        {/* Step 3: Plan Selection */}
+        {step === 3 && (
+          <div ref={headingRef as React.RefObject<HTMLDivElement>} tabIndex={-1} className="outline-none">
+            <PlanSelection
+              onComplete={handlePlanComplete}
+              onBack={() => setStep(2)}
+            />
+          </div>
         )}
       </div>
     </div>
