@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import {
   PLANS,
-  applyPromoCode,
   saveMembership,
   setPendingPlan,
   type MembershipTier,
@@ -34,22 +33,7 @@ const TIER_TO_CHECKOUT_PLAN: Record<MembershipTier, CheckoutPlan> = {
 const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack }) => {
   const navigate = useNavigate();
   const [selected, setSelected] = useState<MembershipTier>('rookie');
-  const [promoInput, setPromoInput] = useState('');
-  const [promoState, setPromoState] = useState<MembershipState | null>(null);
-  const [promoMsg, setPromoMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
-
-  const handleApplyPromo = () => {
-    const result = applyPromoCode(promoInput);
-    if (result.ok && result.state) {
-      setPromoState(result.state);
-      setSelected(result.state.membership_tier);
-      setPromoMsg({ ok: true, text: result.message });
-    } else {
-      setPromoState(null);
-      setPromoMsg({ ok: false, text: result.message });
-    }
-  };
 
   // Free plan -> normal registration. Pro/Teams -> Stripe Buy Button flow:
   // save pending_plan, then route to /upgrade (logged in) or to login if not.
@@ -75,13 +59,7 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack }) => 
 
   const handleContinue = async (tier: MembershipTier) => {
     setSaving(true);
-    let state: MembershipState;
-    // A successfully applied promo overrides the plain plan selection
-    if (promoState && (promoState.membership_tier === tier || promoState.has_admin_full_access)) {
-      state = promoState;
-    } else {
-      state = { ...DEFAULT_MEMBERSHIP, membership_tier: tier };
-    }
+    const state: MembershipState = { ...DEFAULT_MEMBERSHIP, membership_tier: tier };
     await saveMembership(state);
     setSaving(false);
     onComplete(state);
@@ -178,57 +156,8 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack }) => 
         })}
       </div>
 
-      {/* Promo code box */}
-      <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5 shadow-sm max-w-xl mx-auto">
-        <label htmlFor="promo-code" className="block text-sm font-semibold text-[#1A1B23] mb-2">
-          Have a promo code?
-        </label>
-        <div className="flex gap-2">
-          <input
-            id="promo-code"
-            type="text"
-            value={promoInput}
-            onChange={(e) => setPromoInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleApplyPromo(); } }}
-            placeholder="Enter promo code"
-            className="flex-1 px-4 py-2.5 border border-[#E5E7EB] rounded-lg focus:ring-2 focus:ring-[#00A8E8] focus:border-[#00A8E8] outline-none transition-all text-[#1A1B23] bg-[#F9FAFB] placeholder-[#9CA3AF]"
-          />
-          <button
-            type="button"
-            onClick={handleApplyPromo}
-            className="px-5 py-2.5 bg-[#1A1B23] hover:bg-black text-white rounded-lg font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
-          >
-            Apply
-          </button>
-        </div>
-        {promoMsg && (
-          <p
-            role="status"
-            className={`mt-3 text-sm font-medium flex items-center gap-2 ${
-              promoMsg.ok ? 'text-green-700' : 'text-red-600'
-            }`}
-          >
-            {promoMsg.ok ? (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
-            ) : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>
-            )}
-            {promoMsg.text}
-          </p>
-        )}
-        {promoState && (
-          <button
-            onClick={() => handleContinue(promoState.membership_tier)}
-            disabled={saving}
-            className="mt-4 w-full py-3 rounded-xl font-semibold bg-[#00A8E8] hover:bg-[#0090c7] text-white transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2 disabled:opacity-50"
-          >
-            Continue with promo access
-          </button>
-        )}
-      </div>
-
       <p className="text-center text-xs text-[#9CA3AF] mt-4">
-        New accounts default to Rookie if no plan or promo code is selected.
+        New accounts default to Rookie if no plan is selected.
       </p>
     </section>
   );

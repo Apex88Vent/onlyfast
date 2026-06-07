@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { v4 as uuidv4 } from 'uuid';
-import { toast } from '@/components/ui/use-toast';
+import { supabase } from '@/lib/supabase';
+import { syncMembershipFromSubscription } from '@/lib/subscription';
 
 interface AppContextType {
   sidebarOpen: boolean;
@@ -22,6 +22,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const toggleSidebar = () => {
     setSidebarOpen(prev => !prev);
   };
+
+  // Keep the app's paid access in sync with public.user_subscriptions so the
+  // account reflects Stripe (and removes Pro/Teams access once a subscription
+  // is no longer active/trialing). Admin override and active promos are
+  // preserved inside syncMembershipFromSubscription.
+  useEffect(() => {
+    const sync = () => {
+      syncMembershipFromSubscription().catch(() => {/* non-fatal */});
+    };
+
+    sync();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+        sync();
+      }
+    });
+
+    const onSubUpdated = () => sync();
+    window.addEventListener('subscription-updated', onSubUpdated);
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('subscription-updated', onSubUpdated);
+    };
+  }, []);
 
   return (
     <AppContext.Provider
