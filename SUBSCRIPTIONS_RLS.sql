@@ -15,6 +15,7 @@ create table if not exists public.user_subscriptions (
   stripe_customer_id text,
   stripe_subscription_id text,
   stripe_price_id text,
+  stripe_checkout_session_id text,
   plan text,                       -- 'pro' | 'teams' (or null/'free')
   status text,                     -- 'active' | 'trialing' | 'canceled' | 'past_due' | 'unpaid' | 'incomplete' ...
   created_at timestamptz default now(),
@@ -25,6 +26,7 @@ create table if not exists public.user_subscriptions (
 alter table public.user_subscriptions add column if not exists stripe_customer_id text;
 alter table public.user_subscriptions add column if not exists stripe_subscription_id text;
 alter table public.user_subscriptions add column if not exists stripe_price_id text;
+alter table public.user_subscriptions add column if not exists stripe_checkout_session_id text;
 alter table public.user_subscriptions add column if not exists plan text;
 alter table public.user_subscriptions add column if not exists status text;
 alter table public.user_subscriptions add column if not exists created_at timestamptz default now();

@@ -19,6 +19,7 @@ export interface UserSubscriptionRow {
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   stripe_price_id: string | null;
+  stripe_checkout_session_id: string | null;
 }
 
 export interface AccountStatus {
@@ -64,7 +65,7 @@ export async function fetchUserSubscription(
 
   const { data, error } = await supabase
     .from('user_subscriptions')
-    .select('user_id, plan, status, stripe_customer_id, stripe_subscription_id, stripe_price_id')
+    .select('user_id, plan, status, stripe_customer_id, stripe_subscription_id, stripe_price_id, stripe_checkout_session_id')
     .eq('user_id', uid)
     .maybeSingle();
 

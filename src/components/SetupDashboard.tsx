@@ -25,6 +25,8 @@ import {
   isNetworkError,
   PendingSave,
 } from '@/lib/offlineQueue';
+import { getAccountStatus } from '@/lib/subscription';
+
 
 
 interface SetupDashboardProps {
@@ -663,14 +665,27 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   };
 
 
-  // Save button → open modal
-  const handleSaveClick = () => {
+  // Save button → open modal (gated: free users are sent to the subscription
+  // page the first time they try to save a setup; paid/admin go straight to save)
+  const handleSaveClick = async () => {
     if (!user) {
       onSignInClick();
       return;
     }
+    try {
+      const status = await getAccountStatus(user.id, user.user_metadata || {});
+      if (!status.isPaid) {
+        // First time a free user tries to save → show the subscription page.
+        window.location.href = '/pricing';
+        return;
+      }
+    } catch {
+      // If the status check fails, fall through and allow the save modal so we
+      // never block a legitimately paid user due to a transient error.
+    }
     setSaveModalOpen(true);
   };
+
 
   const handleSaveModalSubmit = async (name: string) => {
     const result = await performSave(name);

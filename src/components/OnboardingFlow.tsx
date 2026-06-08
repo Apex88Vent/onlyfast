@@ -1,11 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { CAR_CLASSES, CLASS_CONFIGS } from '@/lib/classConfigs';
-import PlanSelection from './PlanSelection';
-import type { MembershipState } from '@/lib/membership';
 
 interface OnboardingFlowProps {
   onComplete: (car: string) => void;
 }
+
 
 // Lightning Sprints & Non-Wing Sprint Cars are now fully usable classes.
 const ENABLED_CLASSES = [
@@ -185,24 +184,21 @@ const disciplines = [
 ];
 
 const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
-  const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [pendingCar, setPendingCar] = useState<string>('');
+  // Plan selection no longer happens during onboarding — selecting a car/class
+  // takes the user straight into the app. The subscription page only appears
+  // the first time the user tries to save a setup (handled in SetupDashboard).
+  const [step, setStep] = useState<1 | 2>(1);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
     headingRef.current?.focus();
   }, [step]);
 
-  const handlePlanComplete = (_state: MembershipState) => {
-    // Membership already persisted inside PlanSelection.saveMembership().
-    onComplete(pendingCar);
-  };
-
   const steps = [
     { num: 1, label: 'Discipline' },
     { num: 2, label: 'Car' },
-    { num: 3, label: 'Plan' },
   ];
+
 
   return (
     <div className="min-h-screen bg-[#F5F5F7] flex items-center justify-center p-4" role="main">
@@ -334,7 +330,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
                   return (
                     <button
                       key={className}
-                      onClick={() => { setPendingCar(className); setStep(3); }}
+                      onClick={() => onComplete(className)}
                       className="bg-white rounded-2xl border-2 border-[#E5E7EB] hover:border-[#00A8E8] p-6 transition-all group shadow-sm hover:shadow-lg hover:shadow-[#00A8E8]/10 text-left focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
                       aria-label={`${className} - ${config?.description || ''}`}
                     >
@@ -383,19 +379,10 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
             </div>
           </section>
         )}
-
-        {/* Step 3: Plan Selection */}
-        {step === 3 && (
-          <div ref={headingRef as React.RefObject<HTMLDivElement>} tabIndex={-1} className="outline-none">
-            <PlanSelection
-              onComplete={handlePlanComplete}
-              onBack={() => setStep(2)}
-            />
-          </div>
-        )}
       </div>
     </div>
   );
+
 };
 
 export default OnboardingFlow;

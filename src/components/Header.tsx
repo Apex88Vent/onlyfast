@@ -3,6 +3,11 @@ import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import SettingsModal from './SettingsModal';
 import AppMenu, { MenuAction } from './AppMenu';
+import { fetchUserSubscription, deriveAccountStatus } from '@/lib/subscription';
+
+// Display label for the membership badge shown next to the user's name.
+type PlanLabel = 'Rookie' | 'Pro' | 'Team' | 'Admin';
+
 
 interface HeaderProps {
   user: User | null;
@@ -28,8 +33,34 @@ const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBac
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeView, setActiveView] = useState<string>('setup');
   const [nicknameOverride, setNicknameOverride] = useState<string>('');
+  const [planLabel, setPlanLabel] = useState<PlanLabel | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+
+  // Resolve the membership label (Rookie/Pro/Team/Admin) from user_subscriptions.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      if (!user) { setPlanLabel(null); return; }
+      try {
+        const row = await fetchUserSubscription(user.id);
+        const status = deriveAccountStatus(row, user.user_metadata || {});
+        const label: PlanLabel =
+          status.label === 'Admin' ? 'Admin'
+          : status.label === 'Teams' ? 'Team'
+          : status.label === 'Pro' ? 'Pro'
+          : 'Rookie';
+        if (!cancelled) setPlanLabel(label);
+      } catch {
+        if (!cancelled) setPlanLabel('Rookie');
+      }
+    };
+    load();
+    const onUpdated = () => load();
+    window.addEventListener('subscription-updated', onUpdated);
+    return () => { cancelled = true; window.removeEventListener('subscription-updated', onUpdated); };
+  }, [user]);
+
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -76,8 +107,7 @@ const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBac
   };
 
   const nickname = getNickname(user, nicknameOverride);
-  const meta: any = user?.user_metadata || {};
-  const subscription = meta.subscription === 'premium' ? 'premium' : 'basic';
+
 
   return (
     <>
@@ -144,11 +174,21 @@ const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBac
                       <span className="text-sm text-[#4B5563] hidden sm:block max-w-[140px] truncate font-medium">
                         {nickname}
                       </span>
-                      {subscription === 'premium' && (
-                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="#F59E0B" stroke="#F59E0B" strokeWidth="1" className="hidden sm:block" aria-label="Premium">
-                          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                        </svg>
+                      {planLabel && (
+                        <span
+                          className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                            planLabel === 'Admin'
+                              ? 'bg-purple-100 text-purple-700 border-purple-200'
+                              : planLabel === 'Team' || planLabel === 'Pro'
+                              ? 'bg-[#00A8E8]/10 text-[#00A8E8] border-[#00A8E8]/30'
+                              : 'bg-gray-100 text-gray-600 border-gray-200'
+                          }`}
+                          aria-label={`Account type: ${planLabel}`}
+                        >
+                          {planLabel}
+                        </span>
                       )}
+
                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#9CA3AF]" aria-hidden="true">
                         <polyline points="6 9 12 15 18 9" />
                       </svg>
