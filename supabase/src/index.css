@@ -1,0 +1,247 @@
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 97%;
+    --foreground: 225 14% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 225 14% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 225 14% 10%;
+
+    --primary: 197 100% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 9% 46%;
+
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+
+    --accent: 220 14% 96%;
+    --accent-foreground: 220 9% 46%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 197 100% 45%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 225 14% 10%;
+    --sidebar-primary: 197 100% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 14% 96%;
+    --sidebar-accent-foreground: 220 9% 46%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 197 100% 45%;
+  }
+
+  .dark {
+    --background: 0 0% 97%;
+    --foreground: 225 14% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 225 14% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 225 14% 10%;
+
+    --primary: 197 100% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 9% 46%;
+
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+
+    --accent: 220 14% 96%;
+    --accent-foreground: 220 9% 46%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 197 100% 45%;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 225 14% 10%;
+    --sidebar-primary: 197 100% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 14% 96%;
+    --sidebar-accent-foreground: 220 9% 46%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 197 100% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+
+  pre, code {
+    @apply font-mono;
+  }
+
+  /* ============================================
+     WCAG 2.2 AA - Focus Visible Styles
+     ============================================ */
+  
+  /* Global focus-visible ring for all interactive elements */
+  *:focus-visible {
+    outline: 2px solid #00A8E8;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Remove default outline for mouse users, keep for keyboard */
+  *:focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* High contrast focus for inputs */
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid #00A8E8;
+    outline-offset: 0px;
+    box-shadow: 0 0 0 3px rgba(0, 168, 232, 0.2);
+  }
+}
+
+/* ============================================
+   WCAG 2.2 AA - Screen Reader Only Utility
+   ============================================ */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* ============================================
+   WCAG 2.2 AA - Reduced Motion
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-spin {
+    animation: none !important;
+  }
+
+  .animate-in {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* ============================================
+   WCAG 2.2 AA - High Contrast Mode Support
+   ============================================ */
+@media (forced-colors: active) {
+  *:focus-visible {
+    outline: 2px solid Highlight;
+  }
+
+  button, a, input, select, textarea {
+    border: 1px solid ButtonText;
+  }
+}
+
+/* Custom scrollbar for light theme */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #F5F5F7;
+}
+::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+
+.markdown-editor {
+  @apply font-mono text-base leading-relaxed;
+}
+
+.markdown-preview {
+  @apply prose max-w-none prose-blue;
+}
+
+.markdown-preview pre {
+  @apply bg-secondary p-4 rounded-md overflow-x-auto;
+}
+
+.markdown-preview code {
+  @apply text-sm font-mono text-primary;
+}
+
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3,
+.markdown-preview h4,
+.markdown-preview h5,
+.markdown-preview h6 {
+  @apply font-sans font-semibold text-foreground;
+}
+
+.markdown-preview ul,
+.markdown-preview ol {
+  @apply my-4 ml-6;
+}
+
+/* ============================================
+   WCAG 2.2 AA - Minimum Target Size (24x24px)
+   ============================================ */
+button,
+[role="button"],
+a,
+input[type="checkbox"],
+input[type="radio"] {
+  min-height: 24px;
+  min-width: 24px;
+}
+
+/* ============================================
+   WCAG 2.2 AA - Text Spacing Override Support
+   (Users must be able to override text spacing)
+   ============================================ */
+body {
+  line-height: 1.5;
+  letter-spacing: normal;
+  word-spacing: normal;
+}
