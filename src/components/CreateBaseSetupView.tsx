@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import ChassisSetupForm from './ChassisSetupForm';
 import CustomFieldManager, { CustomField } from './CustomFieldManager';
+import { getEffectiveTier, readMembership, checkSavePermission } from '@/lib/membership';
 
 interface CreateBaseSetupViewProps {
   user: User | null;
@@ -195,8 +196,31 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
       setTimeout(() => setMessage(''), 3000);
       return;
     }
+
+    // CENTRALIZED TIER ENFORCEMENT (base templates). Editing an existing
+    // template is always allowed; only NEW templates can hit the Rookie limit.
+    // test@test.com / admin resolve to 'team' here → unlimited, so they pass.
+    const tier = getEffectiveTier(readMembership(user.user_metadata || {}));
+    if (tier !== 'team' && !editingId) {
+      const perm = checkSavePermission({
+        tier,
+        kind: 'base_template',
+        isExistingSave: false,
+        existingRaceWeekendCount: 0,
+        existingBaseSetupCount: templates.length,
+        existingCarTypes: templates.map((t: any) => (t.race_class || '').trim()).filter(Boolean),
+        newCarType: template.raceClass || selectedCar || '',
+      });
+      if (!perm.allowed) {
+        setMessage(perm.upgradeText);
+        setTimeout(() => setMessage(''), 8000);
+        return;
+      }
+    }
+
     setSaving(true);
     setMessage('');
+
     try {
       const payload = buildPayload(template);
       const result = await dbWrite(payload, editingId);

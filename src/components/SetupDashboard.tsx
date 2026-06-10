@@ -26,6 +26,12 @@ import {
   PendingSave,
 } from '@/lib/offlineQueue';
 import { getAccountStatus } from '@/lib/subscription';
+import {
+  getEffectiveTier,
+  readMembership,
+  checkSavePermission,
+  isRaceWeekendEditLocked,
+} from '@/lib/membership';
 import AdsenseAd from './AdsenseAd';
 import RookiePostSaveAdScreen from './RookiePostSaveAdScreen';
 import { shouldShowAds, AD_SLOTS } from '@/lib/ads';
@@ -38,17 +44,36 @@ interface SetupDashboardProps {
   onSignInClick: () => void;
 }
 
-type SetupType = 'base' | 'heat' | 'main';
+// A race day supports up to 6 sessions. The first 3 are the canonical defaults
+// (Hot Laps / Heat / Main); the remaining 3 are optional user-added "extra"
+// slots. setup_type stores this stable slot key (NOT the display label) so
+// save/load/update/swipe never depend on the editable session name.
+type SetupType = 'base' | 'heat' | 'main' | 'extra1' | 'extra2' | 'extra3';
+
+// Default display names + canonical session_order for the built-in slots.
+const TAB_LABELS: Record<SetupType, { full: string; short: string }> = {
+  base: { full: 'Hot Laps Setup', short: 'Hot Laps' },
+  heat: { full: 'Heat Setup', short: 'Heat' },
+  main: { full: 'Main Event Setup', short: 'Main' },
+  extra1: { full: 'Extra Session', short: 'Session 4' },
+  extra2: { full: 'Extra Session', short: 'Session 5' },
+  extra3: { full: 'Extra Session', short: 'Session 6' },
+};
+
+// Every slot key, in canonical fallback order. session_order (when present)
+// drives the real ordering; this is only the tie-break / default order.
+const ALL_SLOTS: SetupType[] = ['base', 'heat', 'main', 'extra1', 'extra2', 'extra3'];
+const MAX_SESSIONS = 6;
+
+// Default session_order for the built-in slots (Hot Laps=1, Heat=2, Main=3).
+const DEFAULT_ORDER: Record<SetupType, number> = {
+  base: 1, heat: 2, main: 3, extra1: 4, extra2: 5, extra3: 6,
+};
 
 interface SetupState {
   [key: string]: string;
 }
 
-const TAB_LABELS: Record<SetupType, { full: string; short: string }> = {
-  base: { full: 'Hot Laps Setup', short: 'Hot Laps' },
-  heat: { full: 'Heat Setup', short: 'Heat' },
-  main: { full: 'Main Event Setup', short: 'Main' },
-};
 
 const emptySetup = (): SetupState => ({
   trackName: '',
@@ -87,7 +112,20 @@ const emptySetup = (): SetupState => ({
   front_axle: '', fuel_mixture: '', bumper_height: '',
   total_weight: '', left_side_pct: '', rear_weight_pct: '',
   lead_location: '', lead_weight: '',
+  trackShape: '', trackLength: '',
   setup_name: '',
+
+});
+
+// A fresh, fully-keyed setups map (all 6 slots). Extra slots start blank and
+// are only surfaced once the user adds them (they have a label / id / data).
+const emptyAllSetups = (): Record<SetupType, SetupState> => ({
+  base: emptySetup(),
+  heat: emptySetup(),
+  main: emptySetup(),
+  extra1: emptySetup(),
+  extra2: emptySetup(),
+  extra3: emptySetup(),
 });
 
 
@@ -103,11 +141,10 @@ interface UnifiedSavedMeta {
 
 const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSignInClick }) => {
   const [activeTab, setActiveTab] = useState<SetupType>('base');
-  const [setups, setSetups] = useState<Record<SetupType, SetupState>>({
-    base: emptySetup(),
-    heat: emptySetup(),
-    main: emptySetup(),
-  });
+  // Always keep ALL 6 slot keys present so reads like setups[activeTab] are never
+  // undefined (extra slots stay blank until the user adds them).
+  const [setups, setSetups] = useState<Record<SetupType, SetupState>>(emptyAllSetups);
+
   // Unified: one file name covers all three tabs, with DB ids stored per tab
   const [savedMeta, setSavedMeta] = useState<UnifiedSavedMeta>({ name: undefined, ids: {} });
   // Timing data (jsonb on race_setups) keyed by tab. Populated when a setup is
@@ -144,8 +181,12 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   const [saveThenClear, setSaveThenClear] = useState(false);
 
   // Per-session custom display labels (display only — does NOT change setup_type,
-  // so the swipe system continues to work on base/heat/main unchanged).
+  // so the swipe system continues to work on the stable slot keys unchanged).
   const [sessionLabels, setSessionLabels] = useState<Partial<Record<SetupType, string>>>({});
+  // Per-session stable ordering. Drives the horizontal selector + swipe order.
+  // session_label is display-only; session_order is the ordering identifier.
+  const [sessionOrders, setSessionOrders] = useState<Partial<Record<SetupType, number>>>({});
+
 
   // Active-session edit controls (pencil menu / rename / delete / add).
   const [sessionMenuOpen, setSessionMenuOpen] = useState(false);
@@ -182,11 +223,18 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       const raw = localStorage.getItem(STATE_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed.setups) setSetups({
-          base: { ...emptySetup(), ...parsed.setups.base },
-          heat: { ...emptySetup(), ...parsed.setups.heat },
-          main: { ...emptySetup(), ...parsed.setups.main },
-        });
+        if (parsed.setups) {
+          // Merge persisted setups onto a fully-keyed (6-slot) base so extra
+          // sessions survive a reload and no slot is ever undefined.
+          const merged = emptyAllSetups();
+          (Object.keys(merged) as SetupType[]).forEach(t => {
+            if (parsed.setups[t]) merged[t] = { ...emptySetup(), ...parsed.setups[t] };
+          });
+          setSetups(merged);
+        }
+        // Restore per-session display labels and ordering for extra sessions.
+        if (parsed.sessionLabels) setSessionLabels(parsed.sessionLabels);
+        if (parsed.sessionOrders) setSessionOrders(parsed.sessionOrders);
         if (parsed.savedMeta) {
           // Migrate older shape {base:{id,name},heat:{id,name},main:{id,name}} → unified
           if (parsed.savedMeta.ids !== undefined) {
@@ -203,8 +251,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
             });
           }
         }
-        if (parsed.customFields) setCustomFields(parsed.customFields);
-        if (parsed.activeTab) setActiveTab(parsed.activeTab);
+
       }
     } catch {}
     setStateLoaded(true);
@@ -216,19 +263,26 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     try {
       localStorage.setItem(STATE_STORAGE_KEY, JSON.stringify({
         setups, savedMeta, customFields, activeTab,
+        // Persist extra-session metadata so they survive reloads.
+        sessionLabels, sessionOrders,
         timestamp: Date.now(),
       }));
     } catch {}
-  }, [setups, savedMeta, customFields, activeTab, stateLoaded]);
+  }, [setups, savedMeta, customFields, activeTab, sessionLabels, sessionOrders, stateLoaded]);
 
   useEffect(() => {
     if (!stateLoaded) return;
-    setSetups(prev => ({
-      base: { ...prev.base, raceClass: selectedCar || prev.base.raceClass },
-      heat: { ...prev.heat, raceClass: selectedCar || prev.heat.raceClass },
-      main: { ...prev.main, raceClass: selectedCar || prev.main.raceClass },
-    }));
+    // Apply the selected class to EVERY slot (including extra sessions) without
+    // dropping any slot — spread prev so extra sessions are never wiped.
+    setSetups(prev => {
+      const next = { ...prev };
+      (Object.keys(next) as SetupType[]).forEach(t => {
+        next[t] = { ...next[t], raceClass: selectedCar || next[t].raceClass };
+      });
+      return next;
+    });
   }, [selectedCar, stateLoaded]);
+
 
   useEffect(() => {
     if (user) fetchSavedForCopy();
@@ -294,13 +348,11 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
         const firstUsable = usable[0];
         const name = firstUsable.setup_name as string;
 
-        const newSetups: Record<SetupType, SetupState> = {
-          base: emptySetup(),
-          heat: emptySetup(),
-          main: emptySetup(),
-        };
+        // Fully-keyed (6-slot) so extra slots are present but blank.
+        const newSetups: Record<SetupType, SetupState> = emptyAllSetups();
         const newIds: Partial<Record<SetupType, string>> = {};
         const newTiming: Partial<Record<SetupType, TimingData | null>> = {};
+
 
         // Siblings = all rows from the same list that share this name
         const siblings = rows.filter((r: any) => r.setup_name === name);
@@ -401,17 +453,23 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   }, [activeTab]);
 
   const handleSharedChange = useCallback((field: string, value: string) => {
-    const sharedFields = ['trackName', 'raceDate', 'raceClass', 'trackCondition', 'latitude', 'longitude', 'temperature', 'humidity', 'windSpeed', 'windDirection'];
+    const sharedFields = ['trackName', 'raceDate', 'raceClass', 'trackCondition', 'trackShape', 'trackLength', 'latitude', 'longitude', 'temperature', 'humidity', 'windSpeed', 'windDirection'];
+
     if (sharedFields.includes(field)) {
-      setSetups(prev => ({
-        base: { ...prev.base, [field]: value },
-        heat: { ...prev.heat, [field]: value },
-        main: { ...prev.main, [field]: value },
-      }));
+      // Shared (race-day-wide) fields apply to EVERY slot, including extra
+      // sessions. Spread prev so no slot is dropped.
+      setSetups(prev => {
+        const next = { ...prev };
+        (Object.keys(next) as SetupType[]).forEach(t => {
+          next[t] = { ...next[t], [field]: value };
+        });
+        return next;
+      });
     } else {
       handleChange(field, value);
     }
   }, [handleChange]);
+
 
   const switchTab = useCallback((newTab: SetupType) => {
     if (newTab === activeTab || isAnimating) return;
@@ -470,6 +528,9 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       track_name: s.trackName || '',
       race_date: s.raceDate || new Date().toISOString().split('T')[0],
       race_class: s.raceClass || '',
+      track_shape: s.trackShape || null,
+      track_length: s.trackLength || null,
+
       track_condition: s.trackCondition || null,
       latitude: s.latitude ? parseFloat(s.latitude) : null,
       longitude: s.longitude ? parseFloat(s.longitude) : null,
@@ -559,13 +620,16 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   };
 
   // Does a given tab's setup state have enough data to be worth saving?
-  const tabHasData = (s: SetupState): boolean => {
+  // Null-safe: extra session slots may be undefined until the user adds them.
+  const tabHasData = (s: SetupState | undefined | null): boolean => {
+    if (!s) return false;
     return Object.entries(s).some(([k, v]) => {
       if (!v) return false;
       if (k === 'raceDate' || k === 'raceClass' || k === 'setup_name') return false;
       return String(v).trim() !== '';
     });
   };
+
 
   // Drain the offline queue — POSTs each pending save in order
   const drainQueue = useCallback(async (): Promise<void> => {
@@ -623,6 +687,86 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       onSignInClick();
       return null;
     }
+
+    // -------------------------------------------------------------------
+    // CENTRALIZED TIER ENFORCEMENT (uses tierLimits via checkSavePermission).
+    // The effective tier already resolves test@test.com / admin → 'team', so
+    // those accounts bypass every check below automatically. Real users keep
+    // their normal Rookie/Pro/Team restrictions.
+    // -------------------------------------------------------------------
+    const tier = getEffectiveTier(readMembership(user.user_metadata || {}));
+    if (tier !== 'team') {
+      try {
+        // Pull a lightweight snapshot of the user's existing race-weekend rows
+        // so we can count saves / car types and check the 48h edit lock.
+        const { data: existingRows } = await supabase
+          .from('race_setups')
+          .select('setup_name, setup_type, race_class, created_at')
+          .eq('user_id', user.id)
+          .limit(300);
+
+        const rows = (existingRows || []).filter(
+          (r: any) => ['base', 'heat', 'main'].includes(r.setup_type || 'base')
+        );
+
+        const raceWeekendNames = new Set(
+          rows
+            .map((r: any) => (r.setup_name || '').trim())
+            .filter((n: string) => n !== '')
+        );
+        const existingCarTypes = Array.from(
+          new Set(rows.map((r: any) => (r.race_class || '').trim()).filter(Boolean))
+        ) as string[];
+
+        // A "new" race weekend = a file name we haven't stored before.
+        const fileExists = raceWeekendNames.has(name.trim());
+        const newCarType = currentSetup.raceClass || selectedCar || '';
+
+        const perm = checkSavePermission({
+          tier,
+          kind: 'race_weekend',
+          isExistingSave: fileExists,
+          existingRaceWeekendCount: raceWeekendNames.size,
+          existingBaseSetupCount: 0,
+          existingCarTypes,
+          newCarType,
+        });
+        if (!perm.allowed) {
+          if (!silent) {
+            setSaveMessage(perm.upgradeText);
+            setTimeout(() => setSaveMessage(''), 8000);
+          }
+          setSaving(false);
+          return null;
+        }
+
+        // 48-HOUR EDIT LOCK (Rookie): existing saves older than the lock window
+        // can no longer be EDITED. They remain viewable + deletable elsewhere.
+        if (fileExists) {
+          const fileRows = rows.filter(
+            (r: any) => (r.setup_name || '').trim() === name.trim()
+          );
+          const earliest = fileRows
+            .map((r: any) => r.created_at)
+            .filter(Boolean)
+            .sort()[0];
+          if (isRaceWeekendEditLocked(tier, earliest)) {
+            if (!silent) {
+              setSaveMessage(
+                'This race weekend is locked (over 48 hours old) and can no longer be edited on the Rookie plan. It stays viewable and can still be deleted. Upgrade to Pro to remove the 48-hour lock.'
+              );
+              setTimeout(() => setSaveMessage(''), 8000);
+            }
+            setSaving(false);
+            return null;
+          }
+        }
+      } catch {
+        // Never block a legitimate save due to a transient lookup error —
+        // fall through and let the save proceed.
+      }
+    }
+
     setSaving(true);
     if (!silent) setSaveMessage('');
     try {
@@ -663,12 +807,13 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
         }
       }
 
-      setSavedMeta({ name, ids: newIds });
-      setSetups(prev => ({
-        base: { ...prev.base, setup_name: name },
-        heat: { ...prev.heat, setup_name: name },
-        main: { ...prev.main, setup_name: name },
-      }));
+      setSavedMeta({ name, ids: { ...savedMeta.ids, ...newIds } });
+      setSetups(prev => {
+        const next = { ...prev };
+        (Object.keys(next) as SetupType[]).forEach(t => { next[t] = { ...next[t], setup_name: name }; });
+        return next;
+      });
+
       setRefreshTrigger(prev => prev + 1);
       setPendingCount(readPendingQueue().length);
       if (!silent) {
@@ -690,26 +835,21 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   };
 
 
-  // Save button → open modal (gated: free users are sent to the subscription
-  // page the first time they try to save a setup; paid/admin go straight to save)
+
+  // Save button → open the save modal. Logged-in users on ANY plan (including
+  // Rookie/free) may save; the centralized tier check inside performSave decides
+  // whether each save is allowed and surfaces an upgrade prompt if a limit is hit.
   const handleSaveClick = async () => {
     if (!user) {
+      // First-save by an unregistered user: register first, then route them to
+      // the Rookie / Pro / Team selection page before returning to saving.
+      try { localStorage.setItem('pending_plan_redirect', '1'); } catch {}
       onSignInClick();
       return;
     }
-    try {
-      const status = await getAccountStatus(user.id, user.user_metadata || {});
-      if (!status.isPaid) {
-        // First time a free user tries to save → show the subscription page.
-        window.location.href = '/pricing';
-        return;
-      }
-    } catch {
-      // If the status check fails, fall through and allow the save modal so we
-      // never block a legitimately paid user due to a transient error.
-    }
     setSaveModalOpen(true);
   };
+
 
 
   const handleSaveModalSubmit = async (name: string) => {
@@ -769,6 +909,9 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       trackName: setup.track_name || '',
       raceDate: setup.race_date || '',
       raceClass: setup.race_class || '',
+      trackShape: setup.track_shape || '',
+      trackLength: setup.track_length || '',
+
       trackCondition: setup.track_condition || '',
       latitude: setup.latitude?.toString() || '',
       longitude: setup.longitude?.toString() || '',
@@ -832,14 +975,13 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   // Load the whole "file" — all rows sharing the same setup_name
   const handleLoadSetup = async (setup: any) => {
     const name = setup.setup_name || setup.track_name || '';
-    const newSetups: Record<SetupType, SetupState> = {
-      base: emptySetup(),
-      heat: emptySetup(),
-      main: emptySetup(),
-    };
+    // Fully-keyed (6-slot) so extra slots are present but blank.
+    const newSetups: Record<SetupType, SetupState> = emptyAllSetups();
     const newIds: Partial<Record<SetupType, string>> = {};
     const newTiming: Partial<Record<SetupType, TimingData | null>> = {};
     const newLabels: Partial<Record<SetupType, string>> = {};
+    const newOrders: Partial<Record<SetupType, number>> = {};
+
 
     // Seed at least the clicked row
     const clickedType = (setup.setup_type || 'base') as SetupType;
@@ -885,9 +1027,12 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     setSavedMeta({ name, ids: newIds });
     setTimingDataByTab(newTiming);
     setSessionLabels(newLabels);
+    // Reset ordering for the freshly loaded race day (built-in defaults apply).
+    setSessionOrders(newOrders);
     setActiveTab(clickedType);
     setActiveView('setup');
   };
+
 
 
   // Called by ScanTimingScreen after it successfully writes timing_data
@@ -989,16 +1134,21 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
   const doClearAllTabs = () => {
     const today = new Date().toISOString().split('T')[0];
-    setSetups({
-      base: { ...emptySetup(), raceClass: selectedCar, raceDate: today },
-      heat: { ...emptySetup(), raceClass: selectedCar, raceDate: today },
-      main: { ...emptySetup(), raceClass: selectedCar, raceDate: today },
+    // Reset to a fully-keyed (6-slot) blank workspace so extra session slots are
+    // never left undefined.
+    const cleared = emptyAllSetups();
+    (Object.keys(cleared) as SetupType[]).forEach(t => {
+      cleared[t] = { ...cleared[t], raceClass: selectedCar, raceDate: today };
     });
+    setSetups(cleared);
     setSavedMeta({ name: undefined, ids: {} });
     setTimingDataByTab({});
+    setSessionLabels({});
+    setSessionOrders({});
     setActiveTab('base');
     setActiveView('setup');
   };
+
 
 
   // Does the current workspace have any data worth prompting to save?
@@ -1083,7 +1233,8 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   };
 
   const isLastSession = () =>
-    (['base', 'heat', 'main'] as SetupType[]).filter(t => sessionExists(t)).length <= 1;
+    ALL_SLOTS.filter(t => sessionExists(t)).length <= 1;
+
 
   const submitDeleteSession = async () => {
     setDeleteBusy(true);
@@ -1092,9 +1243,10 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       try { await supabase.from('race_setups').delete().eq('id', id); } catch {}
     }
 
-    const remaining = (['base', 'heat', 'main'] as SetupType[]).filter(
+    const remaining = ALL_SLOTS.filter(
       t => t !== activeTab && sessionExists(t)
-    );
+    ).sort((a, b) => orderOf(a) - orderOf(b));
+
 
     setDeleteBusy(false);
     setDeleteOpen(false);
@@ -1124,6 +1276,12 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       delete next[activeTab];
       return next;
     });
+    setSessionOrders(prev => {
+      const next = { ...prev };
+      delete next[activeTab];
+      return next;
+    });
+
     setTimingDataByTab(prev => {
       const next = { ...prev };
       delete next[activeTab];
@@ -1143,17 +1301,27 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   const submitAddSession = () => {
     const name = addSessionValue.trim();
     if (!name) { setAddSessionError('Session name cannot be empty.'); return; }
-    const dup = (['base', 'heat', 'main'] as SetupType[]).some(
+    const dup = ALL_SLOTS.some(
       t => sessionExists(t) && labelForTab(t).toLowerCase() === name.toLowerCase()
     );
     if (dup) { setAddSessionError('A session with that name already exists for this race day.'); return; }
 
-    // Find a free canonical slot so the new session joins the swipe system.
-    const freeType = (['base', 'heat', 'main'] as SetupType[]).find(t => !sessionExists(t));
-    if (!freeType) {
-      setAddSessionError('This race day already has all 3 sessions (Hot Laps, Heat, Main).');
+    // Enforce the 6-session-per-race-day maximum.
+    if (ALL_SLOTS.filter(t => sessionExists(t)).length >= MAX_SESSIONS) {
+      setAddSessionError('Maximum of 6 sessions reached for this race day.');
       return;
     }
+
+    // Find a free stable slot key so the new session joins the swipe system.
+    const freeType = ALL_SLOTS.find(t => !sessionExists(t));
+    if (!freeType) {
+      setAddSessionError('Maximum of 6 sessions reached for this race day.');
+      return;
+    }
+
+    // Next available session_order (max existing order + 1, capped at 6).
+    const existingOrders = ALL_SLOTS.filter(t => sessionExists(t)).map(t => orderOf(t));
+    const nextOrder = (existingOrders.length ? Math.max(...existingOrders) : 0) + 1;
 
     // New blank session sharing this race day's metadata (track/date/class).
     const today = new Date().toISOString().split('T')[0];
@@ -1175,17 +1343,38 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       },
     }));
     setSessionLabels(prev => ({ ...prev, [freeType]: name }));
+    setSessionOrders(prev => ({ ...prev, [freeType]: nextOrder }));
     setAddSessionOpen(false);
-    // Make the new session active (the user can save it with the Save button).
+    // Make the new session active so it joins the swipe view immediately.
     setActiveTab(freeType);
   };
 
 
-  const tabs = [
-    { key: 'base' as SetupType, label: TAB_LABELS.base.full, shortLabel: TAB_LABELS.base.short, icon: '1' },
-    { key: 'heat' as SetupType, label: TAB_LABELS.heat.full, shortLabel: TAB_LABELS.heat.short, icon: '2' },
-    { key: 'main' as SetupType, label: TAB_LABELS.main.full, shortLabel: TAB_LABELS.main.short, icon: '3' },
-  ];
+
+  // The session_order for a slot: explicit value wins, else the canonical default.
+  const orderOf = (t: SetupType) => sessionOrders[t] ?? DEFAULT_ORDER[t];
+
+  // The sessions that actually exist for this race day, ordered by session_order.
+  // This drives BOTH the horizontal selector and the swipe system (never hardcoded).
+  // The three canonical sessions (Hot Laps / Heat / Main) ALWAYS show, just like
+  // before; extra slots only appear once added (or while active).
+  const DEFAULT_SESSIONS: SetupType[] = ['base', 'heat', 'main'];
+  const orderedSessions: SetupType[] = ALL_SLOTS
+    .filter(t => DEFAULT_SESSIONS.includes(t) || sessionExists(t) || t === activeTab)
+    .sort((a, b) => orderOf(a) - orderOf(b));
+
+
+  const tabs = orderedSessions.map((key, idx) => ({
+    key,
+    label: fullLabelForTab(key),
+    shortLabel: labelForTab(key),
+    icon: String(idx + 1),
+  }));
+
+  // Whether another session can still be added (max 6 per race day).
+  const sessionCount = ALL_SLOTS.filter(t => sessionExists(t)).length;
+  const canAddSession = sessionCount < MAX_SESSIONS;
+
 
   const getAnimationClass = () => {
     if (prefersReducedMotion || !slideDirection) return 'translate-x-0 opacity-100';
@@ -1267,17 +1456,25 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
                   <span className="sm:inline">{labelForTab(tab.key)}</span>
                 </button>
               ))}
-              {/* [+] Add session — lives in the horizontal selector only */}
-              <button
-                onClick={openAddSession}
-                className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-dashed border-[#9CA3AF] text-[#6B7280] hover:text-[#00A8E8] hover:border-[#00A8E8] transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8] flex-shrink-0"
-                aria-label="Add session"
-                title="Add session"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-              </button>
+              {/* [+] Add session — lives in the horizontal selector only.
+                  Hidden/disabled once the race day has the maximum 6 sessions. */}
+              {canAddSession ? (
+                <button
+                  onClick={openAddSession}
+                  className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-dashed border-[#9CA3AF] text-[#6B7280] hover:text-[#00A8E8] hover:border-[#00A8E8] transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8] flex-shrink-0"
+                  aria-label="Add session"
+                  title="Add session"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                </button>
+              ) : (
+                <span className="inline-flex items-center px-2.5 text-[10px] text-[#9CA3AF] whitespace-nowrap" role="note">
+                  Maximum of 6 sessions reached for this race day.
+                </span>
+              )}
+
 
             </div>
           )}
@@ -1541,12 +1738,15 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
                 raceDate={currentSetup.raceDate}
                 raceClass={currentSetup.raceClass}
                 trackCondition={currentSetup.trackCondition}
+                trackShape={currentSetup.trackShape}
+                trackLength={currentSetup.trackLength}
                 temperature={currentSetup.temperature}
                 humidity={currentSetup.humidity}
                 windSpeed={currentSetup.windSpeed}
                 windDirection={currentSetup.windDirection}
                 onChange={handleSharedChange}
               />
+
 
               <DirtOvalTrack
                 entryHandling={currentSetup.entry_handling}
@@ -1602,7 +1802,10 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
                 exitHandling={currentSetup.exit_handling}
                 setupData={currentSetup}
                 raceClass={currentSetup.raceClass}
+                user={user}
+                raceWeekendKey={savedMeta.name || undefined}
               />
+
 
               {/* INPUT-BOTTOM AD (rookie only): a single small ad placed BELOW all
                   input fields. It is outside any form control group and well above
@@ -1649,8 +1852,9 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
             <div className="flex items-center gap-3">
               <span className="text-xs text-[#9CA3AF] hidden sm:block">
-                {savedMeta.name ? `Auto-saves every 5 min · All 3 tabs` : `Saves all 3 tabs as one file`}
+                {savedMeta.name ? `Auto-saves every 5 min · All sessions` : `Saves every session as one race day`}
               </span>
+
               <button
                 onClick={handleSaveClick}
                 disabled={saving}

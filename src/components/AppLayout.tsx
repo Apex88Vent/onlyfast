@@ -41,6 +41,18 @@ const AppLayout: React.FC = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
 
+      // After an unregistered user registers (triggered from a first-save), send
+      // them to the Rookie / Pro / Team selection page, then back to saving.
+      if (event === 'SIGNED_IN') {
+        try {
+          if (localStorage.getItem('pending_plan_redirect')) {
+            localStorage.removeItem('pending_plan_redirect');
+            window.location.href = '/pricing';
+            return;
+          }
+        } catch {/* ignore */}
+      }
+
       // --- DEV/DEMO reset-on-login fallback -----------------------------
       // Logout normally resets the test account, but logout can't run if the
       // browser was closed or the session expired. As a safety net, when the
@@ -62,6 +74,7 @@ const AppLayout: React.FC = () => {
       }
       // ------------------------------------------------------------------
     });
+
     // Initial check
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);

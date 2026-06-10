@@ -1,5 +1,11 @@
 import React, { useState, useId } from 'react';
 import { supabase } from '@/lib/supabase';
+import { User } from '@supabase/supabase-js';
+import {
+  getEffectiveTier,
+  readMembership,
+  checkSetupAssistPermission,
+} from '@/lib/membership';
 
 interface HandlingFeedbackProps {
   entryHandling: string;
@@ -7,10 +13,18 @@ interface HandlingFeedbackProps {
   exitHandling: string;
   setupData: Record<string, string>;
   raceClass: string;
+  /** Current signed-in user (null when not signed in). */
+  user?: User | null;
+  /**
+   * Stable per-race-weekend grouping key (the saved setup_name). Used as the
+   * usage scope for the Rookie "1 Setup Assist per race weekend" limit. When
+   * empty/undefined the race weekend hasn't been saved yet.
+   */
+  raceWeekendKey?: string;
 }
 
 const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
-  entryHandling, midHandling, exitHandling, setupData, raceClass
+  entryHandling, midHandling, exitHandling, setupData, raceClass, user, raceWeekendKey
 }) => {
   const [suggestions, setSuggestions] = useState('');
   const [loading, setLoading] = useState(false);
@@ -18,6 +32,9 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
   const [whatIfQuestion, setWhatIfQuestion] = useState('');
   const [whatIfResponse, setWhatIfResponse] = useState('');
   const [whatIfLoading, setWhatIfLoading] = useState(false);
+  // Inline notice surfaced when a Rookie hits the per-race-weekend assist limit
+  // (or when they need to save the race weekend first to track the free assist).
+  const [assistNotice, setAssistNotice] = useState('');
   const prefix = useId();
 
   const hasHandling = entryHandling || midHandling || exitHandling;
@@ -32,6 +49,94 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
   const filledCount = importantFields.filter(f => setupData[f] && setupData[f].trim() !== '').length;
   const totalFields = importantFields.length;
   const completionPct = Math.round((filledCount / totalFields) * 100);
+
+  // ------------------------------------------------------------------
+  // SETUP-ASSIST USAGE LIMIT (centralized via checkSetupAssistPermission)
+  // ------------------------------------------------------------------
+  // The effective tier resolves test@test.com / admin / promo to 'team' and
+  // Pro to 'pro' — both are 'unlimited', so they bypass every check here.
+  // Only Rookie (limit = 1 per race weekend) is ever gated.
+
+  const effectiveTier = () => getEffectiveTier(readMembership(user?.user_metadata || {}));
+
+  const scopeKey = () => (raceWeekendKey || '').trim();
+
+  // Read how many assists this race weekend has already consumed for this user.
+  const fetchAssistUsage = async (key: string): Promise<number> => {
+    if (!user) return 0;
+    try {
+      const { data } = await supabase
+        .from('setup_assist_usage')
+        .select('used_count')
+        .eq('user_id', user.id)
+        .eq('race_weekend_key', key)
+        .maybeSingle();
+      return data?.used_count ?? 0;
+    } catch {
+      // If the lookup fails we DO NOT fabricate usage; default to 0 so a
+      // transient error never wrongly blocks a paid feature.
+      return 0;
+    }
+  };
+
+  // Record ONE successful assist for this race weekend. Called ONLY after a
+  // suggestion call succeeds, so failed/errored calls never consume the assist.
+  const recordAssistUsage = async (key: string) => {
+    if (!user) return;
+    try {
+      const current = await fetchAssistUsage(key);
+      await supabase
+        .from('setup_assist_usage')
+        .upsert(
+          {
+            user_id: user.id,
+            race_weekend_key: key,
+            used_count: current + 1,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id,race_weekend_key' }
+        );
+    } catch {
+      /* non-fatal — usage tracking best-effort */
+    }
+  };
+
+  /**
+   * Gate an assist request. Returns { allowed, key } where key is the usage
+   * scope to record against on success. When blocked, sets an inline notice
+   * and returns allowed=false (no AI call, nothing consumed).
+   */
+  const gateAssist = async (): Promise<{ allowed: boolean; key: string }> => {
+    setAssistNotice('');
+    const tier = effectiveTier();
+
+    // Pro / Team / test / admin → unlimited; never gated, no scope needed.
+    if (checkSetupAssistPermission(tier, 0).allowed && tier !== 'rookie') {
+      return { allowed: true, key: scopeKey() };
+    }
+
+    // Non-signed-in users can't save race weekends and have no usage scope —
+    // ask them to sign in so their single free assist can be tracked.
+    if (!user) {
+      setAssistNotice('Sign in to use your free OnlyFast Setup Assist.');
+      return { allowed: false, key: '' };
+    }
+
+    // Rookie: needs a saved race weekend so the 1 free assist can be scoped.
+    const key = scopeKey();
+    if (!key) {
+      setAssistNotice('Save your race weekend first to use your free Setup Assist for it.');
+      return { allowed: false, key: '' };
+    }
+
+    const used = await fetchAssistUsage(key);
+    const perm = checkSetupAssistPermission(tier, used);
+    if (!perm.allowed) {
+      setAssistNotice(perm.upgradeText);
+      return { allowed: false, key };
+    }
+    return { allowed: true, key };
+  };
 
   // Try to extract a useful, user-visible error message from a
   // supabase.functions.invoke() failure. The real backend message is buried
@@ -108,6 +213,10 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
   };
 
   const getSuggestions = async () => {
+    // Enforce the per-race-weekend assist limit BEFORE doing anything else.
+    const gate = await gateAssist();
+    if (!gate.allowed) return;
+
     setLoading(true);
     setSuggestions('');
     try {
@@ -122,6 +231,8 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
       });
       if (data?.suggestion) {
         setSuggestions(data.suggestion);
+        // Only consume the Rookie assist AFTER a successful response.
+        if (gate.key) await recordAssistUsage(gate.key);
       } else if (error) {
         const diag = await describeInvokeError(error);
         // eslint-disable-next-line no-console
@@ -141,6 +252,11 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
 
   const askWhatIf = async () => {
     if (!whatIfQuestion.trim()) return;
+
+    // What-If is part of Setup Assist — gate it through the same limit/scope.
+    const gate = await gateAssist();
+    if (!gate.allowed) return;
+
     setWhatIfLoading(true);
     setWhatIfResponse('');
     try {
@@ -156,6 +272,8 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
       });
       if (data?.suggestion) {
         setWhatIfResponse(data.suggestion);
+        // Only consume the Rookie assist AFTER a successful response.
+        if (gate.key) await recordAssistUsage(gate.key);
       } else if (error) {
         const diag = await describeInvokeError(error);
         // eslint-disable-next-line no-console
@@ -299,6 +417,16 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
           What If?
         </button>
       </div>
+
+      {/* Assist limit / scope notice (Rookie). Clear upgrade prompt — no AI call ran. */}
+      {assistNotice && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-4 py-2.5 text-sm font-medium flex items-start gap-2 mb-4" role="status" aria-live="polite">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="flex-shrink-0 mt-0.5">
+            <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+          <span>{assistNotice}</span>
+        </div>
+      )}
 
       {!hasHandling && (
         <p id="no-handling-hint" className="text-sm text-[#6B7280] text-center py-2">

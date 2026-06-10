@@ -16,7 +16,9 @@ export interface TierLimits {
   maxRaceWeekendSetups: LimitValue;
   raceWeekendSetupLockHours: number | null;
   timingUploadsPerMonth: LimitValue;
-  setupAssistsPerMonth: LimitValue;
+  // Number of OnlyFast Setup Assists allowed PER race weekend save (not monthly).
+  // Rookie = 1 per race weekend; Pro/Team = 'unlimited'.
+  setupAssistsPerRaceWeekend: LimitValue;
   setupExport: boolean;
   leaderboardUpload: boolean;
   leaderboardBadges: boolean;
@@ -31,7 +33,7 @@ export const tierLimits: Record<MembershipTier, TierLimits> = {
     maxRaceWeekendSetups: 2,
     raceWeekendSetupLockHours: 48,
     timingUploadsPerMonth: 2,
-    setupAssistsPerMonth: 2,
+    setupAssistsPerRaceWeekend: 1,
     setupExport: false,
     leaderboardUpload: false,
     leaderboardBadges: false,
@@ -44,7 +46,7 @@ export const tierLimits: Record<MembershipTier, TierLimits> = {
     maxRaceWeekendSetups: 'unlimited',
     raceWeekendSetupLockHours: null,
     timingUploadsPerMonth: 'unlimited',
-    setupAssistsPerMonth: 'unlimited',
+    setupAssistsPerRaceWeekend: 'unlimited',
     setupExport: true,
     leaderboardUpload: true,
     leaderboardBadges: true,
@@ -57,7 +59,7 @@ export const tierLimits: Record<MembershipTier, TierLimits> = {
     maxRaceWeekendSetups: 'unlimited',
     raceWeekendSetupLockHours: null,
     timingUploadsPerMonth: 'unlimited',
-    setupAssistsPerMonth: 'unlimited',
+    setupAssistsPerRaceWeekend: 'unlimited',
     setupExport: true,
     leaderboardUpload: true,
     leaderboardBadges: true,
@@ -370,4 +372,170 @@ export function hasFeatureAccess(
   if (value === 'unlimited') return true;
   // numeric limits: presence of a positive limit means feature is available
   return typeof value === 'number' ? value > 0 : false;
+}
+
+
+// ---------------------------------------------------------------------------
+// Centralized SAVE-PERMISSION helper
+// ---------------------------------------------------------------------------
+// Single place that decides whether a save is allowed for the user's tier,
+// using the existing `tierLimits` values (no new limit numbers introduced).
+//
+// NOTE: pass the EFFECTIVE tier (from getEffectiveTier). Because test@test.com
+// and admin both resolve to 'team' there, this helper automatically lets them
+// bypass every restriction below — no special-casing required here.
+
+export type SaveKind = 'race_weekend' | 'base_template';
+
+export interface SavePermissionContext {
+  /** Effective tier (already resolved via getEffectiveTier). */
+  tier: MembershipTier;
+  /** Which kind of save is being attempted. */
+  kind: SaveKind;
+  /** True when updating a save that already exists (not creating a new one). */
+  isExistingSave: boolean;
+  /** Distinct race-weekend saves already stored for this user. */
+  existingRaceWeekendCount: number;
+  /** Base-template setups already stored for this user. */
+  existingBaseSetupCount: number;
+  /** Distinct car types (race_class) already saved by this user. */
+  existingCarTypes: string[];
+  /** The car type (race_class) being saved now. */
+  newCarType: string;
+}
+
+export interface SavePermission {
+  allowed: boolean;
+  reason: string;
+  /** Upgrade-prompt copy to surface when blocked (empty when allowed). */
+  upgradeText: string;
+}
+
+const ALLOWED: SavePermission = { allowed: true, reason: '', upgradeText: '' };
+
+const normCar = (v: string) => (v || '').trim().toLowerCase();
+
+/**
+ * Decide whether the current save is permitted. Pure + synchronous so it is
+ * easy to unit test and call from the real save flow.
+ */
+export function checkSavePermission(ctx: SavePermissionContext): SavePermission {
+  const limits = tierLimits[ctx.tier];
+
+  // --- Car-type lock (applies to every tier with a finite maxCars) ----------
+  // Updating an already-saved record never trips the car-type lock (the car
+  // type was already accepted when it was first saved).
+  if (typeof limits.maxCars === 'number' && !ctx.isExistingSave) {
+    const newCar = normCar(ctx.newCarType);
+    const known = ctx.existingCarTypes.map(normCar).filter(Boolean);
+    const distinct = new Set(known);
+    const introducesNewCar = newCar !== '' && !distinct.has(newCar);
+    if (introducesNewCar && distinct.size >= limits.maxCars) {
+      if (ctx.tier === 'pro') {
+        return {
+          allowed: false,
+          reason: 'car_type_locked',
+          upgradeText:
+            'Pro accounts are limited to one racecar type. Upgrade to Teams to save setups for multiple car types.',
+        };
+      }
+      return {
+        allowed: false,
+        reason: 'car_type_locked',
+        upgradeText:
+          'Rookie accounts can only use 1 car type. Upgrade to Pro for unlimited setups, or Teams for multiple car types.',
+      };
+    }
+  }
+
+  // --- Count limits (only on NEW saves) -------------------------------------
+  if (!ctx.isExistingSave) {
+    if (ctx.kind === 'base_template' && typeof limits.maxBaseSetups === 'number') {
+      if (ctx.existingBaseSetupCount >= limits.maxBaseSetups) {
+        return {
+          allowed: false,
+          reason: 'base_setup_limit',
+          upgradeText: `Rookie accounts can save ${limits.maxBaseSetups} base setup. Upgrade to Pro for unlimited base setups.`,
+        };
+      }
+    }
+    if (ctx.kind === 'race_weekend' && typeof limits.maxRaceWeekendSetups === 'number') {
+      if (ctx.existingRaceWeekendCount >= limits.maxRaceWeekendSetups) {
+        return {
+          allowed: false,
+          reason: 'race_weekend_limit',
+          upgradeText: `Rookie accounts can keep ${limits.maxRaceWeekendSetups} race weekend saves. Upgrade to Pro for unlimited race weekends.`,
+        };
+      }
+    }
+  }
+
+  return ALLOWED;
+}
+
+/**
+ * Race-weekend EDIT lock. Rookie saves become uneditable after the tier's
+ * `raceWeekendSetupLockHours` window, but remain viewable + deletable. Returns
+ * true when the row may NOT be edited any longer.
+ *
+ * Pass the EFFECTIVE tier — pro/team have no lock window (null) so this always
+ * returns false for them (and for test/admin which resolve to 'team').
+ */
+export function isRaceWeekendEditLocked(
+  tier: MembershipTier,
+  createdAtIso: string | null | undefined
+): boolean {
+  const lockHours = tierLimits[tier].raceWeekendSetupLockHours;
+  if (lockHours == null) return false; // no lock for this tier
+  if (!createdAtIso) return false;
+  const created = new Date(createdAtIso).getTime();
+  if (Number.isNaN(created)) return false;
+  const ageHours = (Date.now() - created) / (1000 * 60 * 60);
+  return ageHours >= lockHours;
+}
+
+// ---------------------------------------------------------------------------
+// Centralized SETUP-ASSIST permission helper
+// ---------------------------------------------------------------------------
+// Decides whether the user may run another OnlyFast Setup Assist for the
+// CURRENT race weekend, using the existing `setupAssistsPerRaceWeekend` tier
+// limit. Pure + synchronous so it is easy to test and call from the AI flow.
+//
+// Pass the EFFECTIVE tier (from getEffectiveTier). Because test@test.com and
+// admin both resolve to 'team' (which is 'unlimited'), they bypass this check
+// automatically — no special-casing required. Pro is also 'unlimited'.
+
+export interface SetupAssistPermission {
+  allowed: boolean;
+  reason: string;
+  /** Upgrade-prompt copy to surface when blocked (empty when allowed). */
+  upgradeText: string;
+}
+
+/**
+ * @param tier       Effective tier (resolved via getEffectiveTier).
+ * @param usedCount  How many Setup Assists this race weekend has already used.
+ */
+export function checkSetupAssistPermission(
+  tier: MembershipTier,
+  usedCount: number
+): SetupAssistPermission {
+  const limit = tierLimits[tier].setupAssistsPerRaceWeekend;
+
+  // Unlimited tiers (Pro / Team / test / admin) are never blocked.
+  if (limit === 'unlimited') {
+    return { allowed: true, reason: '', upgradeText: '' };
+  }
+
+  const used = Number.isFinite(usedCount) && usedCount > 0 ? usedCount : 0;
+  if (used >= limit) {
+    return {
+      allowed: false,
+      reason: 'setup_assist_limit',
+      upgradeText:
+        'Rookie accounts include 1 OnlyFast Setup Assist per race weekend. Upgrade to Pro for unlimited Setup Assists.',
+    };
+  }
+
+  return { allowed: true, reason: '', upgradeText: '' };
 }

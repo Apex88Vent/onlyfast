@@ -23,6 +23,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
   const [subLoading, setSubLoading] = useState(false);
   const [subError, setSubError] = useState('');
   const [portalLoading, setPortalLoading] = useState(false);
+  // Smaller "Cancel Subscription" secondary action → confirm before acting.
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+
 
   useEffect(() => {
     if (isOpen && user) {
@@ -228,10 +231,28 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
                   <p className="text-xs text-[#9CA3AF] mt-2">
                     {account?.label === 'Admin'
                       ? 'Admin full access — all features unlocked.'
-                      : account?.label === 'Free'
-                      ? 'You are on the free Rookie plan.'
-                      : `Your ${account?.label} membership is active.`}
+                      : account?.label === 'Teams'
+                      ? 'Your Team membership is active.'
+                      : account?.label === 'Pro'
+                      ? 'Your Pro membership is active.'
+                      : 'You are on the free Rookie plan.'}
                   </p>
+
+                  {/* Plan feature summary (display only). */}
+                  {account?.label === 'Teams' && (
+                    <ul className="text-xs text-[#6B7280] mt-2 space-y-1 list-disc pl-4">
+                      <li>Everything in Pro</li>
+                      <li>Unlimited cars &amp; classes for your team</li>
+                      <li>Shared team setups &amp; comparisons</li>
+                    </ul>
+                  )}
+                  {account?.label === 'Pro' && (
+                    <ul className="text-xs text-[#6B7280] mt-2 space-y-1 list-disc pl-4">
+                      <li>Save unlimited race-day setups</li>
+                      <li>AI handling feedback &amp; suggestions</li>
+                      <li>Ad-free experience</li>
+                    </ul>
+                  )}
 
                   {subError && (
                     <div className="mt-3 px-3 py-2 rounded-lg text-xs bg-red-50 text-red-700 border border-red-200">
@@ -239,29 +260,72 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
                     </div>
                   )}
 
-                  {hasStripeCustomer ? (
-                    <button
-                      onClick={handleManageBilling}
-                      disabled={portalLoading}
-                      className="mt-4 w-full bg-[#00A8E8] hover:bg-[#0090c7] text-white px-4 py-2.5 rounded-lg text-sm font-semibold disabled:opacity-50 transition-colors"
-                    >
-                      {portalLoading ? 'Opening…' : 'Manage / Cancel Subscription'}
-                    </button>
-                  ) : account?.label === 'Free' ? (
-                    <a
-                      href="/pricing"
-                      className="mt-4 block text-center w-full bg-[#00A8E8] hover:bg-[#0090c7] text-white px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors"
-                    >
-                      Upgrade
-                    </a>
-                  ) : null}
+                  {/* Admin keeps full access and is never shown upgrade/cancel. */}
+                  {account?.label !== 'Admin' && (
+                    <>
+                      {/* PRIMARY: Upgrade Subscription → Rookie / Pro / Team selection page. */}
+                      <a
+                        href="/pricing"
+                        className="mt-4 block text-center w-full bg-[#00A8E8] hover:bg-[#0090c7] text-white px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors"
+                      >
+                        Upgrade Subscription
+                      </a>
+
+                      {/* SECONDARY (smaller link): Cancel Subscription — shown for
+                          ALL paid members (Pro AND Teams). Previously this was gated
+                          on a Stripe customer id, which hid the link for Teams users
+                          whose plan wasn't tied to a Stripe customer record. Confirms,
+                          then routes through the existing Stripe billing portal where
+                          the cancellation is processed. Once Stripe reports the
+                          subscription inactive, the app falls back to Rookie
+                          automatically (deriveAccountStatus). */}
+                      {(account?.label === 'Pro' || account?.label === 'Teams' || hasStripeCustomer) && (
+                        <button
+                          onClick={() => { setSubError(''); setCancelConfirmOpen(true); }}
+                          disabled={portalLoading}
+                          className="mt-2 mx-auto block text-xs text-[#9CA3AF] hover:text-red-600 underline underline-offset-2 transition-colors disabled:opacity-50"
+                        >
+                          {portalLoading ? 'Opening…' : 'Cancel Subscription'}
+                        </button>
+                      )}
+                    </>
+                  )}
                 </>
               )}
             </div>
           </section>
         </div>
       </div>
+
+      {/* CANCEL SUBSCRIPTION CONFIRMATION */}
+      {cancelConfirmOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-label="Cancel subscription">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <h4 className="text-lg font-bold text-[#1A1B23] mb-2">Cancel your subscription?</h4>
+            <p className="text-sm text-[#374151]">
+              You'll be taken to the secure billing portal to confirm cancellation.
+              After it's cancelled, your account returns to the free Rookie plan.
+            </p>
+            <div className="flex justify-end gap-2 mt-5">
+              <button
+                onClick={() => setCancelConfirmOpen(false)}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-[#6B7280] hover:bg-[#F5F5F7] transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
+              >
+                Keep Subscription
+              </button>
+              <button
+                onClick={() => { setCancelConfirmOpen(false); handleManageBilling(); }}
+                disabled={portalLoading}
+                className="px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 hover:bg-red-700 text-white transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-red-500"
+              >
+                Cancel Subscription
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+
   );
 };
 

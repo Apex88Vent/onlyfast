@@ -1,5 +1,4 @@
 import React, { useState, useId } from 'react';
-import { CAR_CLASSES } from '@/lib/classConfigs';
 
 interface TrackInfoProps {
   trackName: string;
@@ -10,19 +9,24 @@ interface TrackInfoProps {
   humidity: string;
   windSpeed: string;
   windDirection: string;
+  trackShape?: string;
+  trackLength?: string;
   onChange: (field: string, value: string) => void;
 }
 
-// 16-point compass from a degrees-from-north value.
 const degreesToCompass = (deg: number): string => {
   const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
   const idx = Math.round(((deg % 360) / 22.5)) % 16;
   return dirs[idx];
 };
 
+const TRACK_SHAPES = ['Traditional', 'D-Shaped', 'Tri-Oval', 'Paperclip', 'Triangular', 'Quad-Oval', 'Rectangular'];
+const TRACK_LENGTHS = ['1/8 mile', '1/4 mile', '3/8 mile', '1/2 mile'];
+
 const TrackInfoSection: React.FC<TrackInfoProps> = ({
-  trackName, raceDate, raceClass, trackCondition,
+  trackName, raceDate, trackCondition,
   temperature, humidity, windSpeed, windDirection,
+  trackShape = '', trackLength = '',
   onChange
 }) => {
   const [gpsLoading, setGpsLoading] = useState(false);
@@ -53,7 +57,6 @@ const TrackInfoSection: React.FC<TrackInfoProps> = ({
       onChange('longitude', longitude.toString());
       setGpsStatus('Location found. Looking up track + weather...');
 
-      // Reverse-geocode the track name (best effort, never blocks weather).
       try {
         const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`);
         const data = await res.json();
@@ -67,13 +70,6 @@ const TrackInfoSection: React.FC<TrackInfoProps> = ({
         console.warn('[TrackInfo] reverse-geocode failed (non-fatal):', geoErr);
       }
 
-      // Fetch weather DIRECTLY from Open-Meteo.
-      // Open-Meteo is free, requires no API key, and supports CORS — so we
-      // don't need an edge function at all for this. (The previous
-      // get-weather edge function was just a thin proxy; calling Open-Meteo
-      // straight from the browser removes the deploy-the-function step
-      // entirely and is what was actually failing with "Failed to send a
-      // request to the Edge Function".)
       setWeatherLoading(true);
       try {
         const url =
@@ -112,7 +108,6 @@ const TrackInfoSection: React.FC<TrackInfoProps> = ({
       }
       setWeatherLoading(false);
     } catch (err: any) {
-      // GeolocationPositionError has a numeric `code`: 1=denied, 2=unavailable, 3=timeout
       const code = err?.code;
       const msg =
         code === 1 ? 'Location permission denied. Allow location access in your browser to use GPS autofill.'
@@ -126,9 +121,6 @@ const TrackInfoSection: React.FC<TrackInfoProps> = ({
       setGpsLoading(false);
     }
   };
-
-
-
 
   const inputClass = "w-full px-3 py-2.5 border border-[#E5E7EB] rounded-lg focus:ring-2 focus:ring-[#00A8E8] focus:border-[#00A8E8] outline-none transition-all text-[#1A1B23] bg-[#F9FAFB] text-sm placeholder-[#9CA3AF]";
   const labelClass = "block text-xs font-semibold text-[#4B5563] uppercase tracking-wider mb-1";
@@ -168,11 +160,20 @@ const TrackInfoSection: React.FC<TrackInfoProps> = ({
             <input id={`${prefix}-raceDate`} type="date" value={raceDate} onChange={(e) => onChange('raceDate', e.target.value)} className={inputClass} />
           </div>
           <div>
-            <label htmlFor={`${prefix}-raceClass`} className={labelClass}>Class</label>
-            <select id={`${prefix}-raceClass`} value={raceClass} onChange={(e) => onChange('raceClass', e.target.value)} className={inputClass}>
-              <option value="">Select class</option>
-              {CAR_CLASSES.map(cls => (
-                <option key={cls} value={cls}>{cls}</option>
+            <label htmlFor={`${prefix}-trackShape`} className={labelClass}>Track Shape</label>
+            <select id={`${prefix}-trackShape`} value={trackShape} onChange={(e) => onChange('trackShape', e.target.value)} className={inputClass}>
+              <option value="">Select shape</option>
+              {TRACK_SHAPES.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor={`${prefix}-trackLength`} className={labelClass}>Length</label>
+            <select id={`${prefix}-trackLength`} value={trackLength} onChange={(e) => onChange('trackLength', e.target.value)} className={inputClass}>
+              <option value="">Select length</option>
+              {TRACK_LENGTHS.map(l => (
+                <option key={l} value={l}>{l}</option>
               ))}
             </select>
           </div>
@@ -189,8 +190,6 @@ const TrackInfoSection: React.FC<TrackInfoProps> = ({
           </div>
         </div>
       </fieldset>
-
-
 
       {/* Weather Row */}
       <fieldset className="mt-4 pt-4 border-t border-[#E5E7EB]">

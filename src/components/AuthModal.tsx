@@ -131,7 +131,19 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           }
         }
 
-        setSuccess('Account created! Check your email to confirm.');
+        // From the app's perspective, do NOT dead-end the user on a "check your
+        // email" screen. Send them straight to the Rookie / Pro / Teams plan
+        // selection page. Email confirmation (if enabled) is shown only as a
+        // small secondary notice.
+        setSuccess(
+          'Account created. If email confirmation is required, please confirm your email — but you can choose your plan now.'
+        );
+        try { localStorage.setItem('pending_plan_redirect', '1'); } catch { /* non-fatal */ }
+        // Brief moment so the notice is visible, then route to plan selection.
+        setTimeout(() => {
+          try { localStorage.removeItem('pending_plan_redirect'); } catch { /* ignore */ }
+          window.location.href = '/pricing';
+        }, 1200);
       } else if (mode === 'login') {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -342,7 +354,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               : mode === 'login'
               ? 'Sign In'
               : mode === 'signup'
-              ? 'Create Account'
+              ? 'Create account and choose free or premium account'
               : 'Send reset link'}
           </button>
 
