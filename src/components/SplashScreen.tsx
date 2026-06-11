@@ -159,8 +159,9 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
 
         /* Logo wrapper - handles the "coming toward you" animation */
         .splash-logo-wrapper {
-          width: 175px;
-          height: 175px;
+          width: 263px;
+          height: 263px;
+
           display: flex;
           align-items: center;
           justify-content: center;

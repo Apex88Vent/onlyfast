@@ -33,6 +33,9 @@ const FIELD_GROUPS = [
       { key: 'front_ride_height', label: 'Front Ride Height', type: 'number' },
       { key: 'rear_ride_height', label: 'Rear Ride Height', type: 'number' },
       { key: 'stagger', label: 'Stagger', type: 'number' },
+      { key: 'front_stagger', label: 'Front Stagger', type: 'number' },
+      { key: 'rear_stagger', label: 'Rear Stagger', type: 'number' },
+
     ],
   },
   {
@@ -74,15 +77,17 @@ const FIELD_GROUPS = [
     ],
   },
   {
-    label: 'Suspension & Drivetrain',
+    label: 'Rear-End & Drivetrain',
     fields: [
-      { key: 'lr_trailing_arm', label: 'LR Trailing Arm', type: 'number' },
-      { key: 'rr_trailing_arm', label: 'RR Trailing Arm', type: 'number' },
-      { key: 'third_link', label: 'Third Link', type: 'text' },
-      { key: 'panhard_bar', label: 'Panhard Bar', type: 'text' },
+      { key: 'lr_trailing_arm', label: 'Left Trailing Arm Angle', type: 'number' },
+      { key: 'rr_trailing_arm', label: 'Right Trailing Arm Angle', type: 'number' },
+      { key: 'third_link', label: 'Third Link Angle', type: 'text' },
+      { key: 'panhard_bar', label: 'Panhard Bar Angle', type: 'text' },
+      { key: 'fuel', label: 'Fuel', type: 'text' },
       { key: 'gear_ratio', label: 'Gear Ratio', type: 'text' },
     ],
   },
+
   {
     label: 'Handling',
     fields: [
@@ -182,7 +187,8 @@ const SetupComparison: React.FC<SetupComparisonProps> = ({ user, onSignInClick }
     printWindow.document.write(`<!DOCTYPE html><html lang="en"><head><title>OnlyFast Setup Comparison</title>
 <style>
 body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:20px;color:#1A1B23;background:#F5F5F7}
-.logo{height:50px;margin-bottom:16px}h1{font-size:20px;margin-bottom:4px}
+.logo{height:75px;margin-bottom:16px}h1{font-size:20px;margin-bottom:4px}
+
 .subtitle{color:#6B7280;font-size:13px;margin-bottom:20px}
 table{width:100%;border-collapse:collapse;font-size:12px}
 th,td{border:1px solid #E5E7EB;padding:6px 10px;text-align:left}

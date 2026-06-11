@@ -124,7 +124,9 @@ const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBac
   const handleMenuSelect = (action: MenuAction) => {
     // Dispatch a global event that SetupDashboard listens for
     window.dispatchEvent(new CustomEvent('onlyfast-menu', { detail: { action } }));
-    setActiveView(action);
+    // 'view-shared' opens a modal — it is NOT a view, so don't change the active
+    // view highlight for it.
+    if (action !== 'view-shared') setActiveView(action);
   };
 
   const nickname = getNickname(user, nicknameOverride);
@@ -163,8 +165,9 @@ const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBac
               <img
                 src="https://d64gsuwffb70l.cloudfront.net/688263e7085fd34dcdf7f46a_1775752881652_48fe46d9.png"
                 alt="OnlyFast Setup Assist - Home"
-                className="h-[50px] w-auto"
+                className="h-[75px] w-auto"
               />
+
             </div>
 
             {/* Center - Car Type Badge */}

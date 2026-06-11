@@ -277,16 +277,17 @@ const ChassisSetupForm: React.FC<ChassisSetupFormProps> = ({ data, customFields,
         </div>
       </section>
 
-      {/* Suspension & Drivetrain */}
+      {/* Rear-End & Drivetrain */}
       <section className="bg-white rounded-2xl border border-[#E5E7EB] p-6 shadow-sm" aria-labelledby="suspension-heading">
         <h3 id="suspension-heading" className={sectionHeaderClass}>
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00A8E8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
           </svg>
-          Suspension & Drivetrain
+          Rear-End &amp; Drivetrain
         </h3>
         <fieldset>
-          <legend className="sr-only">Suspension and drivetrain settings</legend>
+          <legend className="sr-only">Rear-end and drivetrain settings</legend>
+
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
             {config.suspensionFields.map(f => renderField(f))}
           </div>

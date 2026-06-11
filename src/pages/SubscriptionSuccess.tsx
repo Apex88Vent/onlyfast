@@ -70,7 +70,8 @@ const SubscriptionSuccess: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#F5F5F7] px-4 text-center">
-      <img src={LOGO} alt="OnlyFast" className="h-12 mb-6" />
+      <img src={LOGO} alt="OnlyFast" className="h-[72px] mb-6" />
+
 
       {(phase === 'auth' || phase === 'checking') && (
         <>

@@ -197,19 +197,45 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
       return;
     }
 
-    // CENTRALIZED TIER ENFORCEMENT (base templates). Editing an existing
-    // template is always allowed; only NEW templates can hit the Rookie limit.
-    // test@test.com / admin resolve to 'team' here → unlimited, so they pass.
+    // CENTRALIZED TIER ENFORCEMENT (base templates). The car-type lock must look
+    // at EVERY car type this user has saved — base templates AND race-weekend
+    // setups (base/heat/main). Pulling car types only from `templates` was the
+    // bug that let a Pro user lock one car type via a race weekend, then save a
+    // base template for a *different* car type. test@test.com / admin resolve to
+    // 'team' here → unlimited, so they pass automatically.
     const tier = getEffectiveTier(readMembership(user.user_metadata || {}));
-    if (tier !== 'team' && !editingId) {
+    if (tier !== 'team') {
+      const newCarType = template.raceClass || selectedCar || '';
+      // Gather all existing car types across every saved row for this user.
+      let existingCarTypes: string[] = [];
+      try {
+        const { data: allRows } = await supabase
+          .from('race_setups')
+          .select('race_class')
+          .eq('user_id', user.id)
+          .limit(300);
+        existingCarTypes = Array.from(
+          new Set(
+            (allRows || [])
+              .map((r: any) => (r.race_class || '').trim())
+              .filter(Boolean)
+          )
+        );
+      } catch {
+        // Fall back to locally-loaded templates if the lookup fails.
+        existingCarTypes = templates
+          .map((t: any) => (t.race_class || '').trim())
+          .filter(Boolean);
+      }
+
       const perm = checkSavePermission({
         tier,
         kind: 'base_template',
-        isExistingSave: false,
+        isExistingSave: !!editingId,
         existingRaceWeekendCount: 0,
         existingBaseSetupCount: templates.length,
-        existingCarTypes: templates.map((t: any) => (t.race_class || '').trim()).filter(Boolean),
-        newCarType: template.raceClass || selectedCar || '',
+        existingCarTypes,
+        newCarType,
       });
       if (!perm.allowed) {
         setMessage(perm.upgradeText);
@@ -217,6 +243,7 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
         return;
       }
     }
+
 
     setSaving(true);
     setMessage('');

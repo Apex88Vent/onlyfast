@@ -9,6 +9,7 @@ import CustomFieldManager, { CustomField } from './CustomFieldManager';
 import SavedSetups from './SavedSetups';
 import SetupComparison from './SetupComparison';
 import ShareSetupModal from './ShareSetupModal';
+import ViewSharedSetupModal from './ViewSharedSetupModal';
 import SaveSetupModal from './SaveSetupModal';
 import CreateBaseSetupView from './CreateBaseSetupView';
 import BaseTemplatePicker from './BaseTemplatePicker';
@@ -163,6 +164,8 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   const [savedSetupsList, setSavedSetupsList] = useState<any[]>([]);
   const [showCopyFromPast, setShowCopyFromPast] = useState(false);
   const [shareModalSetup, setShareModalSetup] = useState<any>(null);
+  // "View Shared Setup" modal (enter a share code to view a read-only setup).
+  const [viewSharedOpen, setViewSharedOpen] = useState(false);
   const [lastAutoSave, setLastAutoSave] = useState<Date | null>(null);
   const [stateLoaded, setStateLoaded] = useState(false);
   const [baseTemplateMessage, setBaseTemplateMessage] = useState('');
@@ -385,12 +388,16 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, stateLoaded]);
 
-  // Listen for hamburger-menu selections from Header
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (!detail || !detail.action) return;
       const a = detail.action;
+      // 'view-shared' opens the read-only View Shared Setup modal — it is not a view.
+      if (a === 'view-shared') {
+        setViewSharedOpen(true);
+        return;
+      }
       if (a === 'setup' || a === 'saved' || a === 'compare' || a === 'create-base' || a === 'todo' || a === 'parts' || a === 'schedule') {
         setActiveView(a);
       }
@@ -714,9 +721,18 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
             .map((r: any) => (r.setup_name || '').trim())
             .filter((n: string) => n !== '')
         );
+        // Car-type lock must consider EVERY saved car type for this user —
+        // race-weekend saves (base/heat/main) AND base templates. Counting only
+        // race-weekend rows here was the bug that let a Pro user save one car
+        // type as a race weekend and a different car type as a base template.
         const existingCarTypes = Array.from(
-          new Set(rows.map((r: any) => (r.race_class || '').trim()).filter(Boolean))
+          new Set(
+            (existingRows || [])
+              .map((r: any) => (r.race_class || '').trim())
+              .filter(Boolean)
+          )
         ) as string[];
+
 
         // A "new" race weekend = a file name we haven't stored before.
         const fileExists = raceWeekendNames.has(name.trim());
@@ -2017,6 +2033,11 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
         onClose={() => setShareModalSetup(null)}
         setup={shareModalSetup}
         user={user}
+      />
+
+      <ViewSharedSetupModal
+        isOpen={viewSharedOpen}
+        onClose={() => setViewSharedOpen(false)}
       />
     </div>
   );

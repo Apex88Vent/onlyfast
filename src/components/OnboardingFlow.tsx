@@ -9,13 +9,17 @@ interface OnboardingFlowProps {
 }
 
 
-// Lightning Sprints & Non-Wing Sprint Cars are now fully usable classes.
+// Unlocked classes. Pro Stock & Pure Stock are now unlocked; Non-Wing Sprint
+// Cars is locked again (Coming Soon). Lightning Sprints remains usable.
 const ENABLED_CLASSES = [
   'Dwarf Cars',
+  'Modified',
   'Sport Mod',
   'Lightning Sprints',
-  'Non-Wing Sprint Cars',
+  'Pro Stock',
+  'Pure Stock',
 ];
+
 
 
 const carIcons: Record<string, React.ReactNode> = {
@@ -210,13 +214,14 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
   return (
     <div className="min-h-screen bg-[#F5F5F7] flex items-center justify-center p-4" role="main">
       <div className="w-full max-w-3xl" id="main-content">
-        {/* Logo - 25% larger than previous h-24 (96px → 120px) */}
+        {/* Logo - displayed at 1.5x (h-[120px] -> h-[180px]); w-auto keeps aspect ratio */}
         <div className="text-center mb-10">
           <img
             src="https://d64gsuwffb70l.cloudfront.net/688263e7085fd34dcdf7f46a_1775752881652_48fe46d9.png"
             alt="OnlyFast Setup Assist"
-            className="h-[120px] mx-auto mb-4"
+            className="h-[180px] w-auto mx-auto mb-4"
           />
+
           <p className="text-[#6B7280] text-lg">Your Smart Setup Solutions</p>
         </div>
 

@@ -122,6 +122,36 @@ const standardSuspension: FieldDef[] = [
   { label: 'Gear Ratio', key: 'gear_ratio', placeholder: 'e.g. 4.86' },
 ];
 
+// --- Modified & Sport Modified shared sheet ----------------------------------
+// These two dirt-oval classes share one OnlyFast setup sheet with exactly three
+// major categories: General Chassis, Four Corners, Rear-End & Drivetrain.
+//
+// General Chassis uses SEPARATE Front Stagger and Rear Stagger fields (the
+// generic sheet uses a single `stagger`). Existing keys (cross_weight, toe,
+// ride heights, lr/rr_trailing_arm, third_link, panhard_bar, gear_ratio) are
+// preserved so older saved setups keep loading their data. The old
+// "Suspension & Drivetrain" data maps cleanly into "Rear-End & Drivetrain"
+// because the underlying field keys are unchanged.
+const modifiedGeneral: FieldDef[] = [
+  { label: 'Cross Weight (%)', key: 'cross_weight', type: 'number', placeholder: '50.0' },
+  { label: 'Toe', key: 'toe', type: 'select' },
+  { label: 'Front Ride Height', key: 'front_ride_height', type: 'select' },
+  { label: 'Rear Ride Height', key: 'rear_ride_height', type: 'select' },
+  { label: 'Front Stagger', key: 'front_stagger', type: 'number', step: '0.25', placeholder: 'inches' },
+  { label: 'Rear Stagger', key: 'rear_stagger', type: 'number', step: '0.25', placeholder: 'inches' },
+];
+
+// Rear-End & Drivetrain category for Modified / Sport Modified.
+const modifiedRearEndDrivetrain: FieldDef[] = [
+  { label: 'Left Trailing Arm Angle', key: 'lr_trailing_arm', type: 'number', step: '0.25', placeholder: 'degrees' },
+  { label: 'Right Trailing Arm Angle', key: 'rr_trailing_arm', type: 'number', step: '0.25', placeholder: 'degrees' },
+  { label: 'Third Link Angle', key: 'third_link', type: 'number', step: '0.25', placeholder: 'degrees' },
+  { label: 'Panhard Bar Angle', key: 'panhard_bar', placeholder: 'degrees' },
+  { label: 'Fuel', key: 'fuel', placeholder: 'e.g. gallons / type' },
+  { label: 'Gear Ratio', key: 'gear_ratio', placeholder: 'e.g. 4.86' },
+];
+
+
 
 const weightBalanceSection: ClassSection = {
   id: 'weight-balance',
@@ -135,6 +165,117 @@ const weightBalanceSection: ClassSection = {
     { label: 'Lead Weight (lbs)', key: 'lead_weight', type: 'number', placeholder: 'lbs' },
   ],
 };
+
+// --- Pro Stock / Pure Stock shared stock-car sheet --------------------------
+// Both classes use one OnlyFast stock-car sheet with exactly three major
+// categories: General Chassis, Four Corners, Rear-End & Drivetrain.
+// All fields are blank fillable text inputs (no sample/reference values
+// prefilled or shown after the label).
+const stockGeneralFields: FieldDef[] = [
+  { label: 'Track', key: 'sc_track', type: 'text' },
+  { label: 'Car', key: 'sc_car', type: 'text' },
+  { label: 'Date', key: 'sc_date', type: 'text' },
+  { label: 'Nose Height', key: 'nose_height', type: 'text' },
+  { label: 'Front Weight (lbs / %)', key: 'front_weight', type: 'text' },
+  { label: 'Cross Weight (%)', key: 'cross_weight', type: 'text' },
+  { label: 'Left Weight (lbs / %)', key: 'left_weight', type: 'text' },
+  { label: 'Rear Weight (lbs / %)', key: 'rear_weight', type: 'text' },
+  { label: 'Total Weight', key: 'total_weight', type: 'text' },
+  { label: 'Toe Out', key: 'toe_out', type: 'text' },
+  { label: 'Ackerman', key: 'ackerman', type: 'text' },
+  { label: 'Front Stagger', key: 'front_stagger', type: 'text' },
+  { label: 'Rear Stagger', key: 'rear_stagger', type: 'text' },
+];
+
+const stockFrontCornerFields: FieldDef[] = [
+  { label: 'Shock Brand', key: 'shock_brand', type: 'text' },
+  { label: 'Compression', key: 'compression', type: 'text' },
+  { label: 'Rebound', key: 'rebound', type: 'text' },
+  { label: 'Piston', key: 'piston', type: 'text' },
+  { label: 'Weight', key: 'weight', type: 'text' },
+  { label: 'Spring Rate', key: 'spring_rate', type: 'text' },
+  { label: 'Camber', key: 'camber', type: 'text' },
+  { label: 'Caster', key: 'caster', type: 'text' },
+  { label: 'Air Pressure', key: 'air_pressure', type: 'text' },
+  { label: 'Tire Size', key: 'tire_size', type: 'text' },
+  { label: 'Tire Temps', key: 'tire_temps', type: 'text' },
+  { label: 'Ride Height', key: 'ride_height', type: 'text' },
+  { label: 'A-Arm Length', key: 'a_arm_length', type: 'text' },
+  { label: 'Bump', key: 'bump', type: 'text' },
+  { label: 'Spindle', key: 'spindle', type: 'text' },
+];
+
+const stockRearCornerFields: FieldDef[] = [
+  { label: 'Shock Brand', key: 'shock_brand', type: 'text' },
+  { label: 'Compression', key: 'compression', type: 'text' },
+  { label: 'Rebound', key: 'rebound', type: 'text' },
+  { label: 'Piston', key: 'piston', type: 'text' },
+  { label: 'Spring Rate', key: 'spring_rate', type: 'text' },
+  { label: 'Trailing Arm Angle', key: 'trailing_arm_angle', type: 'text' },
+  { label: 'Track Bar', key: 'track_bar', type: 'text' },
+  { label: 'Rear Mount Hole', key: 'rear_mount_hole', type: 'text' },
+  { label: 'Weight', key: 'weight', type: 'text' },
+  { label: 'Air Pressure', key: 'air_pressure', type: 'text' },
+  { label: 'Tire Size', key: 'tire_size', type: 'text' },
+  { label: 'Tire Temps', key: 'tire_temps', type: 'text' },
+  { label: 'Ride Height', key: 'ride_height', type: 'text' },
+  { label: 'Lead', key: 'lead', type: 'text' },
+  { label: 'Quarter Height', key: 'quarter_height', type: 'text' },
+];
+
+const stockRearEndDrivetrain: FieldDef[] = [
+  { label: 'Top Link Front Height', key: 'top_link_front_height', type: 'text' },
+  { label: 'Top Link Rear Height', key: 'top_link_rear_height', type: 'text' },
+  { label: 'Top Link Angle', key: 'top_link_angle', type: 'text' },
+  { label: 'Pinion Angle', key: 'pinion_angle', type: 'text' },
+  { label: 'Gear Ratio', key: 'gear_ratio', type: 'text' },
+  { label: 'Spoiler Angle', key: 'spoiler_angle', type: 'text' },
+];
+
+// --- Lightning Sprint sheet -------------------------------------------------
+// OnlyFast structure plus one sprint-specific Wing section.
+const lsGeneralFields: FieldDef[] = [
+  { label: 'Wheelbase', key: 'wheelbase', type: 'text' },
+  { label: 'Stagger', key: 'stagger', type: 'text' },
+  { label: 'Front Panhard', key: 'front_panhard', type: 'text' },
+];
+
+const lsCornerFields: FieldDef[] = [
+  { label: 'Torsion Bar / Coil Size', key: 'torsion_coil_size', type: 'text' },
+  { label: 'Block Size', key: 'block_size', type: 'text' },
+  { label: '# of Turns Off Block', key: 'turns_off_block', type: 'text' },
+  { label: 'Ride Height', key: 'ride_height', type: 'text' },
+  { label: 'Shock Setting', key: 'shock_setting', type: 'text' },
+  { label: 'Shock Pressure', key: 'shock_pressure', type: 'text' },
+  { label: 'Tire Pressure', key: 'tire_pressure', type: 'text' },
+  { label: 'Tire Size', key: 'tire_size', type: 'text' },
+  { label: 'Wheel', key: 'wheel', type: 'text' },
+];
+
+const lsRearEndDrivetrain: FieldDef[] = [
+  { label: 'Jacobs Ladder', key: 'jacobs_ladder', type: 'text' },
+  { label: 'Rear Bearing Carrier Timing', key: 'rear_bearing_carrier_timing', type: 'text' },
+  { label: 'Right Rear Control Arm Location', key: 'rr_control_arm_location', type: 'text' },
+  { label: 'Left Rear Control Arm Location', key: 'lr_control_arm_location', type: 'text' },
+  { label: 'Center Line of Tire Offset', key: 'center_line_tire_offset', type: 'text' },
+  { label: 'Left Front Offset Reference', key: 'lf_offset_ref', type: 'text' },
+  { label: 'Left Rear Offset Reference', key: 'lr_offset_ref', type: 'text' },
+  { label: 'Right Rear Offset Reference', key: 'rr_offset_ref', type: 'text' },
+  { label: 'Front Sprocket', key: 'front_sprocket', type: 'text' },
+  { label: 'Rear Sprocket', key: 'rear_sprocket', type: 'text' },
+  { label: 'Notes', key: 'rear_notes', type: 'text' },
+];
+
+const lsWingSection: ClassSection = {
+  id: 'ls-wing',
+  title: 'Wing',
+  icon: 'wing',
+  fields: [
+    { label: 'Front Wing Angle', key: 'front_wing_angle', type: 'text' },
+    { label: 'Rear Wing Starting Angle', key: 'rear_wing_starting_angle', type: 'text' },
+  ],
+};
+
 
 export const CAR_CLASSES: string[] = [
   'Dwarf Cars',
@@ -214,52 +355,15 @@ export const CLASS_CONFIGS: Record<string, ClassConfig> = {
     name: 'Lightning Sprints',
     description: 'Lightweight open-wheel sprint cars with motorcycle powerplants',
     showWingAero: true,
-    showWeightBalance: true,
+    showWeightBalance: false,
     showDrivechain: true,
-    generalFields: standardGeneral,
-    frontCornerFields: standardFrontCorner,
-    rearCornerFields: standardRearCorner,
-    suspensionFields: [
-      { label: 'LR Trailing Arm', key: 'lr_trailing_arm', type: 'number', step: '0.25', placeholder: 'degrees' },
-      { label: 'RR Trailing Arm', key: 'rr_trailing_arm', type: 'number', step: '0.25', placeholder: 'degrees' },
-      { label: 'Third Link', key: 'third_link', type: 'number', step: '0.25', placeholder: 'degrees' },
-      { label: 'Panhard Bar', key: 'panhard_bar', placeholder: 'Height/angle' },
-    ],
-
-    extraSections: [
-      {
-        id: 'wing-aero',
-        title: 'Wing & Aero',
-        icon: 'wing',
-        fields: [
-          { label: 'Top Wing Angle', key: 'top_wing_angle', type: 'number', step: '0.5', placeholder: 'degrees' },
-          { label: 'Top Wing Offset', key: 'top_wing_offset', placeholder: 'e.g. 2" left' },
-          { label: 'Nose Wing Angle', key: 'nose_wing_angle', type: 'number', step: '0.5', placeholder: 'degrees' },
-          { label: 'Side Boards', key: 'side_boards', type: 'select', options: [
-            { value: '', label: 'Select' }, { value: 'full', label: 'Full' }, { value: 'half', label: 'Half' }, { value: 'none', label: 'None' },
-          ]},
-          { label: 'Nerf Bar Height', key: 'nerf_bar_height', placeholder: 'inches' },
-        ],
-      },
-      {
-        id: 'drivechain',
-        title: 'Drivetrain',
-        icon: 'gear',
-        fields: [
-          { label: 'Front Sprocket', key: 'front_sprocket', type: 'number', placeholder: 'teeth' },
-          { label: 'Rear Sprocket', key: 'rear_sprocket', type: 'number', placeholder: 'teeth' },
-          { label: 'Chain Tension', key: 'chain_tension', type: 'select', options: [
-            { value: '', label: 'Select' }, { value: 'tight', label: 'Tight' }, { value: 'medium', label: 'Medium' }, { value: 'loose', label: 'Loose' },
-          ]},
-          { label: 'Front Axle', key: 'front_axle', type: 'select', options: [
-            { value: '', label: 'Select' }, { value: 'straight', label: 'Straight' }, { value: '1-degree', label: '1 Degree' }, { value: '2-degree', label: '2 Degree' }, { value: '3-degree', label: '3 Degree' },
-          ]},
-          { label: 'Fuel Mixture', key: 'fuel_mixture', placeholder: 'e.g. 14.7:1' },
-          { label: 'Bumper Height', key: 'bumper_height', placeholder: 'inches' },
-        ],
-      },
-      weightBalanceSection,
-    ],
+    // OnlyFast structure: General Chassis, Four Corners, Rear-End & Drivetrain,
+    // plus a sprint-specific Wing section.
+    generalFields: lsGeneralFields,
+    frontCornerFields: lsCornerFields,
+    rearCornerFields: lsCornerFields,
+    suspensionFields: lsRearEndDrivetrain,
+    extraSections: [lsWingSection],
   },
 
   'Midgets': {
@@ -300,37 +404,16 @@ export const CLASS_CONFIGS: Record<string, ClassConfig> = {
     name: 'Modified',
     description: 'Open-wheel, tube-chassis modified race cars (IMCA/UMP style)',
     showWingAero: false,
-    showWeightBalance: true,
+    showWeightBalance: false,
     showDrivechain: false,
-    generalFields: standardGeneral,
-    frontCornerFields: standardFrontCorner,
-    rearCornerFields: standardRearCorner,
-    suspensionFields: [
-      { label: 'LR Trailing Arm', key: 'lr_trailing_arm', type: 'number', step: '0.25', placeholder: 'degrees' },
-      { label: 'RR Trailing Arm', key: 'rr_trailing_arm', type: 'number', step: '0.25', placeholder: 'degrees' },
-      { label: 'Third Link / Pull Bar', key: 'third_link', type: 'number', step: '0.25', placeholder: 'degrees' },
-      { label: 'Panhard Bar', key: 'panhard_bar', placeholder: 'Height/angle' },
-      { label: 'Gear Ratio', key: 'gear_ratio', placeholder: 'e.g. 4.86' },
-    ],
-
-    extraSections: [
-      {
-        id: 'modified-extras',
-        title: 'Modified Specifics',
-        icon: 'car',
-        fields: [
-          { label: 'LF Torsion Bar', key: 'lf_torsion_bar', placeholder: 'diameter/rate' },
-          { label: 'RF Torsion Bar', key: 'rf_torsion_bar', placeholder: 'diameter/rate' },
-          { label: 'Sway Bar Dia.', key: 'sway_bar', placeholder: 'inches' },
-          { label: 'J-Bar / Panhard Height', key: 'j_bar_height', placeholder: 'inches from ground' },
-          { label: 'Nose Piece', key: 'nose_piece', type: 'select', options: [
-            { value: '', label: 'Select' }, { value: 'flat', label: 'Flat' }, { value: 'wedge', label: 'Wedge' }, { value: 'round', label: 'Round' },
-          ]},
-        ],
-      },
-      weightBalanceSection,
-    ],
+    // OnlyFast sheet: General Chassis, Four Corners, Rear-End & Drivetrain only.
+    generalFields: modifiedGeneral,
+    frontCornerFields: standardFrontCorner, // caster + camber FRONT only
+    rearCornerFields: standardRearCorner,   // no caster/camber on rears
+    suspensionFields: modifiedRearEndDrivetrain,
+    extraSections: [],
   },
+
 
   'Non-Wing Sprint Cars': {
     name: 'Non-Wing Sprint Cars',
@@ -376,34 +459,14 @@ export const CLASS_CONFIGS: Record<string, ClassConfig> = {
     name: 'Pro Stock',
     description: 'Stock-bodied cars with performance modifications, V8 powered',
     showWingAero: false,
-    showWeightBalance: true,
+    showWeightBalance: false,
     showDrivechain: false,
-    generalFields: standardGeneral,
-    frontCornerFields: [casterField, camberField, pressureField(), shockField, springField(), wheelOffsetField],
-    rearCornerFields: standardRearCorner,
-    suspensionFields: [
-      { label: 'LR Trailing Arm', key: 'lr_trailing_arm', type: 'number', step: '0.25', placeholder: 'degrees' },
-      { label: 'RR Trailing Arm', key: 'rr_trailing_arm', type: 'number', step: '0.25', placeholder: 'degrees' },
-      { label: 'Third Link', key: 'third_link', type: 'number', step: '0.25', placeholder: 'degrees' },
-      { label: 'Panhard Bar', key: 'panhard_bar', placeholder: 'Height/angle' },
-      { label: 'Gear Ratio', key: 'gear_ratio', placeholder: 'e.g. 4.11' },
-    ],
-
-    extraSections: [
-      {
-        id: 'prostock-extras',
-        title: 'Pro Stock Specifics',
-        icon: 'car',
-        fields: [
-          { label: 'Sway Bar Dia.', key: 'sway_bar', placeholder: 'inches' },
-          { label: 'Transmission', key: 'transmission', type: 'select', options: [
-            { value: '', label: 'Select' }, { value: 'manual', label: 'Manual' }, { value: 'powerglide', label: 'Powerglide' }, { value: 'bert', label: 'Bert/Brinn' },
-          ]},
-          { label: 'Converter Stall', key: 'converter_stall', placeholder: 'RPM' },
-        ],
-      },
-      weightBalanceSection,
-    ],
+    // OnlyFast stock-car sheet: General Chassis, Four Corners, Rear-End & Drivetrain only.
+    generalFields: stockGeneralFields,
+    frontCornerFields: stockFrontCornerFields,
+    rearCornerFields: stockRearCornerFields,
+    suspensionFields: stockRearEndDrivetrain,
+    extraSections: [],
   },
 
   'Pure Stock': {
@@ -412,32 +475,12 @@ export const CLASS_CONFIGS: Record<string, ClassConfig> = {
     showWingAero: false,
     showWeightBalance: false,
     showDrivechain: false,
-    generalFields: [
-      { label: 'Cross Weight (%)', key: 'cross_weight', type: 'number', placeholder: '50.0' },
-      { label: 'Toe', key: 'toe', type: 'select' },
-      { label: 'Front Ride Height', key: 'front_ride_height', type: 'select' },
-      { label: 'Rear Ride Height', key: 'rear_ride_height', type: 'select' },
-      { label: 'Stagger', key: 'stagger', type: 'number', step: '0.25', placeholder: 'inches' },
-    ],
-    frontCornerFields: [pressureField(), shockField, springField(), wheelOffsetField],
-    rearCornerFields: [tireSizeField, pressureField(), shockField, springField(), wheelOffsetField],
-    suspensionFields: [
-      { label: 'Panhard Bar', key: 'panhard_bar', placeholder: 'Height/angle' },
-      { label: 'Gear Ratio', key: 'gear_ratio', placeholder: 'e.g. 3.73' },
-    ],
-    extraSections: [
-      {
-        id: 'purestock-extras',
-        title: 'Pure Stock Specifics',
-        icon: 'car',
-        fields: [
-          { label: 'Sway Bar', key: 'sway_bar', type: 'select', options: [
-            { value: '', label: 'Select' }, { value: 'stock', label: 'Stock' }, { value: 'removed', label: 'Removed' },
-          ]},
-          { label: 'Tire Brand/Model', key: 'tire_brand', placeholder: 'e.g. Hoosier D55' },
-        ],
-      },
-    ],
+    // Shares the same OnlyFast stock-car sheet as Pro Stock.
+    generalFields: stockGeneralFields,
+    frontCornerFields: stockFrontCornerFields,
+    rearCornerFields: stockRearCornerFields,
+    suspensionFields: stockRearEndDrivetrain,
+    extraSections: [],
   },
 
   'Sport Compact': {
@@ -481,37 +524,17 @@ export const CLASS_CONFIGS: Record<string, ClassConfig> = {
     name: 'Sport Mod',
     description: 'Modified-lite class, tube chassis with limited engine modifications',
     showWingAero: false,
-    showWeightBalance: true,
+    showWeightBalance: false,
     showDrivechain: false,
-    generalFields: standardGeneral,
-    frontCornerFields: standardFrontCorner,
-    rearCornerFields: standardRearCorner,
-    suspensionFields: [
-      { label: 'LR Trailing Arm', key: 'lr_trailing_arm', type: 'number', step: '0.25', placeholder: 'degrees' },
-      { label: 'RR Trailing Arm', key: 'rr_trailing_arm', type: 'number', step: '0.25', placeholder: 'degrees' },
-      { label: 'Third Link', key: 'third_link', type: 'number', step: '0.25', placeholder: 'degrees' },
-      { label: 'Panhard Bar', key: 'panhard_bar', placeholder: 'Height/angle' },
-      { label: 'Gear Ratio', key: 'gear_ratio', placeholder: 'e.g. 4.86' },
-    ],
-
-    extraSections: [
-      {
-        id: 'sportmod-extras',
-        title: 'Sport Mod Specifics',
-        icon: 'car',
-        fields: [
-          { label: 'Sway Bar Dia.', key: 'sway_bar', placeholder: 'inches' },
-          { label: 'Nose Piece', key: 'nose_piece', type: 'select', options: [
-            { value: '', label: 'Select' }, { value: 'flat', label: 'Flat' }, { value: 'wedge', label: 'Wedge' }, { value: 'round', label: 'Round' },
-          ]},
-          { label: 'Transmission', key: 'transmission', type: 'select', options: [
-            { value: '', label: 'Select' }, { value: 'manual', label: 'Manual' }, { value: 'powerglide', label: 'Powerglide' }, { value: 'bert', label: 'Bert/Brinn' },
-          ]},
-        ],
-      },
-      weightBalanceSection,
-    ],
+    // Sport Modified shares the exact same OnlyFast sheet as Modified:
+    // General Chassis, Four Corners, Rear-End & Drivetrain only.
+    generalFields: modifiedGeneral,
+    frontCornerFields: standardFrontCorner, // caster + camber FRONT only
+    rearCornerFields: standardRearCorner,   // no caster/camber on rears
+    suspensionFields: modifiedRearEndDrivetrain,
+    extraSections: [],
   },
+
 };
 
 export const getClassConfig = (className: string): ClassConfig => {

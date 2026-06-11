@@ -423,9 +423,15 @@ export function checkSavePermission(ctx: SavePermissionContext): SavePermission 
   const limits = tierLimits[ctx.tier];
 
   // --- Car-type lock (applies to every tier with a finite maxCars) ----------
-  // Updating an already-saved record never trips the car-type lock (the car
-  // type was already accepted when it was first saved).
-  if (typeof limits.maxCars === 'number' && !ctx.isExistingSave) {
+  // This runs for BOTH new saves AND edits. We do NOT skip it on edits, because
+  // an edit can switch an existing save to a *different* car type — which must
+  // still be blocked once the account is locked to its first car type.
+  //
+  // Allowed when the new car type is one the user has already saved (same car,
+  // any number of base/race-weekend saves) OR when there is still room under
+  // the tier's maxCars. Comparison is normalized (trim + lowercase) so display
+  // labels like "Dwarf Car" and "dwarf car" map to the same locked car type.
+  if (typeof limits.maxCars === 'number') {
     const newCar = normCar(ctx.newCarType);
     const known = ctx.existingCarTypes.map(normCar).filter(Boolean);
     const distinct = new Set(known);
@@ -447,6 +453,7 @@ export function checkSavePermission(ctx: SavePermissionContext): SavePermission 
       };
     }
   }
+
 
   // --- Count limits (only on NEW saves) -------------------------------------
   if (!ctx.isExistingSave) {

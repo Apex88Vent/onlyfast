@@ -14,7 +14,8 @@ const Footer: React.FC<FooterProps> = ({ onPrivacyClick, onTermsClick }) => {
             <img
               src="https://d64gsuwffb70l.cloudfront.net/688263e7085fd34dcdf7f46a_1775752881652_48fe46d9.png"
               alt="OnlyFast logo"
-              className="h-[30px] w-auto"
+              className="h-[45px] w-auto"
+
             />
 
 
