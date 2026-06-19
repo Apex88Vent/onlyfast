@@ -109,6 +109,11 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
   const [addError, setAddError] = useState<string | null>(null);
   const [addBusy, setAddBusy] = useState(false);
 
+  // Delete-event confirmation state (deletes the ENTIRE race day / all sessions).
+  const [deleteTarget, setDeleteTarget] = useState<SetupGroup | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   useEffect(() => {
     if (user) fetchSetups();
   }, [user, refreshTrigger]);
@@ -198,6 +203,48 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
     closeAdd();
   };
 
+  // ---- DELETE RACE EVENT (entire race day / all sessions) ------------------
+  const openDelete = (group: SetupGroup) => {
+    setDeleteTarget(group);
+    setDeleteError(null);
+  };
+
+  const closeDelete = () => {
+    setDeleteTarget(null);
+    setDeleteError(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget || !user) return;
+    const ids = deleteTarget.setups.map(s => s.id).filter(id => id != null);
+    if (ids.length === 0) {
+      closeDelete();
+      return;
+    }
+    setDeleteBusy(true);
+    setDeleteError(null);
+    try {
+      const { error } = await supabase
+        .from('race_setups')
+        .delete()
+        .in('id', ids)
+        .eq('user_id', user.id); // RLS-safe: only the owner can delete
+      if (error) {
+        setDeleteError(error.message || 'Could not delete this race event. Please try again.');
+        setDeleteBusy(false);
+        return;
+      }
+      // Remove every session in this event from local state after success.
+      const idSet = new Set(ids);
+      setSetups(prev => prev.filter(s => !idSet.has(s.id)));
+      setDeleteBusy(false);
+      closeDelete();
+    } catch (err: any) {
+      setDeleteError(err?.message || 'Network error — unable to delete right now.');
+      setDeleteBusy(false);
+    }
+  };
+
   if (!user) {
     return (
       <section className="bg-white rounded-2xl border border-[#E5E7EB] p-8 text-center shadow-sm">
@@ -255,25 +302,37 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
 
                 return (
                   <li key={group.key} className="bg-[#F9FAFB] rounded-xl border border-[#E5E7EB] p-4">
-                    {/* Parent race-day title */}
-                    <div className="mb-3">
-                      <div className="font-bold text-base text-[#1A1B23] truncate">{group.title || 'Untitled'}</div>
-                      {subtitleParts.length > 0 && (
-                        <div className="text-xs text-[#9CA3AF] truncate mt-0.5">
-                          {subtitleParts.join(' • ')}
-                        </div>
-                      )}
+                    {/* Parent race-day title + delete-entire-event trash icon */}
+                    <div className="mb-3 flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-bold text-base text-[#1A1B23] truncate">{group.title || 'Untitled'}</div>
+                        {subtitleParts.length > 0 && (
+                          <div className="text-xs text-[#9CA3AF] truncate mt-0.5">
+                            {subtitleParts.join(' • ')}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => openDelete(group)}
+                        className="flex-shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-lg text-[#9CA3AF] hover:text-red-600 hover:bg-red-50 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500"
+                        aria-label={`Delete entire race event ${group.title} and all its sessions`}
+                        title="Delete entire race event"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" />
+                        </svg>
+                      </button>
                     </div>
 
-                    {/* Session chips: tap a chip to LOAD that session. Rename/Delete
-                        controls now live on the active session page. Only the
-                        trailing [+] add button remains here. */}
+                    {/* Session chips: tap a chip to LOAD that session. Per-session
+                        delete now lives on the active session page; this screen's
+                        trash icon (above) deletes the whole race event. */}
                     <div className="flex flex-wrap gap-2 items-center">
                       {orderedSetups.map(s => (
                         <button
                           key={`chip-${s.id}`}
                           onClick={() => onLoad(s)}
-                          className={`inline-flex items-center rounded-full border border-[#E5E7EB] text-xs font-semibold px-3.5 py-1.5 hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-[#00A8E8] ${getSetupTypeBadge(s.setup_type)}`}
+                          className={`inline-flex items-center px-3.5 py-1.5 rounded-full border border-[#E5E7EB] text-xs font-semibold hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-[#00A8E8] ${getSetupTypeBadge(s.setup_type)}`}
                           aria-label={`Load ${sessionLabelOf(s)} for ${group.title}`}
                           title={`Load ${sessionLabelOf(s)}`}
                         >
@@ -322,6 +381,26 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
               <button onClick={closeAdd} className="px-4 py-2 rounded-lg text-sm font-medium text-[#6B7280] hover:bg-[#F5F5F7] transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8]">Cancel</button>
               <button onClick={submitAdd} disabled={addBusy} className="px-4 py-2 rounded-lg text-sm font-semibold bg-[#00A8E8] hover:bg-[#0090c7] text-white transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[#00A8E8]">
                 {addBusy ? 'Adding...' : 'Add'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE RACE EVENT CONFIRMATION MODAL */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-label="Delete Race Event">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <h4 className="text-lg font-bold text-[#1A1B23] mb-2">Delete this race event?</h4>
+            <p className="text-sm text-[#6B7280] mb-1 font-medium text-[#1A1B23]">{deleteTarget.title || 'Untitled'}</p>
+            <p className="text-sm text-[#6B7280]">
+              Delete this entire race event and all {deleteTarget.setups.length} session{deleteTarget.setups.length === 1 ? '' : 's'} inside it? This cannot be undone.
+            </p>
+            {deleteError && <div className="text-xs text-red-600 mt-3" role="alert">{deleteError}</div>}
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={closeDelete} disabled={deleteBusy} className="px-4 py-2 rounded-lg text-sm font-medium text-[#6B7280] hover:bg-[#F5F5F7] transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[#00A8E8]">Cancel</button>
+              <button onClick={confirmDelete} disabled={deleteBusy} className="px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 hover:bg-red-700 text-white transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2">
+                {deleteBusy ? 'Deleting...' : 'Delete'}
               </button>
             </div>
           </div>

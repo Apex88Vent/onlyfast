@@ -130,7 +130,7 @@ export const STRIPE_PUBLISHABLE_KEY =
 
 export const STRIPE_BUY_BUTTONS: Record<'pro' | 'teams', string> = {
   pro: 'buy_btn_1TdzjMGEWZrPYXmKqblFVGCp',
-  teams: 'buy_btn_1TdzxeGEWZrPYXmKRORftUys',
+  teams: 'buy_btn_1TjNSYGEWZrPYXmKdJbu6VSP',
 };
 
 const PENDING_PLAN_KEY = 'pending_plan';
