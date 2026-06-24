@@ -135,11 +135,15 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
   isReplay = false,
 }) => {
   const [index, setIndex] = useState(0);
+  const [dragStartX, setDragStartX] = useState<number | null>(null);
+  const [dragStartY, setDragStartY] = useState<number | null>(null);
+  const [mouseStartX, setMouseStartX] = useState<number | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const slide = slides[index];
   const Icon = slide.icon;
   const isFinal = index === slides.length - 1;
   const canSkip = !isFinal && index >= REQUIRED_SLIDE_COUNT;
+  const canShowLogin = Boolean(onLogin);
 
   useEffect(() => {
     headingRef.current?.focus();
@@ -151,6 +155,56 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
 
   const skip = () => {
     (onSkip || onComplete)();
+  };
+
+  const goNext = () => {
+    if (!isFinal) setIndex((current) => Math.min(current + 1, slides.length - 1));
+  };
+
+  const goPrevious = () => {
+    setIndex((current) => Math.max(current - 1, 0));
+  };
+
+  const handleTouchStart = (event: React.TouchEvent<HTMLElement>) => {
+    const touch = event.touches[0];
+    if (!touch) return;
+    setDragStartX(touch.clientX);
+    setDragStartY(touch.clientY);
+  };
+
+  const handleTouchEnd = (event: React.TouchEvent<HTMLElement>) => {
+    if (dragStartX == null || dragStartY == null) return;
+    const touch = event.changedTouches[0];
+    setDragStartX(null);
+    setDragStartY(null);
+    if (!touch) return;
+
+    const deltaX = touch.clientX - dragStartX;
+    const deltaY = touch.clientY - dragStartY;
+    if (Math.abs(deltaX) < 48 || Math.abs(deltaX) < Math.abs(deltaY)) return;
+
+    if (deltaX < 0) {
+      goNext();
+    } else {
+      goPrevious();
+    }
+  };
+
+  const handleMouseDown = (event: React.MouseEvent<HTMLElement>) => {
+    setMouseStartX(event.clientX);
+  };
+
+  const handleMouseUp = (event: React.MouseEvent<HTMLElement>) => {
+    if (mouseStartX == null) return;
+    const deltaX = event.clientX - mouseStartX;
+    setMouseStartX(null);
+    if (Math.abs(deltaX) < 60) return;
+
+    if (deltaX < 0) {
+      goNext();
+    } else {
+      goPrevious();
+    }
   };
 
   return (
@@ -198,6 +252,10 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
         aria-labelledby="how-onlyfast-title"
         className="onlyfast-animated w-full max-w-[430px] rounded-[2rem] border border-[#E5E7EB] bg-white p-5 shadow-2xl shadow-slate-900/10"
         style={{ animation: 'onlyfastSlideIn 260ms ease-out' }}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
       >
         <div className="flex items-center justify-between gap-3">
           <img src="/onlyfast-logo.png" alt="OnlyFast" className="h-16 w-auto object-contain" />
@@ -492,7 +550,7 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
 
           <button
             type="button"
-            onClick={() => (isFinal ? finish() : setIndex(index + 1))}
+            onClick={() => (isFinal ? finish() : goNext())}
             className="onlyfast-pulse mt-6 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#00A8E8] px-5 py-4 text-base font-black text-white transition-all hover:-translate-y-0.5 hover:bg-[#0090c7] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
             style={{ animation: 'onlyfastPulse 2.2s ease-in-out infinite' }}
           >
@@ -500,7 +558,40 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
             <ChevronRight className="h-5 w-5" aria-hidden="true" />
           </button>
 
-          {index === 0 && onLogin && (
+          {index === 0 && canShowLogin && (
+            <button
+              type="button"
+              onClick={onLogin}
+              className="mx-auto mt-4 flex items-center gap-1 rounded-full text-xs font-semibold text-[#007EAE] hover:text-[#00A8E8] hover:underline focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
+            >
+              <LogIn className="h-3.5 w-3.5" aria-hidden="true" />
+              Already a member? Login here
+            </button>
+          )}
+
+          {!isReplay && canSkip && (
+            <div className="mt-4 flex flex-col items-center gap-2">
+              <button
+                type="button"
+                onClick={skip}
+                className="rounded-full text-xs font-semibold text-[#6B7280] hover:text-[#00A8E8] hover:underline focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
+              >
+                Skip to plans
+              </button>
+              {canShowLogin && (
+                <button
+                  type="button"
+                  onClick={onLogin}
+                  className="flex items-center gap-1 rounded-full text-xs font-semibold text-[#007EAE] hover:text-[#00A8E8] hover:underline focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
+                >
+                  <LogIn className="h-3.5 w-3.5" aria-hidden="true" />
+                  Already a member? Login here
+                </button>
+              )}
+            </div>
+          )}
+
+          {!isReplay && isFinal && canShowLogin && (
             <button
               type="button"
               onClick={onLogin}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import { AnnouncerProvider } from './AccessibleAnnouncer';
@@ -24,8 +24,10 @@ const AppLayout: React.FC = () => {
   const [showHowOnlyFastWorks, setShowHowOnlyFastWorks] = useState(false);
   const [hasCheckedHowOnlyFastWorks, setHasCheckedHowOnlyFastWorks] = useState(false);
   const [isReplayingHowOnlyFastWorks, setIsReplayingHowOnlyFastWorks] = useState(false);
+  const [skipHowOnlyFastWorksAfterLogin, setSkipHowOnlyFastWorksAfterLogin] = useState(false);
   const [legalModal, setLegalModal] = useState<'privacy' | 'terms' | null>(null);
   const [showSplash, setShowSplash] = useState(true);
+  const onboardingLoginEscapeRef = useRef(false);
 
   const howOnlyFastWorksStorageKey = (userId?: string | null) =>
     userId ? `onlyfast_onboarding_completed_${userId}` : 'onlyfast_onboarding_completed_guest';
@@ -60,6 +62,31 @@ const AppLayout: React.FC = () => {
     window.location.href = '/pricing';
   }, [user]);
 
+  const hasSelectedMembership = useCallback((signedInUser: User | null | undefined): boolean => {
+    const metadata = (signedInUser?.user_metadata || {}) as Record<string, unknown>;
+    if (
+      metadata.membership_tier ||
+      metadata.has_admin_full_access ||
+      metadata.promo_access_level
+    ) {
+      return true;
+    }
+
+    try {
+      const raw = localStorage.getItem('onlyfast_membership');
+      if (!raw) return false;
+      const saved = JSON.parse(raw) as { membership_tier?: unknown };
+      return Boolean(saved?.membership_tier);
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const handleHowOnlyFastWorksLogin = useCallback(() => {
+    onboardingLoginEscapeRef.current = true;
+    setAuthModalOpen(true);
+  }, []);
+
   const handleSplashComplete = useCallback(() => {
     setShowSplash(false);
   }, []);
@@ -80,9 +107,27 @@ const AppLayout: React.FC = () => {
       setUser(session?.user ?? null);
       setHasCheckedHowOnlyFastWorks(false);
 
+      if (!session?.user) {
+        setSkipHowOnlyFastWorksAfterLogin(false);
+      }
+
       // After an unregistered user registers (triggered from a first-save), send
       // them to the Rookie / Pro / Team selection page, then back to saving.
       if (event === 'SIGNED_IN') {
+        if (onboardingLoginEscapeRef.current) {
+          onboardingLoginEscapeRef.current = false;
+          setSkipHowOnlyFastWorksAfterLogin(true);
+          setShowHowOnlyFastWorks(false);
+          setIsReplayingHowOnlyFastWorks(false);
+          setHasCheckedHowOnlyFastWorks(true);
+          setAuthModalOpen(false);
+
+          if (!hasSelectedMembership(session.user)) {
+            window.location.href = '/pricing';
+            return;
+          }
+        }
+
         try {
           if (localStorage.getItem('pending_plan_redirect')) {
             localStorage.removeItem('pending_plan_redirect');
@@ -120,10 +165,16 @@ const AppLayout: React.FC = () => {
       setHasCheckedHowOnlyFastWorks(false);
     });
     return () => subscription.unsubscribe();
-  }, []);
+  }, [hasSelectedMembership]);
 
   useEffect(() => {
     if (showSplash || isReplayingHowOnlyFastWorks) return;
+
+    if (skipHowOnlyFastWorksAfterLogin) {
+      setShowHowOnlyFastWorks(false);
+      setHasCheckedHowOnlyFastWorks(true);
+      return;
+    }
 
     const completedInMetadata = Boolean(user?.user_metadata?.onboarding_completed);
     let completedLocally = false;
@@ -134,7 +185,7 @@ const AppLayout: React.FC = () => {
     const completed = completedInMetadata || completedLocally;
     setShowHowOnlyFastWorks(!completed);
     setHasCheckedHowOnlyFastWorks(true);
-  }, [user, showSplash, isReplayingHowOnlyFastWorks]);
+  }, [user, showSplash, isReplayingHowOnlyFastWorks, skipHowOnlyFastWorksAfterLogin]);
 
   const handleCarSelect = (car: string) => {
     setSelectedCar(car);
@@ -167,7 +218,7 @@ const AppLayout: React.FC = () => {
           <HowOnlyFastWorks
             onComplete={isReplayingHowOnlyFastWorks ? closeHowOnlyFastWorksReplay : markHowOnlyFastWorksComplete}
             onSkip={isReplayingHowOnlyFastWorks ? closeHowOnlyFastWorksReplay : markHowOnlyFastWorksComplete}
-            onLogin={() => setAuthModalOpen(true)}
+            onLogin={handleHowOnlyFastWorksLogin}
             isReplay={isReplayingHowOnlyFastWorks}
           />
         )}
