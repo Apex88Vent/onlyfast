@@ -20,7 +20,6 @@ const AppLayout: React.FC = () => {
   const [selectedCar, setSelectedCar] = useState<string>('');
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [isOnboarded, setIsOnboarded] = useState(false);
-  const [onboardingStartStep, setOnboardingStartStep] = useState<1 | 2>(1);
   const [showHowOnlyFastWorks, setShowHowOnlyFastWorks] = useState(false);
   const [hasCheckedHowOnlyFastWorks, setHasCheckedHowOnlyFastWorks] = useState(false);
   const [isReplayingHowOnlyFastWorks, setIsReplayingHowOnlyFastWorks] = useState(false);
@@ -101,6 +100,40 @@ const AppLayout: React.FC = () => {
     }
   }, []);
 
+  const applySelectedCar = useCallback((car: string) => {
+    setSelectedCar(car);
+    setIsOnboarded(true);
+    localStorage.setItem('onlyfast_car', car);
+  }, []);
+
+  useEffect(() => {
+    if (!user || selectedCar) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('race_setups')
+          .select('race_class')
+          .eq('user_id', user.id)
+          .not('race_class', 'is', null)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        const savedCar = (data?.[0]?.race_class || '').trim();
+        if (!cancelled && savedCar) {
+          applySelectedCar(savedCar);
+        }
+      } catch {
+        /* Non-fatal: users without a saved class continue to class selection. */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, selectedCar, applySelectedCar]);
+
   // Auth state listener
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -170,7 +203,7 @@ const AppLayout: React.FC = () => {
   useEffect(() => {
     if (showSplash || isReplayingHowOnlyFastWorks) return;
 
-    if (skipHowOnlyFastWorksAfterLogin) {
+    if (skipHowOnlyFastWorksAfterLogin || selectedCar || hasSelectedMembership(user)) {
       setShowHowOnlyFastWorks(false);
       setHasCheckedHowOnlyFastWorks(true);
       return;
@@ -185,16 +218,13 @@ const AppLayout: React.FC = () => {
     const completed = completedInMetadata || completedLocally;
     setShowHowOnlyFastWorks(!completed);
     setHasCheckedHowOnlyFastWorks(true);
-  }, [user, showSplash, isReplayingHowOnlyFastWorks, skipHowOnlyFastWorksAfterLogin]);
+  }, [user, selectedCar, showSplash, isReplayingHowOnlyFastWorks, skipHowOnlyFastWorksAfterLogin, hasSelectedMembership]);
 
   const handleCarSelect = (car: string) => {
-    setSelectedCar(car);
-    setIsOnboarded(true);
-    localStorage.setItem('onlyfast_car', car);
+    applySelectedCar(car);
   };
 
   const handleBackToCarSelect = () => {
-    setOnboardingStartStep(2);
     setIsOnboarded(false);
     setSelectedCar('');
     localStorage.removeItem('onlyfast_car');
@@ -231,12 +261,12 @@ const AppLayout: React.FC = () => {
     );
   }
 
-  // Show onboarding if not completed
+  // Show discipline/class selection when no working class has been chosen yet.
   if (!isOnboarded) {
     return (
       <AnnouncerProvider>
         <SkipLink />
-        <OnboardingFlow onComplete={handleCarSelect} initialStep={onboardingStartStep} />
+        <OnboardingFlow onComplete={handleCarSelect} />
         <CookieConsent />
       </AnnouncerProvider>
     );
