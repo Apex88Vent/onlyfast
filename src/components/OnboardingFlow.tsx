@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { CAR_CLASSES, CLASS_CONFIGS } from '@/lib/classConfigs';
+import { ArrowLeft, ArrowRight, Check, Gauge, Sparkles, Wrench } from 'lucide-react';
 // TEST-ACCOUNT BYPASS (remove before production): lets test@test.com click into
 // every "Coming Soon" discipline/class. Real users still see them locked.
 import { isCurrentUserTestAccount } from '@/lib/testAccount';
 
 interface OnboardingFlowProps {
   onComplete: (car: string) => void;
+  initialStep?: 1 | 2;
 }
 
 
@@ -190,11 +192,12 @@ const disciplines = [
   },
 ];
 
-const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
+const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, initialStep = 1 }) => {
   // Plan selection no longer happens during onboarding — selecting a car/class
   // takes the user straight into the app. The subscription page only appears
   // the first time the user tries to save a setup (handled in SetupDashboard).
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(initialStep);
+  const [selectedDiscipline, setSelectedDiscipline] = useState('');
   // TEST-ACCOUNT BYPASS (remove before production): when the dedicated demo
   // account is signed in, treat every "Coming Soon" discipline/class as
   // selectable so the test account can preview everything. Real users unaffected.
@@ -206,63 +209,117 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
   }, [step]);
 
   const steps = [
-    { num: 1, label: 'Discipline' },
-    { num: 2, label: 'Car' },
+    { num: 1, label: 'Welcome' },
+    { num: 2, label: 'Discipline' },
+    { num: 3, label: 'Car' },
   ];
+
+  const chooseDiscipline = (discipline: string) => {
+    setSelectedDiscipline(discipline);
+    setStep(3);
+  };
 
 
   return (
-    <div className="min-h-screen bg-[#F5F5F7] flex items-center justify-center p-4" role="main">
-      <div className="w-full max-w-3xl" id="main-content">
+    <div className="min-h-screen bg-[#F5F5F7] flex items-center justify-center px-4 py-8 sm:py-12" role="main">
+      <div className="w-full max-w-4xl" id="main-content">
         {/* Logo - displayed at 1.5x (h-[120px] -> h-[180px]); w-auto keeps aspect ratio */}
-        <div className="text-center mb-10">
+        <div className="text-center mb-7 sm:mb-9">
           <img
-            src="https://d64gsuwffb70l.cloudfront.net/688263e7085fd34dcdf7f46a_1775752881652_48fe46d9.png"
+            src="/onlyfast-logo.png"
             alt="OnlyFast Setup Assist"
-            className="h-[180px] w-auto mx-auto mb-4"
+            className="h-28 sm:h-36 w-auto mx-auto mb-2"
           />
 
-          <p className="text-[#6B7280] text-lg">Your Smart Setup Solutions</p>
+          <p className="text-[#6B7280] text-base sm:text-lg">Your Smart Setup Solutions</p>
         </div>
 
         {/* Progress */}
-        <nav aria-label="Onboarding progress" className="flex items-center justify-center gap-3 mb-8">
+        <nav aria-label="Onboarding progress" className="flex items-center justify-center gap-2 sm:gap-3 mb-8">
           {steps.map((s, i) => (
             <React.Fragment key={s.num}>
               {i > 0 && (
-                <div className={`w-12 h-1 rounded-full transition-all ${step >= s.num ? 'bg-[#00A8E8]' : 'bg-[#E5E7EB]'}`} aria-hidden="true" />
+                <div className={`w-8 sm:w-12 h-1 rounded-full transition-all ${step >= s.num ? 'bg-[#00A8E8]' : 'bg-[#E5E7EB]'}`} aria-hidden="true" />
               )}
               <div
                 className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
                   step >= s.num ? 'bg-[#00A8E8] text-white' : 'bg-white text-[#9CA3AF] border border-[#E5E7EB]'
                 }`}
                 aria-current={step === s.num ? 'step' : undefined}
-                aria-label={`Step ${s.num}: Select ${s.label}${step === s.num ? ' (current)' : step > s.num ? ' (completed)' : ''}`}
-              >{s.num}</div>
+                aria-label={`Step ${s.num}: ${s.label}${step === s.num ? ' (current)' : step > s.num ? ' (completed)' : ''}`}
+              >{step > s.num ? <Check className="h-5 w-5" aria-hidden="true" /> : s.num}</div>
             </React.Fragment>
           ))}
         </nav>
 
-
-        {/* Step 1: Discipline */}
+        {/* Step 1: Welcome */}
         {step === 1 && (
-          <section aria-labelledby="step1-heading">
-            <h2 id="step1-heading" ref={headingRef} tabIndex={-1} className="text-2xl font-bold text-[#1A1B23] text-center mb-2 outline-none">
-              Select Your Discipline
-            </h2>
-            <p className="text-[#6B7280] text-center mb-8">Choose your racing discipline to get started</p>
+          <section aria-labelledby="step1-heading" className="bg-white rounded-3xl border border-[#E5E7EB] shadow-xl shadow-slate-900/5 px-6 py-8 sm:p-10">
+            <div className="mx-auto max-w-2xl text-center">
+              <div className="inline-flex items-center gap-2 rounded-full bg-[#00A8E8]/10 px-3 py-1.5 text-sm font-semibold text-[#007EAE] mb-4">
+                <Sparkles className="h-4 w-4" aria-hidden="true" /> Built for race day
+              </div>
+              <h2 id="step1-heading" ref={headingRef} tabIndex={-1} className="text-3xl sm:text-4xl font-extrabold tracking-tight text-[#1A1B23] outline-none">
+                Let&apos;s get your car dialed in
+              </h2>
+              <p className="text-[#6B7280] text-base sm:text-lg mt-3">
+                Tell us what you race and OnlyFast will tailor every setup field, recommendation, and comparison to your car.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 my-8">
+              {[
+                { icon: Wrench, title: 'Build smarter', text: 'Use setup fields made for your class.' },
+                { icon: Gauge, title: 'Track changes', text: 'See what helps your car find speed.' },
+                { icon: Sparkles, title: 'Get guidance', text: 'Turn driver feedback into adjustments.' },
+              ].map(({ icon: Icon, title, text }) => (
+                <div key={title} className="rounded-2xl bg-[#F7F9FB] border border-[#E8EDF2] p-5 text-left">
+                  <div className="h-10 w-10 rounded-xl bg-[#00A8E8]/10 text-[#00A8E8] flex items-center justify-center mb-3">
+                    <Icon className="h-5 w-5" aria-hidden="true" />
+                  </div>
+                  <h3 className="font-bold text-[#1A1B23]">{title}</h3>
+                  <p className="text-sm text-[#6B7280] mt-1">{text}</p>
+                </div>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setStep(2)}
+              className="w-full sm:w-auto sm:min-w-64 mx-auto flex items-center justify-center gap-2 rounded-xl bg-[#00A8E8] px-6 py-3.5 font-bold text-white shadow-lg shadow-[#00A8E8]/20 transition-all hover:bg-[#0096D1] hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
+            >
+              Set up my experience <ArrowRight className="h-5 w-5" aria-hidden="true" />
+            </button>
+            <p className="text-center text-xs text-[#8A93A1] mt-4">Takes less than a minute</p>
+          </section>
+        )}
+
+        {/* Step 2: Discipline */}
+        {step === 2 && (
+          <section aria-labelledby="step2-heading">
+            <div className="flex items-center gap-3 mb-6">
+              <button type="button" onClick={() => setStep(1)} className="p-2 rounded-lg text-[#6B7280] hover:text-[#00A8E8] hover:bg-white focus:outline-none focus:ring-2 focus:ring-[#00A8E8]" aria-label="Go back to welcome">
+                <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+              </button>
+              <div>
+                <h2 id="step2-heading" ref={headingRef} tabIndex={-1} className="text-2xl font-bold text-[#1A1B23] outline-none">
+                  Select Your Discipline
+                </h2>
+                <p className="text-[#6B7280] text-sm">Choose where you compete</p>
+              </div>
+            </div>
 
             <div className="space-y-4">
               {disciplines.map(disc => (
                 <div key={disc.key} className="relative">
                   {(disc.enabled || testBypass) ? (
                     <button
-                      onClick={() => setStep(2)}
-                      className="w-full bg-white rounded-2xl border-2 border-[#E5E7EB] hover:border-[#00A8E8] p-8 transition-all group shadow-sm hover:shadow-lg hover:shadow-[#00A8E8]/10 focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
+                      onClick={() => chooseDiscipline(disc.name)}
+                      className="w-full bg-white rounded-2xl border-2 border-[#E5E7EB] hover:border-[#00A8E8] p-5 sm:p-7 transition-all group shadow-sm hover:shadow-lg hover:shadow-[#00A8E8]/10 focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
                       aria-label={`${disc.name} - ${disc.description}`}
                     >
-                      <div className="flex items-center gap-6">
-                        <div className="w-20 h-20 bg-[#00A8E8]/10 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-[#00A8E8]/20 transition-colors" aria-hidden="true">
+                      <div className="flex items-center gap-4 sm:gap-6">
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 bg-[#00A8E8]/10 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-[#00A8E8]/20 transition-colors" aria-hidden="true">
                           {disc.icon}
                         </div>
                         <div className="text-left">
@@ -314,22 +371,20 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
           </section>
         )}
 
-        {/* Step 2: Car Selection */}
-        {step === 2 && (
-          <section aria-labelledby="step2-heading">
+        {/* Step 3: Car Selection */}
+        {step === 3 && (
+          <section aria-labelledby="step3-heading">
             <div className="flex items-center gap-3 mb-6">
               <button
-                onClick={() => setStep(1)}
+                onClick={() => setStep(2)}
                 className="text-[#6B7280] hover:text-[#00A8E8] transition-colors p-1 rounded focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
                 aria-label="Go back to discipline selection"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <polyline points="15 18 9 12 15 6" />
-                </svg>
+                <ArrowLeft className="h-5 w-5" aria-hidden="true" />
               </button>
               <div>
-                <h2 id="step2-heading" ref={headingRef} tabIndex={-1} className="text-2xl font-bold text-[#1A1B23] outline-none">Select Your Car</h2>
-                <p className="text-[#6B7280] text-sm">Choose the class you race in</p>
+                <h2 id="step3-heading" ref={headingRef} tabIndex={-1} className="text-2xl font-bold text-[#1A1B23] outline-none">Select Your Car</h2>
+                <p className="text-[#6B7280] text-sm">{selectedDiscipline || 'Dirt Track Oval'} <span aria-hidden="true">—</span> Choose the class you race in</p>
               </div>
             </div>
 

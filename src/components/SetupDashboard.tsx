@@ -33,9 +33,8 @@ import {
   checkSavePermission,
   isRaceWeekendEditLocked,
 } from '@/lib/membership';
-import AdsenseAd from './AdsenseAd';
-import RookiePostSaveAdScreen from './RookiePostSaveAdScreen';
-import { shouldShowAds, AD_SLOTS } from '@/lib/ads';
+import RookieAdSlot from './RookieAdSlot';
+import { shouldShowAds } from '@/lib/ads';
 
 
 
@@ -1005,6 +1004,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     newIds[clickedType] = setup.id;
     newTiming[clickedType] = setup.timing_data ?? null;
     if (setup.session_label) newLabels[clickedType] = setup.session_label;
+    if (setup.session_order) newOrders[clickedType] = Number(setup.session_order);
 
     // Try to fetch sibling rows (same user, same setup_name) for the other two tabs
     if (user && name) {
@@ -1018,12 +1018,13 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
         if (data) {
           for (const row of data) {
             const t = (row.setup_type || 'base') as SetupType;
-            if (t !== 'base' && t !== 'heat' && t !== 'main') continue;
+            if (!ALL_SLOTS.includes(t)) continue;
             if (newIds[t]) continue; // prefer most recent per type
             newSetups[t] = loadSetupIntoState(row);
             newIds[t] = row.id;
             newTiming[t] = row.timing_data ?? null;
             if (row.session_label) newLabels[t] = row.session_label;
+            if (row.session_order) newOrders[t] = Number(row.session_order);
           }
         }
       } catch {}
@@ -1043,9 +1044,11 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     setSavedMeta({ name, ids: newIds });
     setTimingDataByTab(newTiming);
     setSessionLabels(newLabels);
-    // Reset ordering for the freshly loaded race day (built-in defaults apply).
     setSessionOrders(newOrders);
-    setActiveTab(clickedType);
+    const displayable = ALL_SLOTS
+      .filter(t => !!newIds[t] && (tabHasData(newSetups[t]) || !!newLabels[t]))
+      .sort((a, b) => (newOrders[a] ?? DEFAULT_ORDER[a]) - (newOrders[b] ?? DEFAULT_ORDER[b]));
+    setActiveTab(displayable.includes(clickedType) ? clickedType : (displayable[0] || clickedType));
     setActiveView('setup');
   };
 
@@ -1215,6 +1218,15 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   const sessionExists = (t: SetupType) =>
     !!savedMeta.ids[t] || tabHasData(setups[t]) || !!sessionLabels[t];
 
+  // Display saved race-day sessions only when they are real sessions. This keeps
+  // deleted default sessions from reappearing as gray/blank tabs, and hides old
+  // polluted standby rows that have no user data and no intentional label.
+  const isDisplayableSession = (t: SetupType) => {
+    if (!sessionExists(t)) return false;
+    if (savedMeta.ids[t] && !tabHasData(setups[t]) && !sessionLabels[t]) return false;
+    return true;
+  };
+
   // Open the pencil menu's Rename option.
   const openRenameSession = () => {
     setSessionMenuOpen(false);
@@ -1249,19 +1261,32 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   };
 
   const isLastSession = () =>
-    ALL_SLOTS.filter(t => sessionExists(t)).length <= 1;
+    ALL_SLOTS.filter(t => isDisplayableSession(t)).length <= 1;
 
 
   const submitDeleteSession = async () => {
     setDeleteBusy(true);
     const id = savedMeta.ids[activeTab];
     if (id) {
-      try { await supabase.from('race_setups').delete().eq('id', id); } catch {}
+      try {
+        const { error } = await supabase.from('race_setups').delete().eq('id', id);
+        if (error) throw error;
+      } catch (err: any) {
+        setDeleteBusy(false);
+        setDeleteOpen(false);
+        setSaveMessage('Error deleting session: ' + (err?.message || 'Please try again'));
+        setTimeout(() => setSaveMessage(''), 5000);
+        return;
+      }
     }
 
+    const deletedOrder = orderOf(activeTab);
     const remaining = ALL_SLOTS.filter(
-      t => t !== activeTab && sessionExists(t)
+      t => t !== activeTab && isDisplayableSession(t)
     ).sort((a, b) => orderOf(a) - orderOf(b));
+    const replacement =
+      remaining.find(t => orderOf(t) > deletedOrder) ||
+      remaining[remaining.length - 1];
 
 
     setDeleteBusy(false);
@@ -1303,7 +1328,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       delete next[activeTab];
       return next;
     });
-    switchTab(remaining[0]);
+    if (replacement) setActiveTab(replacement);
   };
 
   // Add a new session (plus button in the horizontal selector).
@@ -1318,25 +1343,25 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     const name = addSessionValue.trim();
     if (!name) { setAddSessionError('Session name cannot be empty.'); return; }
     const dup = ALL_SLOTS.some(
-      t => sessionExists(t) && labelForTab(t).toLowerCase() === name.toLowerCase()
+      t => isDisplayableSession(t) && labelForTab(t).toLowerCase() === name.toLowerCase()
     );
     if (dup) { setAddSessionError('A session with that name already exists for this race day.'); return; }
 
     // Enforce the 6-session-per-race-day maximum.
-    if (ALL_SLOTS.filter(t => sessionExists(t)).length >= MAX_SESSIONS) {
+    if (ALL_SLOTS.filter(t => isDisplayableSession(t)).length >= MAX_SESSIONS) {
       setAddSessionError('Maximum of 6 sessions reached for this race day.');
       return;
     }
 
     // Find a free stable slot key so the new session joins the swipe system.
-    const freeType = ALL_SLOTS.find(t => !sessionExists(t));
+    const freeType = ALL_SLOTS.find(t => !isDisplayableSession(t));
     if (!freeType) {
       setAddSessionError('Maximum of 6 sessions reached for this race day.');
       return;
     }
 
     // Next available session_order (max existing order + 1, capped at 6).
-    const existingOrders = ALL_SLOTS.filter(t => sessionExists(t)).map(t => orderOf(t));
+    const existingOrders = ALL_SLOTS.filter(t => isDisplayableSession(t)).map(t => orderOf(t));
     const nextOrder = (existingOrders.length ? Math.max(...existingOrders) : 0) + 1;
 
     // New blank session sharing this race day's metadata (track/date/class).
@@ -1371,12 +1396,16 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   const orderOf = (t: SetupType) => sessionOrders[t] ?? DEFAULT_ORDER[t];
 
   // The sessions that actually exist for this race day, ordered by session_order.
-  // This drives BOTH the horizontal selector and the swipe system (never hardcoded).
-  // The three canonical sessions (Hot Laps / Heat / Main) ALWAYS show, just like
-  // before; extra slots only appear once added (or while active).
+  // Saved race days render only real persisted/user-created sessions; brand-new
+  // unsaved workspaces still start with the normal Hot Laps / Heat / Main tabs.
   const DEFAULT_SESSIONS: SetupType[] = ['base', 'heat', 'main'];
+  const shouldShowDefaultSessions = !savedMeta.name;
   const orderedSessions: SetupType[] = ALL_SLOTS
-    .filter(t => DEFAULT_SESSIONS.includes(t) || sessionExists(t) || t === activeTab)
+    .filter(t =>
+      isDisplayableSession(t) ||
+      (shouldShowDefaultSessions && DEFAULT_SESSIONS.includes(t)) ||
+      (t === activeTab && isDisplayableSession(t))
+    )
     .sort((a, b) => orderOf(a) - orderOf(b));
 
 
@@ -1388,7 +1417,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   }));
 
   // Whether another session can still be added (max 6 per race day).
-  const sessionCount = ALL_SLOTS.filter(t => sessionExists(t)).length;
+  const sessionCount = orderedSessions.length;
   const canAddSession = sessionCount < MAX_SESSIONS;
 
 
@@ -1502,7 +1531,10 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
         {activeView === 'compare' ? (
           <SetupComparison user={user} onSignInClick={onSignInClick} />
         ) : activeView === 'saved' ? (
-          <SavedSetups user={user} onLoad={handleLoadSetup} refreshTrigger={refreshTrigger} />
+          <div className="space-y-6">
+            <SavedSetups user={user} onLoad={handleLoadSetup} refreshTrigger={refreshTrigger} />
+            <RookieAdSlot placement="setup_dashboard_bottom" user={user} />
+          </div>
         ) : activeView === 'todo' ? (
           <TodoList variant="page" />
         ) : activeView === 'parts' ? (
@@ -1804,12 +1836,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
                 setupType={activeTab}
               />
 
-              {/* TIMING-RESULTS AD (rookie only): shown BELOW the session timing
-                  summary. Never placed inside the scan/upload flow above. */}
-              {adsEnabled && timingDataByTab[activeTab] && (
-                /* REPLACE_ME: timing_results_rookie_ad slot — see AD_SLOTS in src/lib/ads.ts */
-                <AdsenseAd slot={AD_SLOTS.timing_results_rookie_ad} />
-              )}
+              <RookieAdSlot placement="timing_scan_bottom" user={user} />
 
 
               <HandlingFeedback
@@ -1823,13 +1850,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
               />
 
 
-              {/* INPUT-BOTTOM AD (rookie only): a single small ad placed BELOW all
-                  input fields. It is outside any form control group and well above
-                  the fixed Save bar, so it cannot cause accidental clicks. */}
-              {adsEnabled && (
-                /* REPLACE_ME: input_bottom_ad slot — see AD_SLOTS in src/lib/ads.ts */
-                <AdsenseAd slot={AD_SLOTS.input_bottom_ad} className="mt-2" />
-              )}
+              <RookieAdSlot placement="setup_session_bottom" user={user} className="mt-2" />
             </div>
           </div>
         )}
@@ -2019,12 +2040,15 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       )}
 
 
-      {/* POST-SAVE FULL-PAGE AD (rookie users only) — shown after a successful save. */}
+      {/* POST-SAVE UPGRADE INTERSTITIAL (rookie users only) - shown after a successful save. */}
       {showPostSaveAd && adsEnabled && (
-        <RookiePostSaveAdScreen
-          onContinue={() => setShowPostSaveAd(false)}
-          subtitle={'Your setup is saved. Here\u2019s a quick word from our sponsors.'}
-        />
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label="OnlyFast Pro upgrade">
+          <RookieAdSlot
+            placement="after_save_interstitial"
+            user={user}
+            onContinue={() => setShowPostSaveAd(false)}
+          />
+        </div>
       )}
 
 

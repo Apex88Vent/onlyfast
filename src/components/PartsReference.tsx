@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
+import RookieAdSlot from './RookieAdSlot';
 
 interface PartsReferenceProps {
   user: User | null;
@@ -410,6 +411,7 @@ const PartsReference: React.FC<PartsReferenceProps> = ({ user, onSignInClick }) 
           </div>
         )}
       </section>
+      <RookieAdSlot placement="parts_reference_bottom" user={user} />
     </div>
   );
 };

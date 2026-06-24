@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>OnlyFast Rookie Mobile Preview</title>
+    <style>
+      :root {
+        --blue: #00a8e8;
+        --blue-dark: #0090c7;
+        --ink: #1a1b23;
+        --muted: #6b7280;
+        --line: #e5e7eb;
+        --soft: #f5f5f7;
+        --ad-line: #d7eef8;
+        --green: #15803d;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: #d7dbe2;
+        color: var(--ink);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+      }
+
+      .page {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 18px;
+      }
+
+      .phone {
+        position: relative;
+        width: min(100%, 430px);
+        height: min(900px, calc(100vh - 36px));
+        min-height: 720px;
+        overflow: hidden;
+        border: 10px solid #111827;
+        border-radius: 34px;
+        background: var(--soft);
+        box-shadow: 0 28px 80px rgb(17 24 39 / 30%);
+      }
+
+      .app {
+        height: 100%;
+        overflow: auto;
+        padding-bottom: 92px;
+      }
+
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        height: 64px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        border-bottom: 1px solid var(--line);
+        background: white;
+        padding: 0 14px;
+      }
+
+      .icon-button {
+        width: 40px;
+        height: 40px;
+        display: grid;
+        place-items: center;
+        border: 1px solid transparent;
+        border-radius: 10px;
+        background: white;
+        color: var(--ink);
+        font-size: 22px;
+      }
+
+      .logo {
+        height: 48px;
+        width: auto;
+        object-fit: contain;
+      }
+
+      .account {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #f9fafb;
+        padding: 5px 8px 5px 5px;
+      }
+
+      .avatar {
+        width: 28px;
+        height: 28px;
+        display: grid;
+        place-items: center;
+        border-radius: 999px;
+        background: var(--blue);
+        color: white;
+        font-size: 12px;
+        font-weight: 900;
+      }
+
+      .tier {
+        border-radius: 999px;
+        background: #f3f4f6;
+        color: #4b5563;
+        padding: 2px 7px;
+        font-size: 10px;
+        font-weight: 900;
+      }
+
+      .tabs {
+        position: sticky;
+        top: 64px;
+        z-index: 4;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 6px;
+        border-bottom: 1px solid var(--line);
+        background: white;
+        padding: 8px;
+      }
+
+      .tab {
+        min-height: 38px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: white;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 800;
+      }
+
+      .tab.active {
+        border-color: var(--blue);
+        background: var(--blue);
+        color: white;
+      }
+
+      main {
+        padding: 14px;
+      }
+
+      .view {
+        display: none;
+      }
+
+      .view.active {
+        display: block;
+      }
+
+      .hero-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 14px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 23px;
+        line-height: 1.12;
+      }
+
+      h2 {
+        margin: 0;
+        font-size: 16px;
+      }
+
+      p {
+        margin: 0;
+      }
+
+      .sub {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.35;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid rgb(0 168 232 / 20%);
+        border-radius: 999px;
+        background: rgb(0 168 232 / 10%);
+        color: var(--blue);
+        padding: 6px 10px;
+        font-size: 11px;
+        font-weight: 900;
+        white-space: nowrap;
+      }
+
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: white;
+        padding: 14px;
+        box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+      }
+
+      .stack {
+        display: grid;
+        gap: 12px;
+      }
+
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 5px;
+        color: #4b5563;
+        font-size: 11px;
+        font-weight: 800;
+      }
+
+      input,
+      select,
+      textarea {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #f9fafb;
+        color: var(--ink);
+        padding: 10px;
+        font-size: 13px;
+        outline: none;
+      }
+
+      textarea {
+        min-height: 72px;
+        resize: vertical;
+      }
+
+      .segment {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+      }
+
+      .segment button {
+        min-height: 36px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: white;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .segment button.active {
+        border-color: var(--blue);
+        background: rgb(0 168 232 / 10%);
+        color: var(--blue);
+      }
+
+      .ad-slot {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--ad-line);
+        border-radius: 16px;
+        background: white;
+        box-shadow: 0 12px 28px rgb(0 168 232 / 10%);
+      }
+
+      .ad-slot::before {
+        content: "";
+        position: absolute;
+        inset: 0 0 auto;
+        height: 4px;
+        background: var(--blue);
+      }
+
+      .ad-inner {
+        display: grid;
+        gap: 12px;
+        padding: 16px;
+      }
+
+      .ad-logo {
+        height: 30px;
+        width: auto;
+        object-fit: contain;
+      }
+
+      .eyebrow {
+        margin-top: 2px;
+        color: var(--blue);
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+      }
+
+      .ad-title {
+        margin-top: 3px;
+        font-size: 18px;
+        font-weight: 900;
+        line-height: 1.18;
+      }
+
+      .ad-body {
+        margin-top: 5px;
+        color: #4b5563;
+        font-size: 13px;
+        line-height: 1.42;
+      }
+
+      .benefits {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 10px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .benefits li {
+        border: 1px solid var(--ad-line);
+        border-radius: 999px;
+        background: #f3fbfe;
+        padding: 5px 9px;
+        font-size: 11px;
+        font-weight: 800;
+      }
+
+      .actions {
+        display: grid;
+        gap: 8px;
+      }
+
+      .primary,
+      .secondary,
+      .save {
+        min-height: 44px;
+        border-radius: 12px;
+        padding: 10px 14px;
+        font-size: 14px;
+        font-weight: 900;
+      }
+
+      .primary,
+      .save {
+        border: 1px solid var(--blue);
+        background: var(--blue);
+        color: white;
+      }
+
+      .secondary {
+        border: 1px solid var(--line);
+        background: white;
+        color: #4b5563;
+      }
+
+      .small-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border: 1px solid #f0f0f2;
+        border-radius: 12px;
+        background: #fafafa;
+        padding: 10px;
+      }
+
+      .row strong {
+        display: block;
+        font-size: 13px;
+      }
+
+      .row span {
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .bottom-bar {
+        position: absolute;
+        inset: auto 0 0;
+        z-index: 6;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        border-top: 1px solid var(--line);
+        background: white;
+        padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+      }
+
+      .save-note {
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.25;
+      }
+
+      .save {
+        flex: 0 0 auto;
+        padding-inline: 18px;
+      }
+
+      .toast {
+        position: absolute;
+        left: 14px;
+        right: 14px;
+        bottom: 82px;
+        z-index: 8;
+        display: none;
+        border: 1px solid #bbf7d0;
+        border-radius: 14px;
+        background: #f0fdf4;
+        color: var(--green);
+        padding: 10px 12px;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .toast.show {
+        display: block;
+      }
+
+      .modal {
+        position: absolute;
+        inset: 0;
+        z-index: 10;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgb(0 0 0 / 62%);
+        padding: 16px;
+      }
+
+      .modal.show {
+        display: flex;
+      }
+
+      .interstitial-wrap {
+        border-radius: 24px;
+        background: var(--ink);
+        padding: 12px;
+        box-shadow: 0 24px 48px rgb(26 27 35 / 22%);
+      }
+
+      .interstitial {
+        text-align: center;
+      }
+
+      .interstitial .ad-logo {
+        height: 38px;
+        margin: 0 auto;
+      }
+
+      .note {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.35;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="phone" aria-label="OnlyFast Rookie mobile preview">
+        <div class="app">
+          <header>
+            <button class="icon-button" type="button" aria-label="Menu">☰</button>
+            <img src="onlyfast-logo.png" alt="OnlyFast" class="logo" />
+            <div class="account" aria-label="Rookie account">
+              <span class="avatar">R</span>
+              <span class="tier">Rookie</span>
+            </div>
+          </header>
+
+          <nav class="tabs" aria-label="Preview pages">
+            <button class="tab active" type="button" data-view="setup">Setup</button>
+            <button class="tab" type="button" data-view="saved">Saved</button>
+            <button class="tab" type="button" data-view="parts">Parts</button>
+            <button class="tab" type="button" data-view="schedule">Schedule</button>
+          </nav>
+
+          <main>
+            <section class="view active" id="setup">
+              <div class="hero-row">
+                <div>
+                  <h1>Hot Laps Setup</h1>
+                  <p class="sub">Mobile Rookie/free setup notebook preview.</p>
+                </div>
+                <span class="pill">Dirt Oval</span>
+              </div>
+
+              <div class="stack">
+                <div class="card stack">
+                  <div class="grid-2">
+                    <div>
+                      <label>Track</label>
+                      <input value="Eldora Speedway" />
+                    </div>
+                    <div>
+                      <label>Date</label>
+                      <input value="2026-06-23" />
+                    </div>
+                  </div>
+                  <div>
+                    <label>Track condition</label>
+                    <select>
+                      <option>Slick</option>
+                      <option selected>Tacky to slick</option>
+                      <option>Heavy</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="card stack">
+                  <h2>Handling Feel</h2>
+                  <label>Corner entry</label>
+                  <div class="segment">
+                    <button type="button">Tight</button>
+                    <button class="active" type="button">Neutral</button>
+                    <button type="button">Loose</button>
+                  </div>
+                  <label>Corner exit</label>
+                  <div class="segment">
+                    <button class="active" type="button">Tight</button>
+                    <button type="button">Neutral</button>
+                    <button type="button">Loose</button>
+                  </div>
+                </div>
+
+                <div class="card stack">
+                  <h2>Chassis</h2>
+                  <div class="grid-2">
+                    <div>
+                      <label>Cross weight</label>
+                      <input value="53.2%" />
+                    </div>
+                    <div>
+                      <label>Stagger</label>
+                      <input value="2.25 in" />
+                    </div>
+                    <div>
+                      <label>RF shock</label>
+                      <input value="5-3" />
+                    </div>
+                    <div>
+                      <label>LR spring</label>
+                      <input value="200" />
+                    </div>
+                  </div>
+                  <div>
+                    <label>Notes</label>
+                    <textarea>Car is stable on entry but needs more drive off.</textarea>
+                  </div>
+                </div>
+
+                <div class="card stack">
+                  <h2>Timing Scan</h2>
+                  <p class="sub">Rookie preview of timing tools inside the setup page.</p>
+                  <div class="row">
+                    <div>
+                      <strong>Best lap</strong>
+                      <span>15.842 seconds</span>
+                    </div>
+                    <span class="pill">Saved</span>
+                  </div>
+                </div>
+
+                <div id="timing-ad"></div>
+                <div id="session-ad"></div>
+              </div>
+            </section>
+
+            <section class="view" id="saved">
+              <div class="hero-row">
+                <div>
+                  <h1>Saved Setups</h1>
+                  <p class="sub">Rookie dashboard with limited saved setup history.</p>
+                </div>
+              </div>
+              <div class="stack">
+                <div class="card small-list">
+                  <div class="row"><div><strong>Eldora Practice</strong><span>Hot Laps · Tacky to slick</span></div><span>View</span></div>
+                  <div class="row"><div><strong>Feature Baseline</strong><span>Main · Slick</span></div><span>View</span></div>
+                </div>
+                <div id="dashboard-ad"></div>
+              </div>
+            </section>
+
+            <section class="view" id="parts">
+              <div class="hero-row">
+                <div>
+                  <h1>Parts Reference</h1>
+                  <p class="sub">Track part numbers, suppliers, and costs.</p>
+                </div>
+              </div>
+              <div class="stack">
+                <div class="card stack">
+                  <div class="grid-2">
+                    <div><label>Part type</label><input value="Shock" /></div>
+                    <div><label>Part number</label><input value="AFCO-1294" /></div>
+                  </div>
+                  <button class="secondary" type="button">Add Part</button>
+                </div>
+                <div class="card small-list">
+                  <div class="row"><div><strong>Shock</strong><span>AFCO-1294 · RR</span></div><span>$189</span></div>
+                  <div class="row"><div><strong>Spring</strong><span>Hyperco 200 · LR</span></div><span>$98</span></div>
+                </div>
+                <div id="parts-ad"></div>
+              </div>
+            </section>
+
+            <section class="view" id="schedule">
+              <div class="hero-row">
+                <div>
+                  <h1>Race Schedule</h1>
+                  <p class="sub">Upcoming and past races sorted by date.</p>
+                </div>
+              </div>
+              <div class="stack">
+                <div class="card small-list">
+                  <div class="row"><div><strong>June 28</strong><span>Wayne County Speedway</span></div><span>TBD</span></div>
+                  <div class="row"><div><strong>July 12</strong><span>Eldora Speedway</span></div><span>TBD</span></div>
+                </div>
+                <button class="secondary" type="button">Add Race</button>
+                <div id="schedule-ad"></div>
+              </div>
+            </section>
+          </main>
+        </div>
+
+        <div class="toast" id="toast">Saved setup. Rookie ad shown after successful save.</div>
+
+        <div class="bottom-bar">
+          <div class="save-note">Rookie preview<br />Tap save to test interstitial</div>
+          <button class="save" type="button" id="saveButton">Save Setup</button>
+        </div>
+
+        <div class="modal" id="saveModal" aria-label="After-save Rookie ad">
+          <div class="interstitial-wrap">
+            <div id="interstitial-ad"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const copy = {
+        setup_dashboard_bottom: ['Placeholder ad slot', 'Rookie plan is ad-supported.', 'Upgrade to Pro for $5/mo to remove ads and keep your setup notebook cleaner.', ['Ad-free screens.', 'Export setups.', 'More setup tools.']],
+        setup_session_bottom: ['Placeholder ad slot', 'Keep tuning. Lose the ads.', 'Upgrade to Pro for $5/mo for an ad-free setup notebook.', ['Cleaner setup screens.', 'More saved workflow.', 'Export-ready setups.']],
+        parts_reference_bottom: ['Placeholder ad slot', 'Build your edge with Pro.', 'Upgrade to Pro for $5/mo to remove ads and unlock a cleaner parts workflow.', ['Ad-free parts reference.', 'More tools.', 'Faster workflow.']],
+        schedule_bottom: ['Placeholder ad slot', 'Plan race days with fewer distractions.', 'Upgrade to Pro for $5/mo and remove Rookie ads.', ['Cleaner screens.', 'Less clutter.', 'Faster workflow.']],
+        timing_scan_bottom: ['Placeholder ad slot', 'Scan results. Skip the ads.', 'Upgrade to Pro for $5/mo for a cleaner timing workflow.', ['Ad-free timing.', 'More tools.', 'Cleaner workflow.']],
+        after_save_interstitial: ['Setup Saved', 'Rookie plan is ad-supported.', 'Upgrade to Pro for $5/mo to remove ads and keep working faster.', ['Ad-free experience.', 'Export setups.', 'More setup tools.'], 'Temporary house ad until Media.net, AdMob, or another ad provider is approved.'],
+      };
+
+      function adSlot(key, interstitial = false) {
+        const [eyebrow, title, body, benefits, note] = copy[key];
+        return `
+          <article class="ad-slot ${interstitial ? 'interstitial' : ''}">
+            <div class="ad-inner">
+              <div>
+                <img src="onlyfast-logo.png" alt="OnlyFast" class="ad-logo" />
+                <p class="eyebrow">${eyebrow}</p>
+                <div class="ad-title">${title}</div>
+                <p class="ad-body">${body}</p>
+                <ul class="benefits">${benefits.map((benefit) => `<li>${benefit}</li>`).join('')}</ul>
+                ${note ? `<p class="note">${note}</p>` : ''}
+              </div>
+              <div class="actions">
+                <button class="primary" type="button" onclick="showUpgrade()">Upgrade to Pro</button>
+                <button class="secondary" type="button" onclick="${interstitial ? 'closeInterstitial()' : 'this.closest(\\'.ad-slot\\').remove()'}">Continue with Rookie</button>
+              </div>
+            </div>
+          </article>
+        `;
+      }
+
+      document.getElementById('dashboard-ad').innerHTML = adSlot('setup_dashboard_bottom');
+      document.getElementById('session-ad').innerHTML = adSlot('setup_session_bottom');
+      document.getElementById('parts-ad').innerHTML = adSlot('parts_reference_bottom');
+      document.getElementById('schedule-ad').innerHTML = adSlot('schedule_bottom');
+      document.getElementById('timing-ad').innerHTML = adSlot('timing_scan_bottom');
+      document.getElementById('interstitial-ad').innerHTML = adSlot('after_save_interstitial', true);
+
+      document.querySelectorAll('.tab').forEach((tab) => {
+        tab.addEventListener('click', () => {
+          document.querySelectorAll('.tab').forEach((item) => item.classList.remove('active'));
+          document.querySelectorAll('.view').forEach((view) => view.classList.remove('active'));
+          tab.classList.add('active');
+          document.getElementById(tab.dataset.view).classList.add('active');
+        });
+      });
+
+      document.getElementById('saveButton').addEventListener('click', () => {
+        const toast = document.getElementById('toast');
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 1800);
+        setTimeout(() => document.getElementById('saveModal').classList.add('show'), 450);
+      });
+
+      function closeInterstitial() {
+        document.getElementById('saveModal').classList.remove('show');
+      }
+
+      function showUpgrade() {
+        alert('In the real app, this routes to the existing /upgrade Pro checkout flow.');
+      }
+    </script>
+  </body>
+</html>

@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import RaceScheduleForm, { RaceEntry } from './RaceScheduleForm';
 import RaceScheduleExport from './RaceScheduleExport';
+import RookieAdSlot from './RookieAdSlot';
 
 interface RaceScheduleProps {
   user: User | null;
@@ -264,6 +265,10 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick }) => {
         races={races}
         onClose={() => setExportOpen(false)}
       />
+
+      <div className="mt-6">
+        <RookieAdSlot placement="schedule_bottom" user={user} />
+      </div>
     </div>
   );
 };
