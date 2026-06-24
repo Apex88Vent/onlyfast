@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import { openSetupPdf } from '@/lib/setupPdf';
+import { hasFeatureAccess, readMembership } from '@/lib/membership';
 
 interface ShareSetupModalProps {
   isOpen: boolean;
@@ -109,6 +110,10 @@ const ShareSetupModal: React.FC<ShareSetupModalProps> = ({ isOpen, onClose, setu
   // Save as PDF — uses the shared chassis-diagram setup sheet builder.
   const handleSaveAsPdf = () => {
     if (!setup) return;
+    if (!user || !hasFeatureAccess(readMembership(user.user_metadata || {}), 'setupExport')) {
+      alert('PDF export is available on Pro and Team plans.');
+      return;
+    }
     const ok = openSetupPdf(setup, { shareCode });
     if (!ok) alert('Pop-up blocked. Please allow pop-ups for this site to save as PDF.');
   };
@@ -201,7 +206,7 @@ const ShareSetupModal: React.FC<ShareSetupModalProps> = ({ isOpen, onClose, setu
             </div>
 
             <p className="text-xs text-[#9CA3AF] text-center">
-              Anyone with this code can view your setup. Share expires in 30 days.
+              Anyone with this code can view your setup.
             </p>
           </div>
         ) : null}

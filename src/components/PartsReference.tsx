@@ -93,9 +93,14 @@ const PartsReference: React.FC<PartsReferenceProps> = ({ user, onSignInClick }) 
   };
 
   const handleDelete = async (id: string) => {
+    if (!user) return;
     if (!confirm('Remove this part?')) return;
     try {
-      const { error } = await supabase.from('parts_reference').delete().eq('id', id);
+      const { error } = await supabase
+        .from('parts_reference')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
       if (error) throw error;
       setRows(prev => prev.filter(r => r.id !== id));
     } catch (err: any) {
@@ -115,7 +120,7 @@ const PartsReference: React.FC<PartsReferenceProps> = ({ user, onSignInClick }) 
   };
 
   const saveEdit = async () => {
-    if (!editId) return;
+    if (!editId || !user) return;
     setSaving(true);
     setError('');
     try {
@@ -131,6 +136,7 @@ const PartsReference: React.FC<PartsReferenceProps> = ({ user, onSignInClick }) 
         .from('parts_reference')
         .update(payload)
         .eq('id', editId)
+        .eq('user_id', user.id)
         .select()
         .single();
       if (error) throw error;

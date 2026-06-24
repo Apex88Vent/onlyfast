@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useId } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
+import { getEffectiveTier, readMembership, tierLimits } from '@/lib/membership';
 
 interface LapRow {
   lap: number;
@@ -57,7 +58,7 @@ interface Props {
   user: User | null;
   currentSetupName?: string;
   currentSetupId?: string;
-  currentSetupType?: 'base' | 'heat' | 'main';
+  currentSetupType?: 'base' | 'heat' | 'main' | 'extra1' | 'extra2' | 'extra3';
   onSignInClick: () => void;
   onSaved?: (setupId: string, timingData: any) => void;
 }
@@ -136,6 +137,7 @@ const ScanTimingScreen: React.FC<Props> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prefix = useId();
+  const isSavingStep = step === 'saving';
 
   const reset = useCallback(() => {
     setStep('idle');
@@ -159,6 +161,48 @@ const ScanTimingScreen: React.FC<Props> = ({
         setTimeout(() => reject(new Error('FRONTEND_TIMEOUT')), timeoutMs)
       ),
     ]);
+  };
+
+  const canUseTimingUpload = async (): Promise<boolean> => {
+    if (!user) return true;
+
+    const tier = getEffectiveTier(readMembership(user.user_metadata || {}));
+    const limit = tierLimits[tier].timingUploadsPerMonth;
+    if (limit === 'unlimited') return true;
+
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    try {
+      const { data, error } = await supabase
+        .from('race_setups')
+        .select('timing_data')
+        .eq('user_id', user.id)
+        .not('timing_data', 'is', null);
+
+      if (error) throw error;
+
+      const usedThisMonth = (data || []).filter((row: any) => {
+        const scannedAt = row?.timing_data?.scanned_at;
+        if (!scannedAt) return false;
+        const scannedDate = new Date(scannedAt);
+        return !Number.isNaN(scannedDate.getTime()) && scannedDate >= startOfMonth;
+      }).length;
+
+      if (usedThisMonth >= limit) {
+        setError(`Rookie accounts include ${limit} timing scans per month. Upgrade to Pro for unlimited timing scans.`);
+        setErrorStage('timing-limit');
+        return false;
+      }
+
+      return true;
+    } catch (err: any) {
+      setError('Could not verify your timing scan limit. Please try again.');
+      setErrorDetail(err?.message || null);
+      setErrorStage('timing-limit');
+      return false;
+    }
   };
 
   const handleInvokeResult = (result: any, opts: { testMode?: boolean } = {}) => {
@@ -344,6 +388,7 @@ const ScanTimingScreen: React.FC<Props> = ({
       setErrorStage('client-validation');
       return;
     }
+    if (!(await canUseTimingUpload())) return;
 
     try {
       // Compress: max 1200px wide, JPEG q=0.7
@@ -696,10 +741,10 @@ const ScanTimingScreen: React.FC<Props> = ({
               </button>
               <button
                 onClick={saveSession}
-                disabled={step === 'saving'}
+                disabled={isSavingStep}
                 className="bg-[#00A8E8] hover:bg-[#0090c7] text-white px-5 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 inline-flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
               >
-                {step === 'saving' ? (
+                {isSavingStep ? (
                   <>
                     <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />

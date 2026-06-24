@@ -24,8 +24,10 @@ const AppLayout: React.FC = () => {
   const [hasCheckedHowOnlyFastWorks, setHasCheckedHowOnlyFastWorks] = useState(false);
   const [isReplayingHowOnlyFastWorks, setIsReplayingHowOnlyFastWorks] = useState(false);
   const [skipHowOnlyFastWorksAfterLogin, setSkipHowOnlyFastWorksAfterLogin] = useState(false);
+  const [isLoadingSavedCar, setIsLoadingSavedCar] = useState(false);
   const [legalModal, setLegalModal] = useState<'privacy' | 'terms' | null>(null);
   const [showSplash, setShowSplash] = useState(true);
+  const [authChecked, setAuthChecked] = useState(false);
   const onboardingLoginEscapeRef = useRef(false);
 
   const howOnlyFastWorksStorageKey = (userId?: string | null) =>
@@ -58,7 +60,6 @@ const AppLayout: React.FC = () => {
     setShowHowOnlyFastWorks(false);
     setIsReplayingHowOnlyFastWorks(false);
     setHasCheckedHowOnlyFastWorks(true);
-    window.location.href = '/pricing';
   }, [user]);
 
   const hasSelectedMembership = useCallback((signedInUser: User | null | undefined): boolean => {
@@ -107,9 +108,14 @@ const AppLayout: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!user || selectedCar) return;
+    if (!authChecked) return;
+    if (!user || selectedCar) {
+      setIsLoadingSavedCar(false);
+      return;
+    }
 
     let cancelled = false;
+    setIsLoadingSavedCar(true);
     (async () => {
       try {
         const { data } = await supabase
@@ -126,46 +132,42 @@ const AppLayout: React.FC = () => {
         }
       } catch {
         /* Non-fatal: users without a saved class continue to class selection. */
+      } finally {
+        if (!cancelled) setIsLoadingSavedCar(false);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [user, selectedCar, applySelectedCar]);
+  }, [authChecked, user, selectedCar, applySelectedCar]);
 
   // Auth state listener
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const isOnboardingLoginEscape = event === 'SIGNED_IN' && onboardingLoginEscapeRef.current;
+
       setUser(session?.user ?? null);
-      setHasCheckedHowOnlyFastWorks(false);
+      setAuthChecked(true);
+      setHasCheckedHowOnlyFastWorks(isOnboardingLoginEscape);
 
       if (!session?.user) {
         setSkipHowOnlyFastWorksAfterLogin(false);
       }
 
-      // After an unregistered user registers (triggered from a first-save), send
-      // them to the Rookie / Pro / Team selection page, then back to saving.
       if (event === 'SIGNED_IN') {
-        if (onboardingLoginEscapeRef.current) {
+        if (isOnboardingLoginEscape) {
           onboardingLoginEscapeRef.current = false;
           setSkipHowOnlyFastWorksAfterLogin(true);
           setShowHowOnlyFastWorks(false);
           setIsReplayingHowOnlyFastWorks(false);
           setHasCheckedHowOnlyFastWorks(true);
           setAuthModalOpen(false);
-
-          if (!hasSelectedMembership(session.user)) {
-            window.location.href = '/pricing';
-            return;
-          }
         }
 
         try {
           if (localStorage.getItem('pending_plan_redirect')) {
             localStorage.removeItem('pending_plan_redirect');
-            window.location.href = '/pricing';
-            return;
           }
         } catch {/* ignore */}
       }
@@ -195,13 +197,18 @@ const AppLayout: React.FC = () => {
     // Initial check
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
+      setAuthChecked(true);
+      setHasCheckedHowOnlyFastWorks(false);
+    }).catch(() => {
+      setAuthChecked(true);
       setHasCheckedHowOnlyFastWorks(false);
     });
     return () => subscription.unsubscribe();
-  }, [hasSelectedMembership]);
+  }, []);
 
   useEffect(() => {
     if (showSplash || isReplayingHowOnlyFastWorks) return;
+    if (!authChecked) return;
 
     if (skipHowOnlyFastWorksAfterLogin || selectedCar || hasSelectedMembership(user)) {
       setShowHowOnlyFastWorks(false);
@@ -218,7 +225,7 @@ const AppLayout: React.FC = () => {
     const completed = completedInMetadata || completedLocally;
     setShowHowOnlyFastWorks(!completed);
     setHasCheckedHowOnlyFastWorks(true);
-  }, [user, selectedCar, showSplash, isReplayingHowOnlyFastWorks, skipHowOnlyFastWorksAfterLogin, hasSelectedMembership]);
+  }, [authChecked, user, selectedCar, showSplash, isReplayingHowOnlyFastWorks, skipHowOnlyFastWorksAfterLogin, hasSelectedMembership]);
 
   const handleCarSelect = (car: string) => {
     applySelectedCar(car);
@@ -256,6 +263,16 @@ const AppLayout: React.FC = () => {
           isOpen={authModalOpen}
           onClose={() => setAuthModalOpen(false)}
         />
+        <CookieConsent />
+      </AnnouncerProvider>
+    );
+  }
+
+  if (!authChecked || isLoadingSavedCar) {
+    return (
+      <AnnouncerProvider>
+        <SkipLink />
+        <div className="min-h-screen bg-[#F5F5F7]" />
         <CookieConsent />
       </AnnouncerProvider>
     );

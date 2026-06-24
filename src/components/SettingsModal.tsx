@@ -15,6 +15,7 @@ interface SettingsModalProps {
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) => {
   const [nickname, setNickname] = useState('');
+  const [carNumber, setCarNumber] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -33,7 +34,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
       const localOverride = (() => {
         try { return localStorage.getItem(`nickname_override_${user.id}`) || ''; } catch { return ''; }
       })();
+      const localCarNumber = (() => {
+        try { return localStorage.getItem(`car_number_override_${user.id}`); } catch { return null; }
+      })();
       setNickname(localOverride || meta.nickname || (user.email?.split('@')[0] || ''));
+      setCarNumber(localCarNumber !== null ? localCarNumber : (meta.car_number || ''));
       setMessage('');
       setSubError('');
 
@@ -59,10 +64,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
 
   if (!isOpen) return null;
 
-  const handleSaveNickname = async () => {
+  const handleSaveProfile = async () => {
     const trimmed = nickname.trim();
+    const trimmedCarNumber = carNumber.trim();
     if (!trimmed) { setMessage('Nickname cannot be empty'); return; }
     if (trimmed.length < 2) { setMessage('Nickname must be at least 2 characters'); return; }
+    if (trimmedCarNumber.length > 12) { setMessage('Car number must be 12 characters or less'); return; }
 
     setSaving(true);
     setMessage('');
@@ -70,6 +77,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
     let localSaved = false;
     try {
       localStorage.setItem(`nickname_override_${user.id}`, trimmed);
+      localStorage.setItem(`car_number_override_${user.id}`, trimmedCarNumber);
       localSaved = true;
     } catch { /* ignore */ }
 
@@ -79,11 +87,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
       }));
     } catch {/* non-fatal */}
 
+    try {
+      window.dispatchEvent(new CustomEvent('car-number-updated', {
+        detail: { userId: user.id, carNumber: trimmedCarNumber },
+      }));
+    } catch {/* non-fatal */}
+
     let remoteOk = false;
     let remoteErrMsg = '';
     try {
       const updatePromise = supabase.auth.updateUser({
-        data: { ...(user.user_metadata || {}), nickname: trimmed },
+        data: { ...(user.user_metadata || {}), nickname: trimmed, car_number: trimmedCarNumber },
       });
       const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
         setTimeout(() => resolve({ data: null, error: new Error('Gateway timeout (10s)') }), 10000)
@@ -99,10 +113,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
     }
 
     if (remoteOk) {
-      setMessage(`Nickname saved as "${trimmed}"`);
+      setMessage('Profile saved');
       setTimeout(() => setMessage(''), 2500);
     } else if (localSaved) {
-      setMessage(`Saved as "${trimmed}" (sync pending — will retry)`);
+      setMessage('Profile saved locally (sync pending - will retry)');
       setTimeout(() => setMessage(''), 3500);
     } else {
       setMessage('Error: ' + remoteErrMsg);
@@ -189,22 +203,38 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
             </div>
           )}
 
-          {/* Nickname */}
+          {/* Profile */}
           <section>
-            <h3 className="text-sm font-bold text-[#1A1B23] mb-2">Change Nickname</h3>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={nickname}
-                onChange={(e) => setNickname(e.target.value)}
-                maxLength={30}
-                className="flex-1 px-4 py-2 border border-[#E5E7EB] rounded-lg focus:ring-2 focus:ring-[#00A8E8] focus:border-[#00A8E8] outline-none bg-[#F9FAFB] text-sm"
-                placeholder="Your nickname"
-              />
+            <h3 className="text-sm font-bold text-[#1A1B23] mb-2">Profile</h3>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_120px_auto]">
+              <div>
+                <label htmlFor="settings-nickname" className="block text-xs font-semibold text-[#6B7280] mb-1">Nickname</label>
+                <input
+                  id="settings-nickname"
+                  type="text"
+                  value={nickname}
+                  onChange={(e) => setNickname(e.target.value)}
+                  maxLength={30}
+                  className="w-full px-4 py-2 border border-[#E5E7EB] rounded-lg focus:ring-2 focus:ring-[#00A8E8] focus:border-[#00A8E8] outline-none bg-[#F9FAFB] text-sm"
+                  placeholder="Your nickname"
+                />
+              </div>
+              <div>
+                <label htmlFor="settings-car-number" className="block text-xs font-semibold text-[#6B7280] mb-1">Car Number</label>
+                <input
+                  id="settings-car-number"
+                  type="text"
+                  value={carNumber}
+                  onChange={(e) => setCarNumber(e.target.value)}
+                  maxLength={12}
+                  className="w-full px-4 py-2 border border-[#E5E7EB] rounded-lg focus:ring-2 focus:ring-[#00A8E8] focus:border-[#00A8E8] outline-none bg-[#F9FAFB] text-sm"
+                  placeholder="#88M"
+                />
+              </div>
               <button
-                onClick={handleSaveNickname}
+                onClick={handleSaveProfile}
                 disabled={saving}
-                className="bg-[#00A8E8] hover:bg-[#0090c7] text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+                className="self-end bg-[#00A8E8] hover:bg-[#0090c7] text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
               >
                 {saving ? 'Saving...' : 'Save'}
               </button>

@@ -80,11 +80,16 @@ const buildGroups = (setups: any[]): SetupGroup[] => {
   return [...groups, ...standalone];
 };
 
-const sessionOrder: Record<string, number> = { base: 0, heat: 1, main: 2 };
+const sessionOrder: Record<string, number> = { base: 1, heat: 2, main: 3, extra1: 4, extra2: 5, extra3: 6 };
 
-const CANONICAL_TYPES = ['base', 'heat', 'main'] as const;
+const CANONICAL_TYPES = ['base', 'heat', 'main', 'extra1', 'extra2', 'extra3'] as const;
 const defaultLabelForType = (type: string) =>
-  type === 'main' ? 'Main Event' : type === 'heat' ? 'Heat Race' : 'Hot Laps';
+  type === 'main' ? 'Main Event' :
+  type === 'heat' ? 'Heat Race' :
+  type === 'extra1' ? 'Session 4' :
+  type === 'extra2' ? 'Session 5' :
+  type === 'extra3' ? 'Session 6' :
+  'Hot Laps';
 const sessionLabelOf = (s: any) =>
   norm(s.session_label) || defaultLabelForType(s.setup_type);
 
@@ -173,9 +178,13 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
     const usedTypes = new Set(group.setups.map(s => s.setup_type));
     const freeType = CANONICAL_TYPES.find(t => !usedTypes.has(t));
     if (!freeType) {
-      setAddError('This race day already has all 3 sessions (Hot Laps, Heat, Main).');
+      setAddError('This race day already has all 6 sessions.');
       return;
     }
+    const existingOrders = group.setups
+      .map(s => Number(s.session_order ?? sessionOrder[s.setup_type] ?? 0))
+      .filter(n => Number.isFinite(n) && n > 0);
+    const nextOrder = Math.min((existingOrders.length ? Math.max(...existingOrders) : 0) + 1, 6);
     const sharedName =
       group.setups.find(s => norm(s.setup_name))?.setup_name || group.title;
 
@@ -185,6 +194,7 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
       setup_type: freeType,
       setup_name: sharedName,
       session_label: name,
+      session_order: nextOrder,
       track_name: group.trackName,
       race_date: group.raceDate || null,
       race_class: group.raceClass || 'Open',
@@ -296,9 +306,11 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
             <ul className="space-y-3 max-h-[560px] overflow-y-auto" aria-label="Saved setups list">
               {groups.map(group => {
                 const subtitleParts = [group.raceClass, group.trackName, group.org].filter(p => p && p.trim() !== '');
-                const orderedSetups = [...group.setups].sort(
-                  (a, b) => (sessionOrder[a.setup_type] ?? 99) - (sessionOrder[b.setup_type] ?? 99)
-                );
+                const orderedSetups = [...group.setups].sort((a, b) => {
+                  const orderA = Number(a.session_order ?? sessionOrder[a.setup_type] ?? 99);
+                  const orderB = Number(b.session_order ?? sessionOrder[b.setup_type] ?? 99);
+                  return orderA - orderB;
+                });
 
                 return (
                   <li key={group.key} className="bg-[#F9FAFB] rounded-xl border border-[#E5E7EB] p-4">

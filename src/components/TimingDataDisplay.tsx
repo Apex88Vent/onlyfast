@@ -32,7 +32,7 @@ export interface TimingData {
 interface Props {
   timingData?: TimingData | null;
   // Which setup tab this is being shown under, just for the label
-  setupType?: 'base' | 'heat' | 'main';
+  setupType?: 'base' | 'heat' | 'main' | 'extra1' | 'extra2' | 'extra3';
 }
 
 const fmt = (v: string | number | null | undefined): string => {

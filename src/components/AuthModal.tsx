@@ -132,18 +132,18 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
         }
 
         // From the app's perspective, do NOT dead-end the user on a "check your
-        // email" screen. Send them straight to the Rookie / Pro / Teams plan
-        // selection page. Email confirmation (if enabled) is shown only as a
+        // email" screen. Email confirmation (if enabled) is shown only as a
         // small secondary notice.
         setSuccess(
-          'Account created. If email confirmation is required, please confirm your email — but you can choose your plan now.'
+          'Account created. If email confirmation is required, please confirm your email.'
         );
-        try { localStorage.setItem('pending_plan_redirect', '1'); } catch { /* non-fatal */ }
-        // Brief moment so the notice is visible, then route to plan selection.
-        setTimeout(() => {
-          try { localStorage.removeItem('pending_plan_redirect'); } catch { /* ignore */ }
-          window.location.href = '/pricing';
-        }, 1200);
+        try { localStorage.removeItem('pending_plan_redirect'); } catch { /* ignore */ }
+        if (data?.session) {
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('onlyfast-menu', { detail: { action: 'home' } }));
+            onClose();
+          }, 600);
+        }
       } else if (mode === 'login') {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;

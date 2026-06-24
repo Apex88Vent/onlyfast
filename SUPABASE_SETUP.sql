@@ -41,9 +41,13 @@ create table if not exists public.race_setups (
   -- Identity & grouping
   setup_type   text not null default 'base',
   setup_name   text,
+  session_label text,
+  session_order integer,
   track_name   text,
   race_date    date,
   race_class   text,
+  track_shape  text,
+  track_length text,
 
   -- Track / weather context
   track_condition text,
@@ -114,8 +118,15 @@ create table if not exists public.race_setups (
   session_slowest_lap   text,
 
   -- User-defined fields (key/value JSON: { "Field name": "value", ... })
-  custom_fields         jsonb
+  custom_fields         jsonb,
+  timing_data           jsonb
 );
+
+alter table public.race_setups add column if not exists session_label text;
+alter table public.race_setups add column if not exists session_order integer;
+alter table public.race_setups add column if not exists track_shape text;
+alter table public.race_setups add column if not exists track_length text;
+alter table public.race_setups add column if not exists timing_data jsonb;
 
 -- Helpful indexes
 create index if not exists race_setups_user_id_idx      on public.race_setups (user_id);
@@ -155,12 +166,68 @@ create table if not exists public.shared_setups (
 create index if not exists shared_setups_setup_id_idx  on public.shared_setups (setup_id);
 create index if not exists shared_setups_shared_by_idx on public.shared_setups (shared_by);
 
+create table if not exists public.race_schedule (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  race_date date not null,
+  track text not null,
+  organization text,
+  finishing_position text default 'TBD',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists race_schedule_user_date_idx on public.race_schedule (user_id, race_date);
+
+drop trigger if exists race_schedule_touch_updated_at on public.race_schedule;
+create trigger race_schedule_touch_updated_at
+before update on public.race_schedule
+for each row execute function public.touch_updated_at();
+
+create table if not exists public.parts_reference (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  part_type text,
+  part_number text,
+  ordered_from text,
+  cost numeric(10,2),
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists parts_reference_user_created_idx on public.parts_reference (user_id, created_at desc);
+
+drop trigger if exists parts_reference_touch_updated_at on public.parts_reference;
+create trigger parts_reference_touch_updated_at
+before update on public.parts_reference
+for each row execute function public.touch_updated_at();
+
+create table if not exists public.setup_assist_usage (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  race_weekend_key text not null,
+  used_count integer not null default 0 check (used_count >= 0),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, race_weekend_key)
+);
+
+create index if not exists setup_assist_usage_user_idx on public.setup_assist_usage (user_id);
+
+drop trigger if exists setup_assist_usage_touch_updated_at on public.setup_assist_usage;
+create trigger setup_assist_usage_touch_updated_at
+before update on public.setup_assist_usage
+for each row execute function public.touch_updated_at();
+
 
 -- ════════════════════════════════════════════════════════════════════════════
 --  ROW LEVEL SECURITY
 -- ════════════════════════════════════════════════════════════════════════════
 alter table public.race_setups   enable row level security;
 alter table public.shared_setups enable row level security;
+alter table public.race_schedule enable row level security;
+alter table public.parts_reference enable row level security;
+alter table public.setup_assist_usage enable row level security;
 
 -- ── race_setups: each user sees + manages only their own rows ──────────────
 drop policy if exists race_setups_select_own on public.race_setups;
@@ -218,6 +285,69 @@ drop policy if exists shared_setups_delete_own on public.shared_setups;
 create policy shared_setups_delete_own
   on public.shared_setups for delete
   using (auth.uid() = shared_by);
+
+drop policy if exists race_schedule_select_own on public.race_schedule;
+create policy race_schedule_select_own
+  on public.race_schedule for select
+  using (auth.uid() = user_id);
+
+drop policy if exists race_schedule_insert_own on public.race_schedule;
+create policy race_schedule_insert_own
+  on public.race_schedule for insert
+  with check (auth.uid() = user_id);
+
+drop policy if exists race_schedule_update_own on public.race_schedule;
+create policy race_schedule_update_own
+  on public.race_schedule for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists race_schedule_delete_own on public.race_schedule;
+create policy race_schedule_delete_own
+  on public.race_schedule for delete
+  using (auth.uid() = user_id);
+
+drop policy if exists parts_reference_select_own on public.parts_reference;
+create policy parts_reference_select_own
+  on public.parts_reference for select
+  using (auth.uid() = user_id);
+
+drop policy if exists parts_reference_insert_own on public.parts_reference;
+create policy parts_reference_insert_own
+  on public.parts_reference for insert
+  with check (auth.uid() = user_id);
+
+drop policy if exists parts_reference_update_own on public.parts_reference;
+create policy parts_reference_update_own
+  on public.parts_reference for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists parts_reference_delete_own on public.parts_reference;
+create policy parts_reference_delete_own
+  on public.parts_reference for delete
+  using (auth.uid() = user_id);
+
+drop policy if exists setup_assist_usage_select_own on public.setup_assist_usage;
+create policy setup_assist_usage_select_own
+  on public.setup_assist_usage for select
+  using (auth.uid() = user_id);
+
+drop policy if exists setup_assist_usage_insert_own on public.setup_assist_usage;
+create policy setup_assist_usage_insert_own
+  on public.setup_assist_usage for insert
+  with check (auth.uid() = user_id);
+
+drop policy if exists setup_assist_usage_update_own on public.setup_assist_usage;
+create policy setup_assist_usage_update_own
+  on public.setup_assist_usage for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists setup_assist_usage_delete_own on public.setup_assist_usage;
+create policy setup_assist_usage_delete_own
+  on public.setup_assist_usage for delete
+  using (auth.uid() = user_id);
 
 
 -- ════════════════════════════════════════════════════════════════════════════

@@ -7,7 +7,7 @@ export interface PendingSave {
   id: string;              // local queue id
   op: PendingOp;
   rowId?: string;          // DB row id for updates
-  setupType: 'base' | 'heat' | 'main';
+  setupType: 'base' | 'heat' | 'main' | 'extra1' | 'extra2' | 'extra3';
   setupName: string;
   payload: any;
   queuedAt: number;

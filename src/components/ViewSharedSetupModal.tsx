@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+import type { User } from '@supabase/supabase-js';
 import { getClassConfig, FieldDef } from '@/lib/classConfigs';
 import { openSetupPdf, getCarStyle, CAR_STYLE_A } from '@/lib/setupPdf';
+import { hasFeatureAccess, readMembership } from '@/lib/membership';
 
 interface ViewSharedSetupModalProps {
   isOpen: boolean;
   onClose: () => void;
+  user?: User | null;
 }
 
 const has = (v: any) => v !== null && v !== undefined && String(v).trim() !== '';
@@ -46,7 +49,7 @@ const MiniTable: React.FC<{ rows: Array<[string, string]> }> = ({ rows }) => {
   );
 };
 
-const ViewSharedSetupModal: React.FC<ViewSharedSetupModalProps> = ({ isOpen, onClose }) => {
+const ViewSharedSetupModal: React.FC<ViewSharedSetupModalProps> = ({ isOpen, onClose, user }) => {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -113,6 +116,10 @@ const ViewSharedSetupModal: React.FC<ViewSharedSetupModalProps> = ({ isOpen, onC
 
   const handlePdf = () => {
     if (!setup) return;
+    if (!user || !hasFeatureAccess(readMembership(user.user_metadata || {}), 'setupExport')) {
+      alert('PDF export is available on Pro and Team plans.');
+      return;
+    }
     openSetupPdf(setup, { shareCode: setup.__share_code });
   };
 

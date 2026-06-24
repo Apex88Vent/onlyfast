@@ -18,6 +18,7 @@ import ScanTimingScreen from './ScanTimingScreen';
 import TimingDataDisplay, { TimingData } from './TimingDataDisplay';
 import PartsReference from './PartsReference';
 import RaceSchedule from './RaceSchedule';
+import HomeLanding, { HomeAction } from './HomeLanding';
 
 import {
   enqueue as enqueuePending,
@@ -43,6 +44,17 @@ interface SetupDashboardProps {
   selectedCar: string;
   onSignInClick: () => void;
 }
+
+const readCarNumber = (user: User | null | undefined, override?: string): string => {
+  if (!user) return '';
+  if (override !== undefined) return override;
+  try {
+    const local = localStorage.getItem(`car_number_override_${user.id}`);
+    if (local !== null) return local;
+  } catch {/* ignore */}
+  const meta: any = user.user_metadata || {};
+  return meta.car_number || '';
+};
 
 // A race day supports up to 6 sessions. The first 3 are the canonical defaults
 // (Hot Laps / Heat / Main); the remaining 3 are optional user-added "extra"
@@ -131,6 +143,7 @@ const emptyAllSetups = (): Record<SetupType, SetupState> => ({
 
 const TAB_ORDER: SetupType[] = ['base', 'heat', 'main'];
 const AUTOSAVE_MS = 5 * 60 * 1000; // 5 minutes
+const IDLE_HOME_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour
 const STATE_STORAGE_KEY = 'onlyfast_setup_state_v2';
 
 // Single unified meta for the whole setup file (one name, separate DB ids per tab)
@@ -156,11 +169,13 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   const [saving, setSaving] = useState(false);
 
   const [saveMessage, setSaveMessage] = useState('');
+  const [carNumberOverride, setCarNumberOverride] = useState<string | undefined>(undefined);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [baseTemplateRefresh, setBaseTemplateRefresh] = useState(0);
-  const [activeView, setActiveView] = useState<'setup' | 'saved' | 'compare' | 'create-base' | 'todo' | 'parts' | 'schedule'>('setup');
+  const [activeView, setActiveView] = useState<'home' | 'setup' | 'saved' | 'compare' | 'create-base' | 'todo' | 'parts' | 'schedule'>('home');
 
   const [savedSetupsList, setSavedSetupsList] = useState<any[]>([]);
+  const [scheduleRows, setScheduleRows] = useState<any[]>([]);
   const [showCopyFromPast, setShowCopyFromPast] = useState(false);
   const [shareModalSetup, setShareModalSetup] = useState<any>(null);
   // "View Shared Setup" modal (enter a share code to view a read-only setup).
@@ -212,9 +227,12 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   const [isAnimating, setIsAnimating] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const [touchStart, setTouchStart] = useState<number | null>(null);
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastActivityRef = useRef(Date.now());
 
   const prefix = useId();
   const currentSetup = setups[activeTab];
+  const carNumber = readCarNumber(user, carNumberOverride);
 
   const prefersReducedMotion = typeof window !== 'undefined' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -254,6 +272,14 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
           }
         }
 
+        const restoredHasData =
+          Boolean(parsed.savedMeta?.name) ||
+          Boolean(parsed.savedMeta?.base?.name || parsed.savedMeta?.heat?.name || parsed.savedMeta?.main?.name) ||
+          Boolean(parsed.setups && ALL_SLOTS.some(t => tabHasData(parsed.setups[t])));
+        if (restoredHasData) {
+          setActiveView('setup');
+        }
+
       }
     } catch {}
     setStateLoaded(true);
@@ -290,6 +316,46 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     if (user) fetchSavedForCopy();
   }, [user, refreshTrigger]);
 
+  useEffect(() => {
+    setCarNumberOverride(readCarNumber(user));
+  }, [user]);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && user && detail.userId === user.id) {
+        setCarNumberOverride(detail.carNumber || '');
+      }
+    };
+    window.addEventListener('car-number-updated', handler);
+    return () => window.removeEventListener('car-number-updated', handler);
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) {
+      setScheduleRows([]);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('race_schedule')
+          .select('id,race_date,track,finishing_position')
+          .eq('user_id', user.id)
+          .order('race_date', { ascending: true })
+          .limit(20);
+
+        if (!cancelled) setScheduleRows(data || []);
+      } catch {
+        if (!cancelled) setScheduleRows([]);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [user]);
+
   const fetchSavedForCopy = async () => {
     if (!user) return;
     try {
@@ -303,87 +369,22 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     } catch {}
   };
 
-  // Auto-resume: when user signs in, load their most recently updated setup file
-  // (all rows sharing the same setup_name). Only runs when the workspace is empty
-  // so we don't clobber unsaved in-progress work from localStorage.
+  // After login, keep a restored in-progress setup open. Otherwise, start at Home
+  // instead of automatically opening the latest saved setup.
   useEffect(() => {
     if (!stateLoaded || !user || resumeAttempted) return;
 
     // If they already have in-progress work (either a named file or data in any tab), skip.
     const hasInProgress = !!savedMeta.name ||
-      (['base', 'heat', 'main'] as SetupType[]).some(t => tabHasData(setups[t]));
+      ALL_SLOTS.some(t => tabHasData(setups[t]));
     if (hasInProgress) {
       setResumeAttempted(true);
       return;
     }
 
-    let cancelled = false;
-    (async () => {
-      try {
-        // Use the same safe query pattern as SavedSetups (created_at only, no
-        // .not() filters — some backends reject PostgREST "is null" filters)
-        const { data: rows, error } = await supabase
-          .from('race_setups')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(50);
+    setResumeAttempted(true);
+    setActiveView('home');
 
-        if (cancelled) return;
-        if (error || !rows || rows.length === 0) {
-          setResumeAttempted(true);
-          return;
-        }
-
-        // Filter in JS to usable setup types with a non-empty name
-        const usable = rows.filter((r: any) => {
-          const t = r.setup_type || 'base';
-          if (t !== 'base' && t !== 'heat' && t !== 'main') return false;
-          const name = r.setup_name;
-          return typeof name === 'string' && name.trim() !== '';
-        });
-        if (usable.length === 0) {
-          setResumeAttempted(true);
-          return;
-        }
-
-        const firstUsable = usable[0];
-        const name = firstUsable.setup_name as string;
-
-        // Fully-keyed (6-slot) so extra slots are present but blank.
-        const newSetups: Record<SetupType, SetupState> = emptyAllSetups();
-        const newIds: Partial<Record<SetupType, string>> = {};
-        const newTiming: Partial<Record<SetupType, TimingData | null>> = {};
-
-
-        // Siblings = all rows from the same list that share this name
-        const siblings = rows.filter((r: any) => r.setup_name === name);
-        for (const row of siblings) {
-          const t = (row.setup_type || 'base') as SetupType;
-          if (t !== 'base' && t !== 'heat' && t !== 'main') continue;
-          if (newIds[t]) continue; // prefer most recent per type
-          newSetups[t] = loadSetupIntoState(row);
-          newIds[t] = row.id;
-          newTiming[t] = row.timing_data ?? null;
-        }
-
-        if (cancelled) return;
-        setSetups(newSetups);
-        setSavedMeta({ name, ids: newIds });
-        setTimingDataByTab(newTiming);
-        setActiveTab(newIds.base ? 'base' : newIds.heat ? 'heat' : 'main');
-        setActiveView('setup');
-        setResumedBanner(name);
-
-      } catch {
-        // Network/unreachable — silently skip auto-resume so the user can still
-        // use the app. SavedSetups view will surface a clearer error.
-      } finally {
-        if (!cancelled) setResumeAttempted(true);
-      }
-    })();
-
-    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, stateLoaded]);
 
@@ -397,12 +398,58 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
         setViewSharedOpen(true);
         return;
       }
-      if (a === 'setup' || a === 'saved' || a === 'compare' || a === 'create-base' || a === 'todo' || a === 'parts' || a === 'schedule') {
+      if (a === 'home' || a === 'setup' || a === 'saved' || a === 'compare' || a === 'create-base' || a === 'todo' || a === 'parts' || a === 'schedule') {
         setActiveView(a);
       }
     };
     window.addEventListener('onlyfast-menu', handler);
     return () => window.removeEventListener('onlyfast-menu', handler);
+  }, []);
+
+  useEffect(() => {
+    const clearIdleTimer = () => {
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current);
+        idleTimerRef.current = null;
+      }
+    };
+
+    const sendHome = () => {
+      setActiveView('home');
+    };
+
+    const scheduleIdleTimer = () => {
+      clearIdleTimer();
+      idleTimerRef.current = setTimeout(sendHome, IDLE_HOME_TIMEOUT_MS);
+    };
+
+    const markActivity = () => {
+      const now = Date.now();
+      if (now - lastActivityRef.current >= IDLE_HOME_TIMEOUT_MS) {
+        sendHome();
+      }
+      lastActivityRef.current = now;
+      scheduleIdleTimer();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        markActivity();
+      }
+    };
+
+    const events = ['pointerdown', 'keydown', 'touchstart', 'scroll'] as const;
+    events.forEach(eventName => window.addEventListener(eventName, markActivity, { passive: true }));
+    window.addEventListener('focus', markActivity);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    scheduleIdleTimer();
+
+    return () => {
+      clearIdleTimer();
+      events.forEach(eventName => window.removeEventListener(eventName, markActivity));
+      window.removeEventListener('focus', markActivity);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   // Broadcast view changes so Header's menu highlights the right item
@@ -530,6 +577,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       setup_type: tabKey,
       setup_name: name || s.setup_name || null,
       session_label: sessionLabels[tabKey] || null,
+      session_order: sessionOrders[tabKey] ?? DEFAULT_ORDER[tabKey],
 
       track_name: s.trackName || '',
       race_date: s.raceDate || new Date().toISOString().split('T')[0],
@@ -712,7 +760,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
           .limit(300);
 
         const rows = (existingRows || []).filter(
-          (r: any) => ['base', 'heat', 'main'].includes(r.setup_type || 'base')
+          (r: any) => (r.setup_type || 'base') !== 'base_template'
         );
 
         const raceWeekendNames = new Set(
@@ -789,7 +837,11 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       const newIds: Partial<Record<SetupType, string>> = {};
       let queuedAny = false;
 
-      for (const tabKey of TAB_ORDER) {
+      const saveTabs = ALL_SLOTS.filter(tabKey =>
+        isDisplayableSession(tabKey) || tabHasData(setups[tabKey]) || !!savedMeta.ids[tabKey]
+      );
+
+      for (const tabKey of saveTabs) {
         const setup = setups[tabKey];
         const existingId = savedMeta.ids[tabKey];
         if (!tabHasData(setup) && !existingId) continue;
@@ -856,8 +908,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   // whether each save is allowed and surfaces an upgrade prompt if a limit is hit.
   const handleSaveClick = async () => {
     if (!user) {
-      // First-save by an unregistered user: register first, then route them to
-      // the Rookie / Pro / Team selection page before returning to saving.
+      // First-save by an unregistered user: ask them to sign in before saving.
       try { localStorage.setItem('pending_plan_redirect', '1'); } catch {}
       onSignInClick();
       return;
@@ -907,10 +958,40 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       onSignInClick();
       return;
     }
+    if (!savedMeta.name) {
+      setSaveMessage('Save this setup before sharing.');
+      setSaveModalOpen(true);
+      setTimeout(() => setSaveMessage(''), 5000);
+      return;
+    }
+
     setSaving(true);
     try {
-      const payload = buildPayload(currentSetup, activeTab, savedMeta.name || undefined);
-      const result = await dbInsert(payload);
+      const saved = await performSave(savedMeta.name);
+      if (!saved) {
+        setSaving(false);
+        return;
+      }
+
+      let query = supabase
+        .from('race_setups')
+        .select('*')
+        .eq('user_id', user.id);
+
+      const existingId = savedMeta.ids[activeTab];
+      if (existingId) {
+        query = query.eq('id', existingId);
+      } else {
+        query = query
+          .eq('setup_name', savedMeta.name)
+          .eq('setup_type', activeTab)
+          .order('created_at', { ascending: false })
+          .limit(1);
+      }
+
+      const { data: result, error } = await query.maybeSingle();
+      if (error) throw error;
+      if (!result) throw new Error('Save this session before sharing.');
       setRefreshTrigger(prev => prev + 1);
       setShareModalSetup(result);
     } catch (err: any) {
@@ -1435,13 +1516,78 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     return parts.join(' - ') || 'Setup';
   };
 
+  const existingSessionCount = orderedSessions.filter(t => tabHasData(setups[t]) || !!savedMeta.ids[t]).length;
+  const sessionStatus = (t: SetupType) => {
+    if (setups[t]?.session_finished) return 'complete' as const;
+    if (setups[t]?.session_started || tabHasData(setups[t]) || savedMeta.ids[t]) return 'in-progress' as const;
+    return 'not-started' as const;
+  };
+  const currentWeekend = (() => {
+    const source = setups[activeTab] || setups.base;
+    const hasCurrentWeekend = Boolean(savedMeta.name) || existingSessionCount > 0;
+    if (!hasCurrentWeekend) return null;
+
+    return {
+      trackName: source.trackName || savedMeta.name,
+      date: source.raceDate,
+      sessions: [
+        { label: 'Hot Laps', status: sessionStatus('base') },
+        { label: 'Heat Race', status: sessionStatus('heat') },
+        { label: 'Main Event', status: sessionStatus('main') },
+      ],
+    };
+  })();
+  const today = new Date().toISOString().split('T')[0];
+  const upcomingEvents = scheduleRows
+    .filter(r => r.race_date >= today && r.track)
+    .slice(0, 3)
+    .map(r => ({ id: r.id, track: r.track, date: r.race_date }));
+  const nextEvent = upcomingEvents[0] || null;
+  const finishedRaces = scheduleRows.filter(r => {
+    const pos = Number.parseInt(String(r.finishing_position || ''), 10);
+    return Number.isFinite(pos) && pos > 0;
+  });
+  const wins = finishedRaces.filter(r => Number.parseInt(String(r.finishing_position), 10) === 1).length;
+  const topFives = finishedRaces.filter(r => {
+    const pos = Number.parseInt(String(r.finishing_position), 10);
+    return pos >= 1 && pos <= 5;
+  }).length;
+  const performanceStats = scheduleRows.length > 0
+    ? [
+        { label: 'Events', value: scheduleRows.length },
+        ...(topFives > 0 ? [{ label: 'Top 5s', value: topFives }] : []),
+        ...(wins > 0 ? [{ label: 'Wins', value: wins }] : []),
+      ]
+    : [];
+
+  const handleHomeAction = (action: HomeAction) => {
+    if (action === 'new-setup') {
+      handleNewSetupClick();
+      return;
+    }
+
+    if (action === 'continue-weekend') {
+      setActiveView('setup');
+      return;
+    }
+
+    if (action === 'saved' || action === 'library') {
+      setActiveView('saved');
+      return;
+    }
+
+    if (action === 'schedule' || action === 'todo' || action === 'parts') {
+      setActiveView(action);
+    }
+  };
+
   // Base setup for diff highlighting on Heat/Main (Hot Laps is the reference)
   const baseSetupForDiff = setups.base;
 
   return (
     <div className="min-h-screen bg-[#F5F5F7]">
       {/* Sub Navigation — stacked: row 1 = views, row 2 = setup type (only on setup view) */}
-      <nav className="bg-white border-b border-[#E5E7EB] sticky top-16 z-40" aria-label="Dashboard navigation">
+      <nav className={`bg-white border-b border-[#E5E7EB] sticky top-16 z-40 ${activeView === 'home' ? 'hidden' : ''}`} aria-label="Dashboard navigation">
         <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
           {/* Row 1: View tabs */}
           <div className="flex gap-0.5 sm:gap-1 py-2 flex-wrap" role="tablist" aria-label="View selection">
@@ -1528,7 +1674,19 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
       <div id="view-panel" role="tabpanel" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24">
 
-        {activeView === 'compare' ? (
+        {activeView === 'home' ? (
+          <HomeLanding
+            selectedCar={selectedCar}
+            carNumber={carNumber}
+            nextEvent={nextEvent}
+            currentWeekend={currentWeekend}
+            performanceStats={performanceStats}
+            upcomingEvents={upcomingEvents}
+            middleSlot={<RookieAdSlot placement="home_middle" user={user} />}
+            bottomSlot={<RookieAdSlot placement="home_bottom" user={user} />}
+            onAction={handleHomeAction}
+          />
+        ) : activeView === 'compare' ? (
           <SetupComparison user={user} onSignInClick={onSignInClick} />
         ) : activeView === 'saved' ? (
           <div className="space-y-6">
@@ -2062,6 +2220,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       <ViewSharedSetupModal
         isOpen={viewSharedOpen}
         onClose={() => setViewSharedOpen(false)}
+        user={user}
       />
     </div>
   );

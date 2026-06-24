@@ -6,6 +6,8 @@ import { shouldShowAds } from '@/lib/ads';
 import { setPendingPlan } from '@/lib/membership';
 
 export type RookieAdPlacement =
+  | 'home_middle'
+  | 'home_bottom'
   | 'setup_dashboard_bottom'
   | 'setup_session_bottom'
   | 'parts_reference_bottom'
@@ -24,6 +26,18 @@ interface RookieAdSlotProps {
 const LOGO_SRC = '/onlyfast-logo.png';
 
 const placementCopy: Record<RookieAdPlacement, { eyebrow: string; title: string; body: string; benefits: string[]; note?: string }> = {
+  home_middle: {
+    eyebrow: 'Rookie ad slot',
+    title: 'Rookie is free and ad-supported.',
+    body: 'Upgrade to Pro for $5/mo to remove ads from your Home dashboard.',
+    benefits: ['Ad-free Home.', 'Cleaner race day view.', 'More setup tools.'],
+  },
+  home_bottom: {
+    eyebrow: 'Rookie ad slot',
+    title: 'Remove ads from OnlyFast.',
+    body: 'Pro keeps the app cleaner while you plan, tune, and save race weekends.',
+    benefits: ['Ad-free screens.', 'Export setups.', 'Faster workflow.'],
+  },
   setup_dashboard_bottom: {
     eyebrow: 'Placeholder ad slot',
     title: 'Rookie plan is ad-supported.',
