@@ -276,6 +276,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   // session_label is display-only; session_order is the ordering identifier.
   const [sessionOrders, setSessionOrders] = useState<Partial<Record<SetupType, number>>>({});
   const [deletedSessionSlots, setDeletedSessionSlots] = useState<Partial<Record<SetupType, boolean>>>({});
+  const [addedSessionSlots, setAddedSessionSlots] = useState<Partial<Record<SetupType, boolean>>>({});
 
 
   // Active-session edit controls (pencil menu / rename / delete / add).
@@ -329,6 +330,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
         if (parsed.sessionLabels) setSessionLabels(parsed.sessionLabels);
         if (parsed.sessionOrders) setSessionOrders(parsed.sessionOrders);
         if (parsed.deletedSessionSlots) setDeletedSessionSlots(parsed.deletedSessionSlots);
+        if (parsed.addedSessionSlots) setAddedSessionSlots(parsed.addedSessionSlots);
         if (parsed.savedMeta) {
           // Migrate older shape {base:{id,name},heat:{id,name},main:{id,name}} → unified
           if (parsed.savedMeta.ids !== undefined) {
@@ -366,11 +368,11 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       localStorage.setItem(STATE_STORAGE_KEY, JSON.stringify({
         setups, savedMeta, customFields, activeTab,
         // Persist extra-session metadata so they survive reloads.
-        sessionLabels, sessionOrders, deletedSessionSlots,
+        sessionLabels, sessionOrders, deletedSessionSlots, addedSessionSlots,
         timestamp: Date.now(),
       }));
     } catch {}
-  }, [setups, savedMeta, customFields, activeTab, sessionLabels, sessionOrders, deletedSessionSlots, stateLoaded]);
+  }, [setups, savedMeta, customFields, activeTab, sessionLabels, sessionOrders, deletedSessionSlots, addedSessionSlots, stateLoaded]);
 
   useEffect(() => {
     if (!stateLoaded) return;
@@ -466,23 +468,47 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       );
       if (raceRows.length === 0) return null;
 
-      const byType = new Map<string, any>();
-      raceRows.forEach(row => {
-        const type = String(row.setup_type || 'base');
-        if (!byType.has(type)) byType.set(type, row);
-      });
       const source = raceRows[0];
-      const rowStatus = (type: SetupType): WeekendSessionStatus =>
-        byType.has(type) ? 'in-progress' : 'not-started';
+      const orderedRows = [...raceRows].sort((a, b) => {
+        const aType = ALL_SLOTS.includes(a.setup_type as SetupType) ? (a.setup_type as SetupType) : 'base';
+        const bType = ALL_SLOTS.includes(b.setup_type as SetupType) ? (b.setup_type as SetupType) : 'base';
+        const orderA = Number(a.session_order ?? DEFAULT_ORDER[aType] ?? 99);
+        const orderB = Number(b.session_order ?? DEFAULT_ORDER[bType] ?? 99);
+        return orderA - orderB;
+      });
+      const rowHasWeekendCardData = (row: any) => {
+        const sharedRaceFields = new Set([
+          'id', 'user_id', 'setup_type', 'setup_name', 'session_label', 'session_order',
+          'track_name', 'race_date', 'race_class', 'track_condition', 'track_shape',
+          'track_length', 'latitude', 'longitude', 'temperature', 'humidity',
+          'wind_speed', 'wind_direction', 'created_at', 'updated_at',
+        ]);
+
+        return Object.entries(row || {}).some(([key, value]) => {
+          if (value === null || value === undefined || sharedRaceFields.has(key)) return false;
+          if (typeof value === 'object') {
+            return Array.isArray(value) ? value.length > 0 : Object.keys(value).length > 0;
+          }
+          return String(value).trim() !== '';
+        });
+      };
+      const summaryRows = orderedRows.filter(row => {
+        const type = ALL_SLOTS.includes(row.setup_type as SetupType) ? (row.setup_type as SetupType) : 'base';
+        if (DEFAULT_SESSION_SLOTS.includes(type)) return true;
+        if (row.session_label && row.session_label !== TAB_LABELS[type].short) return true;
+        return rowHasWeekendCardData(row);
+      });
+      const rowLabel = (row: any) => {
+        const type = ALL_SLOTS.includes(row.setup_type as SetupType) ? (row.setup_type as SetupType) : 'base';
+        return row.session_label || TAB_LABELS[type].short;
+      };
+      const rowStatus = (row: any): WeekendSessionStatus =>
+        row.session_finished ? 'complete' : 'in-progress';
 
       return {
         trackName: source.track_name || source.setup_name || '',
         date: source.race_date || '',
-        sessions: [
-          { label: 'Hot Laps', status: rowStatus('base') },
-          { label: 'Heat Race', status: rowStatus('heat') },
-          { label: 'Main Event', status: rowStatus('main') },
-        ],
+        sessions: summaryRows.map(row => ({ label: rowLabel(row), status: rowStatus(row) })),
       };
     };
 
@@ -844,6 +870,28 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     });
   };
 
+  const sessionHasSpecificData = (s: SetupState | undefined | null): boolean => {
+    if (!s) return false;
+    const sharedRaceFields = new Set([
+      'raceDate', 'raceClass', 'setup_name', 'trackName', 'trackCondition',
+      'trackShape', 'trackLength', 'latitude', 'longitude', 'temperature',
+      'humidity', 'windSpeed', 'windDirection',
+    ]);
+
+    return Object.entries(s).some(([key, value]) => {
+      if (!value || sharedRaceFields.has(key)) return false;
+      return String(value).trim() !== '';
+    });
+  };
+
+  const isIntentionalExtraSession = (t: SetupType) =>
+    !DEFAULT_SESSION_SLOTS.includes(t) && Boolean(
+      addedSessionSlots[t] ||
+      (sessionLabels[t] && sessionLabels[t] !== TAB_LABELS[t].short) ||
+      sessionHasSpecificData(setups[t]) ||
+      timingDataByTab[t]
+    );
+
 
   // Drain the offline queue — POSTs each pending save in order
   const drainQueue = useCallback(async (): Promise<void> => {
@@ -997,10 +1045,13 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       const newIds: Partial<Record<SetupType, string>> = {};
       let queuedAny = false;
 
-      const saveTabs = ALL_SLOTS.filter(tabKey =>
-        !deletedSessionSlots[tabKey] &&
-        (tabHasData(setups[tabKey]) || !!savedMeta.ids[tabKey] || !!sessionLabels[tabKey])
-      );
+      const saveTabs = ALL_SLOTS.filter(tabKey => {
+        if (deletedSessionSlots[tabKey]) return false;
+        if (DEFAULT_SESSION_SLOTS.includes(tabKey)) {
+          return tabHasData(setups[tabKey]) || !!savedMeta.ids[tabKey] || !!sessionLabels[tabKey];
+        }
+        return isIntentionalExtraSession(tabKey);
+      });
 
       for (const tabKey of saveTabs) {
         const setup = setups[tabKey];
@@ -1296,8 +1347,16 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     setSessionLabels(newLabels);
     setSessionOrders(newOrders);
     setDeletedSessionSlots({});
+    setAddedSessionSlots({});
     const displayable = ALL_SLOTS
-      .filter(t => !!newIds[t] && (tabHasData(newSetups[t]) || !!newLabels[t]))
+      .filter(t =>
+        !!newIds[t] && (
+          DEFAULT_SESSION_SLOTS.includes(t) ||
+          (newLabels[t] && newLabels[t] !== TAB_LABELS[t].short) ||
+          sessionHasSpecificData(newSetups[t]) ||
+          newTiming[t]
+        )
+      )
       .sort((a, b) => (newOrders[a] ?? DEFAULT_ORDER[a]) - (newOrders[b] ?? DEFAULT_ORDER[b]));
     setActiveTab(displayable.includes(clickedType) ? clickedType : (displayable[0] || clickedType));
     setActiveView('setup');
@@ -1447,6 +1506,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     setSessionLabels({});
     setSessionOrders({});
     setDeletedSessionSlots({});
+    setAddedSessionSlots({});
     setActiveTab('base');
     setActiveView('setup');
   };
@@ -1463,6 +1523,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     // If already on setup view and workspace is empty, just ensure we're clean
     if (!workspaceHasData() && !savedMeta.name) {
       setDeletedSessionSlots({});
+      setAddedSessionSlots({});
       setActiveView('setup');
       return;
     }
@@ -1498,21 +1559,27 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   const labelForTab = (t: SetupType) => sessionLabels[t] || TAB_LABELS[t].short;
   const fullLabelForTab = (t: SetupType) => sessionLabels[t] || TAB_LABELS[t].full;
 
-  // Does a tab represent an existing session? (has data, a saved row, or a label)
-  const sessionExists = (t: SetupType) =>
-    !deletedSessionSlots[t] && (
-      !!savedMeta.ids[t] ||
-      tabHasData(setups[t]) ||
-      !!sessionLabels[t] ||
-      (!savedMeta.name && DEFAULT_SESSION_SLOTS.includes(t))
-    );
+  // Does a tab represent an existing session? Defaults are real; blank extra
+  // slots are not, even if older state gave them the default Session 4/5/6 name.
+  const sessionExists = (t: SetupType) => {
+    if (deletedSessionSlots[t]) return false;
+    if (DEFAULT_SESSION_SLOTS.includes(t)) {
+      return !!savedMeta.ids[t] || tabHasData(setups[t]) || !!sessionLabels[t] || !savedMeta.name;
+    }
+    return isIntentionalExtraSession(t);
+  };
 
   // Display saved race-day sessions only when they are real sessions. This keeps
   // deleted default sessions from reappearing as gray/blank tabs, and hides old
   // polluted standby rows that have no user data and no intentional label.
   const isDisplayableSession = (t: SetupType) => {
     if (!sessionExists(t)) return false;
-    if (savedMeta.ids[t] && !tabHasData(setups[t]) && !sessionLabels[t]) return false;
+    if (
+      DEFAULT_SESSION_SLOTS.includes(t) &&
+      savedMeta.ids[t] &&
+      !tabHasData(setups[t]) &&
+      !sessionLabels[t]
+    ) return false;
     return true;
   };
 
@@ -1605,6 +1672,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       setTimingDataByTab({});
       setSessionLabels({});
       setSessionOrders({});
+      setAddedSessionSlots({});
       setActiveTab('base');
       setActiveView('setup');
       setSaveMessage('Session deleted');
@@ -1623,6 +1691,11 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       return { name: prev.name, ids };
     });
     setSessionLabels(prev => {
+      const next = { ...prev };
+      delete next[deletedTab];
+      return next;
+    });
+    setAddedSessionSlots(prev => {
       const next = { ...prev };
       delete next[deletedTab];
       return next;
@@ -1709,6 +1782,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     }));
     setSessionLabels(prev => ({ ...prev, [freeType]: name }));
     setSessionOrders(prev => ({ ...prev, [freeType]: nextOrder }));
+    setAddedSessionSlots(prev => ({ ...prev, [freeType]: true }));
     setDeletedSessionSlots(prev => {
       const next = { ...prev };
       delete next[freeType];
@@ -1774,9 +1848,13 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   const existingSessionCount = orderedSessions.filter(t => tabHasData(setups[t]) || !!savedMeta.ids[t]).length;
   const sessionStatus = (t: SetupType) => {
     if (setups[t]?.session_finished) return 'complete' as const;
-    if (setups[t]?.session_started || tabHasData(setups[t]) || savedMeta.ids[t]) return 'in-progress' as const;
+    if (setups[t]?.session_started || tabHasData(setups[t]) || savedMeta.ids[t] || timingDataByTab[t]) return 'in-progress' as const;
     return 'not-started' as const;
   };
+  const currentWeekendSessions = orderedSessions.filter(t => {
+    if (DEFAULT_SESSION_SLOTS.includes(t)) return true;
+    return isIntentionalExtraSession(t);
+  });
   const activeWeekend = (() => {
     const source = setups[activeTab] || setups.base;
     const hasCurrentWeekend = Boolean(savedMeta.name) || existingSessionCount > 0;
@@ -1785,11 +1863,10 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     return {
       trackName: source.trackName || savedMeta.name,
       date: source.raceDate,
-      sessions: [
-        { label: 'Hot Laps', status: sessionStatus('base') },
-        { label: 'Heat Race', status: sessionStatus('heat') },
-        { label: 'Main Event', status: sessionStatus('main') },
-      ],
+      sessions: currentWeekendSessions.map(t => ({
+        label: labelForTab(t),
+        status: sessionStatus(t),
+      })),
     };
   })();
   const currentWeekend = activeWeekend || lastOpenedWeekend;

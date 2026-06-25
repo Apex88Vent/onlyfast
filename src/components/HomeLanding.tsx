@@ -136,6 +136,44 @@ const TrackLogoPanel: React.FC<{ trackName?: string }> = ({ trackName }) => {
   );
 };
 
+const TrackLogoBadge: React.FC<{ trackName?: string }> = ({ trackName }) => {
+  const [imageFailed, setImageFailed] = React.useState(false);
+  const src = trackLogoSrc(trackName);
+  const initials = (trackName || 'TR')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0])
+    .join('')
+    .toUpperCase();
+
+  return (
+    <div className="relative h-10 w-10 rounded-xl overflow-hidden bg-[#1A1B23] flex-shrink-0 shadow-sm" aria-hidden="true">
+      {src && !imageFailed && (
+        <img
+          src={src}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+          onError={() => setImageFailed(true)}
+        />
+      )}
+      {(imageFailed || !src) && (
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              'radial-gradient(ellipse at 48% 72%, rgba(185,135,72,0.95) 0 18%, rgba(102,74,43,0.9) 19% 27%, rgba(245,245,247,0.8) 28% 31%, rgba(35,43,54,0.95) 32% 100%)',
+          }}
+        />
+      )}
+      <div className="absolute inset-0 bg-gradient-to-br from-[#00A8E8]/20 via-transparent to-black/55" />
+      <div className="relative h-full w-full flex items-center justify-center text-white text-xs font-extrabold drop-shadow">
+        {initials}
+      </div>
+    </div>
+  );
+};
+
 const HomeLanding: React.FC<HomeLandingProps> = ({
   selectedCar,
   carNumber,
@@ -147,9 +185,24 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
   bottomSlot,
   onAction,
 }) => {
+  const nextRaceWeekend = nextEvent ? {
+    trackName: nextEvent.track,
+    date: nextEvent.date,
+    sessions: [
+      { label: 'Hot Laps', status: 'not-started' as const },
+      { label: 'Heat', status: 'not-started' as const },
+      { label: 'Main', status: 'not-started' as const },
+    ],
+  } : null;
+  const [raceCardMode, setRaceCardMode] = React.useState<'current' | 'next'>('current');
+  const displayedWeekend = raceCardMode === 'next' && nextRaceWeekend ? nextRaceWeekend : currentWeekend;
   const nextEventCountdown = getEventCountdown(nextEvent?.date);
-  const showNextEvent = Boolean(nextEvent && (nextEventCountdown || nextEvent.track));
-  const topInfoCount = (selectedCar ? 1 : 0) + (showNextEvent ? 1 : 0);
+  const showNextEventCountdown = Boolean(nextEvent && nextEventCountdown && nextEvent.track);
+  const showTopInfoCard = Boolean(selectedCar || showNextEventCountdown);
+  const showCurrentRaceWeekendCard = Boolean(
+    displayedWeekend && (displayedWeekend.trackName || displayedWeekend.date || displayedWeekend.sessions?.length)
+  );
+  const topInfoCount = (selectedCar ? 1 : 0) + (showNextEventCountdown ? 1 : 0);
   const formattedCarNumber = formatCarNumber(carNumber);
   const weekendStorageKey = getWeekendStorageKey(currentWeekend);
   const [weekendStarted, setWeekendStarted] = React.useState(false);
@@ -163,12 +216,20 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
     setWeekendStarted(window.localStorage.getItem(weekendStorageKey) === 'true');
   }, [weekendStorageKey]);
 
+  React.useEffect(() => {
+    setRaceCardMode('current');
+  }, [weekendStorageKey]);
+
   const handleWeekendAction = () => {
     if (weekendStorageKey && typeof window !== 'undefined') {
       window.localStorage.setItem(weekendStorageKey, 'true');
     }
     setWeekendStarted(true);
     onAction('continue-weekend');
+  };
+  const handleNextRaceAction = () => {
+    if (!nextRaceWeekend) return;
+    setRaceCardMode(mode => mode === 'next' ? 'current' : 'next');
   };
 
   return (
@@ -188,7 +249,7 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
         </div>
       </section>
 
-      {(selectedCar || showNextEvent) && (
+      {showTopInfoCard && (
         <section className="mb-2 sm:mb-6 bg-white rounded-2xl border border-[#E5E7EB] shadow-sm px-3 sm:px-4 py-2.5 sm:py-4">
           <div className={`grid ${topInfoCount > 1 ? 'grid-cols-2 divide-x divide-[#E5E7EB]' : 'grid-cols-1'}`}>
             {selectedCar && (
@@ -210,12 +271,12 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
                 </div>
               </div>
             )}
-            {showNextEvent && nextEvent && (
+            {showNextEventCountdown && nextEvent && (
               <div className="flex items-center justify-center gap-2 sm:gap-3 px-1 sm:px-2">
                 <CalendarDays className="h-6 w-6 sm:h-8 sm:w-8 text-[#00A8E8] flex-shrink-0" aria-hidden="true" />
                 <div className="text-left min-w-0">
                   <div className="text-[#00A8E8] text-[12px] sm:text-sm font-semibold tracking-[0.08em] uppercase leading-tight">Next Event</div>
-                  <div className="text-[#1A1B23] text-sm sm:text-lg font-medium truncate">{nextEventCountdown || formatDate(nextEvent.date)}</div>
+                  <div className="text-[#1A1B23] text-sm sm:text-lg font-medium truncate">{nextEventCountdown}</div>
                   <div className="text-[#4B5563] text-xs sm:text-sm font-medium truncate">{nextEvent.track}</div>
                 </div>
               </div>
@@ -241,23 +302,32 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
         ))}
       </section>
 
-      {currentWeekend && (currentWeekend.trackName || currentWeekend.date || currentWeekend.sessions?.length) && (
+      {showCurrentRaceWeekendCard && displayedWeekend && (
         <section className="mb-2 sm:mb-4 bg-white rounded-2xl border border-[#E5E7EB] shadow-sm overflow-hidden">
           <div className="grid sm:grid-cols-[34%_1fr]">
-            <TrackLogoPanel trackName={currentWeekend.trackName} />
+            <TrackLogoPanel trackName={displayedWeekend.trackName} />
             <div className="p-2.5 sm:p-5">
-              <div className="text-[#00A8E8] text-[11px] sm:text-sm font-semibold uppercase tracking-[0.08em]">Current Race Weekend</div>
-              {currentWeekend.trackName && (
-                <h3 className="text-sm sm:text-2xl font-semibold text-[#1A1B23] mt-0.5 sm:mt-3 uppercase tracking-wide">
-                  {currentWeekend.trackName}
-                </h3>
-              )}
-              {currentWeekend.date && (
-                <div className="text-[#4B5563] text-[11px] sm:text-base font-semibold mt-0.5 sm:mt-1">{formatDate(currentWeekend.date)}</div>
-              )}
-              {currentWeekend.sessions && currentWeekend.sessions.length > 0 && (
+              <div className="text-[#00A8E8] text-[11px] sm:text-sm font-semibold uppercase tracking-[0.08em]">
+                {raceCardMode === 'next' ? 'Next Race' : 'Current Race Weekend'}
+              </div>
+              <div className="flex items-center gap-2 mt-1 sm:mt-3">
+                <div className="sm:hidden">
+                  <TrackLogoBadge trackName={displayedWeekend.trackName} />
+                </div>
+                <div className="min-w-0">
+                  {displayedWeekend.trackName && (
+                    <h3 className="text-sm sm:text-2xl font-semibold text-[#1A1B23] uppercase tracking-wide truncate">
+                      {displayedWeekend.trackName}
+                    </h3>
+                  )}
+                  {displayedWeekend.date && (
+                    <div className="text-[#4B5563] text-[11px] sm:text-base font-semibold mt-0.5 sm:mt-1">{formatDate(displayedWeekend.date)}</div>
+                  )}
+                </div>
+              </div>
+              {displayedWeekend.sessions && displayedWeekend.sessions.length > 0 && (
                 <div className="grid grid-cols-3 divide-x divide-[#E5E7EB] border-t border-[#E5E7EB] mt-1.5 sm:mt-4 pt-1.5 sm:pt-4">
-                  {currentWeekend.sessions.map(session => (
+                  {displayedWeekend.sessions.map(session => (
                     <div key={session.label} className="px-1 sm:px-2 first:pl-0 last:pr-0 flex items-start gap-1 sm:gap-2">
                       {session.status === 'complete' ? (
                         <span className="mt-0.5 h-4 w-4 sm:h-6 sm:w-6 rounded-full bg-[#00A8E8] text-white inline-flex items-center justify-center flex-shrink-0">
@@ -276,13 +346,23 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
                   ))}
                 </div>
               )}
-              <button
-                onClick={handleWeekendAction}
-                className="mt-1.5 sm:mt-5 w-full bg-[#00A8E8] hover:bg-[#0090c7] text-white px-4 py-1.5 sm:py-3 rounded-xl text-xs sm:text-lg font-bold transition-colors flex items-center justify-center gap-2 sm:gap-4 focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
-              >
-                Continue Weekend
-                <ArrowRight className="h-4 w-4 sm:h-6 sm:w-6" aria-hidden="true" />
-              </button>
+              <div className="mt-1.5 sm:mt-5 grid grid-cols-2 gap-2">
+                <button
+                  onClick={handleWeekendAction}
+                  className="bg-[#00A8E8] hover:bg-[#0090c7] text-white px-3 py-1.5 sm:py-3 rounded-xl text-xs sm:text-lg font-bold transition-colors flex items-center justify-center gap-1.5 sm:gap-3 focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
+                >
+                  Continue Weekend
+                  <ArrowRight className="h-4 w-4 sm:h-6 sm:w-6" aria-hidden="true" />
+                </button>
+                <button
+                  onClick={handleNextRaceAction}
+                  disabled={!nextRaceWeekend}
+                  className="border border-[#00A8E8] text-[#00A8E8] hover:bg-[#00A8E8]/10 px-3 py-1.5 sm:py-3 rounded-xl text-xs sm:text-lg font-bold transition-colors flex items-center justify-center gap-1.5 sm:gap-3 focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
+                >
+                  {raceCardMode === 'next' ? 'Current Weekend' : 'Next Race'}
+                  <ArrowRight className="h-4 w-4 sm:h-6 sm:w-6" aria-hidden="true" />
+                </button>
+              </div>
             </div>
           </div>
         </section>
