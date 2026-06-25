@@ -207,28 +207,30 @@ const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBac
                       aria-expanded={showDropdown}
                       aria-haspopup="true"
                       aria-label={`Account menu for ${nickname}`}
-                      className="flex items-center gap-2 bg-[#F5F5F7] hover:bg-[#EBEBED] rounded-full px-3 py-1.5 transition-colors border border-[#E5E7EB] focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
+                      className="flex items-center gap-1.5 sm:gap-2 bg-[#F5F5F7] hover:bg-[#EBEBED] rounded-full px-2 sm:px-3 py-1 sm:py-1.5 transition-colors border border-[#E5E7EB] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] max-w-[150px] sm:max-w-none"
                     >
                       <div className="w-7 h-7 rounded-full bg-[#00A8E8] flex items-center justify-center text-white text-xs font-bold" aria-hidden="true">
                         {nickname.charAt(0).toUpperCase()}
                       </div>
-                      <span className="text-sm text-[#4B5563] hidden sm:block max-w-[140px] truncate font-medium">
-                        {nickname}
-                      </span>
-                      {planLabel && (
-                        <span
-                          className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                            planLabel === 'Admin'
-                              ? 'bg-purple-100 text-purple-700 border-purple-200'
-                              : planLabel === 'Team' || planLabel === 'Pro'
-                              ? 'bg-[#00A8E8]/10 text-[#00A8E8] border-[#00A8E8]/30'
-                              : 'bg-gray-100 text-gray-600 border-gray-200'
-                          }`}
-                          aria-label={`Account type: ${planLabel}`}
-                        >
-                          {planLabel}
+                      <span className="min-w-0 flex flex-col sm:flex-row sm:items-center sm:gap-2">
+                        <span className="text-[11px] leading-tight sm:text-sm text-[#4B5563] max-w-[76px] sm:max-w-[140px] truncate font-medium">
+                          {nickname}
                         </span>
-                      )}
+                        {planLabel && (
+                          <span
+                            className={`inline-flex items-center self-start sm:self-auto px-1.5 sm:px-2 py-0 sm:py-0.5 rounded-full text-[9px] sm:text-[10px] leading-tight font-bold border ${
+                              planLabel === 'Admin'
+                                ? 'bg-purple-100 text-purple-700 border-purple-200'
+                                : planLabel === 'Team' || planLabel === 'Pro'
+                                ? 'bg-[#00A8E8]/10 text-[#00A8E8] border-[#00A8E8]/30'
+                                : 'bg-gray-100 text-gray-600 border-gray-200'
+                            }`}
+                            aria-label={`Account type: ${planLabel}`}
+                          >
+                            {planLabel}
+                          </span>
+                        )}
+                      </span>
 
                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#9CA3AF]" aria-hidden="true">
                         <polyline points="6 9 12 15 18 9" />
