@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OnlyFast Home Preview</title>
+    <style>
+      :root {
+        --blue: #008ff0;
+        --blue-dark: #0077c8;
+        --ink: #181a25;
+        --muted: #5f6777;
+        --line: #dfe4ec;
+        --soft: #f7f9fc;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: #f5f5f7;
+        color: var(--ink);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: rgba(255,255,255,.96);
+        border-bottom: 1px solid var(--line);
+        box-shadow: 0 1px 8px rgba(15,23,42,.04);
+      }
+
+      .nav {
+        max-width: 980px;
+        height: 52px;
+        margin: 0 auto;
+        padding: 0 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .icon-button {
+        width: 42px;
+        height: 42px;
+        border: 0;
+        background: transparent;
+        color: var(--ink);
+        border-radius: 12px;
+        display: inline-grid;
+        place-items: center;
+      }
+
+      .account {
+        height: 42px;
+        min-width: 76px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: var(--soft);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        color: #778092;
+      }
+
+      .avatar {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: var(--blue);
+        color: #fff;
+        font-weight: 800;
+        display: grid;
+        place-items: center;
+      }
+
+      main {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 0 14px 16px;
+      }
+
+      .brand {
+        text-align: center;
+        padding: 0;
+        margin-top: 28px;
+      }
+
+      .brand-logo-frame {
+        width: min(330px, 78vw);
+        height: 76px;
+        overflow: hidden;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        margin: 0 auto;
+      }
+
+      .brand img {
+        width: 100%;
+        height: auto;
+        display: block;
+        transform: translateY(-37%);
+      }
+
+      .tagline {
+        margin-top: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+        color: #4b5563;
+      }
+
+      .tagline span { color: var(--blue); }
+
+      .card {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        box-shadow: 0 2px 12px rgba(15,23,42,.045);
+      }
+
+      .info-card {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        padding: 8px 8px;
+        margin-bottom: 7px;
+      }
+
+      .info-item {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        min-width: 0;
+        padding: 0 10px;
+      }
+
+      .info-item + .info-item {
+        border-left: 1px solid var(--line);
+      }
+
+      .info-icon {
+        color: var(--blue);
+        flex: 0 0 auto;
+      }
+
+      .kicker {
+        color: var(--blue);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        line-height: 1.1;
+      }
+
+      .info-main {
+        margin-top: 5px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--ink);
+        line-height: 1.25;
+      }
+
+      .countdown {
+        font-size: 20px;
+        font-weight: 700;
+        line-height: 1.05;
+      }
+
+      .info-sub {
+        margin-top: 1px;
+        font-size: 14px;
+        font-weight: 500;
+        color: #3f4654;
+        line-height: 1.25;
+      }
+
+      .tiles {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+
+      .tile {
+        min-height: 87px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: #fff;
+        box-shadow: 0 2px 10px rgba(15,23,42,.035);
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        color: var(--ink);
+        cursor: pointer;
+      }
+
+      .tile-icon {
+        width: 48px;
+        height: 48px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 48px;
+      }
+
+      .tile svg {
+        color: var(--blue);
+      }
+
+      .tile-label {
+        font-size: 18px;
+        line-height: 1.12;
+        font-weight: 600;
+        text-align: center;
+      }
+
+      .rookie-ad {
+        margin: 8px 0;
+        padding: 10px 12px;
+        border: 1px solid #d7eef8;
+        border-radius: 14px;
+        background: #fff;
+        box-shadow: 0 2px 10px rgba(0, 143, 240, .08);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .rookie-ad-kicker {
+        color: var(--blue);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+      }
+
+      .rookie-ad-title {
+        margin-top: 2px;
+        font-size: 14px;
+        font-weight: 650;
+      }
+
+      .rookie-ad-button {
+        border: 0;
+        border-radius: 10px;
+        background: var(--blue);
+        color: #fff;
+        min-height: 34px;
+        padding: 0 12px;
+        font-size: 12px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .section {
+        margin-top: 7px;
+        padding: 10px;
+      }
+
+      .weekend-card {
+        padding: 0;
+        overflow: hidden;
+      }
+
+      .weekend-layout {
+        display: grid;
+        grid-template-columns: 34% 1fr;
+      }
+
+      .track-panel {
+        min-height: 86px;
+        background:
+          linear-gradient(160deg, rgba(0, 143, 240, .18), rgba(24, 26, 37, .72)),
+          radial-gradient(circle at 30% 35%, #c6a06b 0 18%, #9f7d4f 19% 31%, #5b6570 32% 36%, #b0bbc8 37% 40%, #29313b 41% 100%);
+        color: white;
+        display: flex;
+        align-items: flex-end;
+        padding: 12px;
+        font-weight: 950;
+        font-size: 18px;
+        line-height: .95;
+        text-transform: uppercase;
+        text-shadow: 0 2px 6px rgba(0,0,0,.55);
+      }
+
+      .weekend-content {
+        padding: 8px;
+      }
+
+      .section-title {
+        color: var(--blue);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        margin-bottom: 6px;
+      }
+
+      .weekend-track {
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+      }
+
+      .weekend-date {
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 650;
+      }
+
+      .sessions {
+        margin-top: 5px;
+        border-top: 1px solid var(--line);
+        padding-top: 5px;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+      }
+
+      .session {
+        min-width: 0;
+        display: flex;
+        align-items: flex-start;
+        gap: 5px;
+        padding: 0 5px;
+      }
+
+      .session + .session {
+        border-left: 1px solid var(--line);
+      }
+
+      .session-name {
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .session-status {
+        margin-top: 1px;
+        color: var(--blue);
+        font-size: 10px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .primary {
+        margin-top: 8px;
+        width: 100%;
+        border: 0;
+        border-radius: 10px;
+        background: var(--blue);
+        color: white;
+        min-height: 26px;
+        font-size: 12px;
+        font-weight: 850;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+      }
+
+      .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 7px;
+      }
+
+      .stat {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        min-height: 87px;
+        padding: 7px 4px;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .stat svg {
+        color: var(--blue);
+        margin-bottom: 2px;
+      }
+
+      .stat-value {
+        font-size: 22px;
+        line-height: 1;
+        font-weight: 900;
+      }
+
+      .stat-label {
+        margin-top: 2px;
+        color: var(--muted);
+        font-weight: 750;
+      }
+
+      .event-row {
+        display: grid;
+        grid-template-columns: 20px 92px 1fr 16px;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .event-row svg {
+        color: var(--blue);
+      }
+
+      .event-date {
+        color: var(--blue);
+        font-weight: 600;
+      }
+
+      .event-track {
+        font-weight: 500;
+      }
+
+      .outline {
+        margin-top: 8px;
+        width: 100%;
+        min-height: 34px;
+        border-radius: 11px;
+        border: 1.5px solid var(--blue);
+        background: #fff;
+        color: var(--blue);
+        font-size: 14px;
+        font-weight: 850;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+      }
+
+      @media (max-width: 640px) {
+        main { padding-left: 14px; padding-right: 14px; }
+        .tagline { font-size: 14px; }
+        .info-card { padding: 8px; }
+        .info-item { gap: 9px; padding: 0 6px; }
+        .info-main, .info-sub { font-size: 14px; }
+        .countdown { font-size: 20px; }
+        .tile { min-height: 87px; gap: 8px; }
+        .tile-label { font-size: 18px; }
+        .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .sessions { grid-template-columns: repeat(3, 1fr); gap: 0; }
+        .session { padding: 0; }
+        .session + .session { border-left: 1px solid var(--line); padding-left: 5px; }
+        .event-row { grid-template-columns: 24px 104px 1fr 16px; gap: 9px; }
+        .track-panel { min-height: 78px; font-size: 14px; padding: 8px; }
+        .weekend-content { padding: 7px; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="nav">
+        <button class="icon-button" aria-label="Open menu">
+          <svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round">
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
+        <div></div>
+        <button class="account" aria-label="Account menu">
+          <span class="avatar">V</span>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <main>
+      <section class="brand">
+        <div class="brand-logo-frame">
+          <img src="./onlyfast-logo.png" alt="OnlyFast" />
+        </div>
+        <div class="tagline">Race Smarter. <span>Finish Faster.</span></div>
+      </section>
+
+      <section class="card info-card">
+        <div class="info-item">
+          <svg class="info-icon" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 17h12l1.5-5.5A2 2 0 0 0 17.6 9H6.4a2 2 0 0 0-1.9 2.5L6 17Z"></path>
+            <circle cx="7.5" cy="17.5" r="1.5"></circle>
+            <circle cx="16.5" cy="17.5" r="1.5"></circle>
+            <path d="M8 9V6h8v3"></path>
+          </svg>
+          <div>
+            <div class="kicker">Current Car</div>
+            <div class="info-main">DWARF CAR</div>
+            <div class="info-sub">#88M</div>
+          </div>
+        </div>
+        <div class="info-item">
+          <svg class="info-icon" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2"></rect>
+            <line x1="16" y1="2" x2="16" y2="6"></line>
+            <line x1="8" y1="2" x2="8" y2="6"></line>
+            <line x1="3" y1="10" x2="21" y2="10"></line>
+          </svg>
+          <div>
+            <div class="kicker">Next Event:</div>
+            <div class="info-main countdown">5 Days</div>
+            <div class="info-sub">Barona Speedway</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tiles">
+        <button class="tile"><span class="tile-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="7" x2="12" y2="17"></line><line x1="7" y1="12" x2="17" y2="12"></line></svg></span><span class="tile-label">New Setup</span></button>
+        <button class="tile"><span class="tile-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg></span><span class="tile-label">Continue Saved Setup</span></button>
+        <button class="tile"><span class="tile-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg></span><span class="tile-label">Calendar</span></button>
+        <button class="tile"><span class="tile-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m8 12 3 3 5-6"></path></svg></span><span class="tile-label">To-Do List</span></button>
+        <button class="tile"><span class="tile-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94z"></path></svg></span><span class="tile-label">Parts Reference</span></button>
+        <button class="tile"><span class="tile-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z"></path></svg></span><span class="tile-label">Setup Library</span></button>
+      </section>
+
+      <section class="rookie-ad" aria-label="Rookie subscription ad">
+        <div>
+          <div class="rookie-ad-kicker">Rookie ad slot</div>
+          <div class="rookie-ad-title">Rookie is free and ad-supported.</div>
+        </div>
+        <button class="rookie-ad-button">Upgrade</button>
+      </section>
+
+      <section class="card section weekend-card">
+        <div class="weekend-layout">
+          <div class="track-panel">Barona<br />Speedway</div>
+          <div class="weekend-content">
+            <div class="section-title">Next Race Weekend</div>
+            <div class="weekend-track">Barona Speedway</div>
+            <div class="weekend-date">July 11, 2026</div>
+            <div class="sessions">
+              <div class="session"><svg width="16" height="16" viewBox="0 0 24 24" fill="var(--blue)"><circle cx="12" cy="12" r="11"></circle><path d="m7 12 3 3 7-7" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg><div><div class="session-name">Hot Laps</div><div class="session-status">Complete</div></div></div>
+              <div class="session"><svg width="16" height="16" viewBox="0 0 24 24" fill="var(--blue)"><circle cx="12" cy="12" r="11"></circle><path d="m7 12 3 3 7-7" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg><div><div class="session-name">Heat Race</div><div class="session-status">Complete</div></div></div>
+              <div class="session"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-dasharray="2 2"><circle cx="12" cy="12" r="10"></circle></svg><div><div class="session-name">Main Event</div><div class="session-status">In Progress</div></div></div>
+            </div>
+            <button class="primary" id="weekend-action"><span>Start Weekend</span> <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg></button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card section">
+        <div class="section-title">Performance Summary</div>
+        <div class="stat-grid">
+          <div class="stat"><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 21h8"></path><path d="M12 17v4"></path><path d="M7 4h10v4a5 5 0 0 1-10 0V4Z"></path><path d="M5 5H3a3 3 0 0 0 3 3h1"></path><path d="M19 5h2a3 3 0 0 1-3 3h-1"></path></svg><div class="stat-value">12</div><div class="stat-label">Events</div></div>
+          <div class="stat"><svg width="38" height="38" viewBox="0 0 24 24" fill="currentColor"><path d="m12 2 2.8 6 6.2.7-4.6 4.3 1.2 6.2L12 16.1 6.4 19.2 7.6 13 3 8.7 9.2 8 12 2Z"></path></svg><div class="stat-value">4</div><div class="stat-label">Top 5s</div></div>
+          <div class="stat"><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V4s-1 1-4 1-5-2-8-2-4 1-4 1v17"></path></svg><div class="stat-value">1</div><div class="stat-label">Wins</div></div>
+          <div class="stat"><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17 9 11l4 4 8-8"></path><path d="M14 7h7v7"></path></svg><div class="stat-value">+37</div><div class="stat-label">Pos Gain</div></div>
+        </div>
+      </section>
+
+      <section class="card section">
+        <div class="section-title">Upcoming Events</div>
+        <div class="event-row"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg><div class="event-date">Jul 11, 2026</div><div class="event-track">Ventura Speedway</div><div>›</div></div>
+        <div class="event-row"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg><div class="event-date">Aug 1, 2026</div><div class="event-track">Barona Speedway</div><div>›</div></div>
+        <div class="event-row"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg><div class="event-date">Aug 15, 2026</div><div class="event-track">Barona Speedway</div><div>›</div></div>
+        <button class="outline">View Full Schedule <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg></button>
+      </section>
+
+      <section class="rookie-ad" aria-label="Rookie subscription ad">
+        <div>
+          <div class="rookie-ad-kicker">Rookie ad slot</div>
+          <div class="rookie-ad-title">Remove ads from OnlyFast with Pro.</div>
+        </div>
+        <button class="rookie-ad-button">Upgrade</button>
+      </section>
+    </main>
+    <script>
+      document.getElementById('weekend-action')?.addEventListener('click', event => {
+        event.currentTarget.querySelector('span').textContent = 'Continue Weekend';
+      });
+    </script>
+  </body>
+</html>
