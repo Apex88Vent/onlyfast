@@ -1416,10 +1416,6 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     setDeleteOpen(true);
   };
 
-  const isLastSession = () =>
-    ALL_SLOTS.filter(t => isDisplayableSession(t)).length <= 1;
-
-
   const submitDeleteSession = async () => {
     setDeleteBusy(true);
     const deletedTab = activeTab;
@@ -1465,19 +1461,19 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     setRefreshTrigger(prev => prev + 1);
 
     if (remaining.length === 0) {
-      // Last real session: reset saved-event state without opening blank standby tabs.
+      // Last real session: clear session state but keep the race-day container open.
       const cleared = emptyAllSetups();
       (Object.keys(cleared) as SetupType[]).forEach(t => {
         cleared[t] = { ...cleared[t], raceClass: selectedCar };
       });
       setSetups(cleared);
-      setSavedMeta({ name: undefined, ids: {} });
+      setSavedMeta(prev => ({ name: prev.name, ids: {} }));
       setTimingDataByTab({});
       setSessionLabels({});
       setSessionOrders({});
       setActiveTab('base');
-      setActiveView('saved');
-      setSaveMessage('Race day deleted');
+      setActiveView('setup');
+      setSaveMessage('Session deleted');
       setTimeout(() => setSaveMessage(''), 4000);
       return;
     }
@@ -2260,14 +2256,12 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
             <h4 className="text-lg font-bold text-[#1A1B23] mb-2">Delete Session</h4>
             <p className="text-sm text-[#374151]">
-              {isLastSession()
-                ? `"${labelForTab(activeTab)}" is the last session for this race day. Deleting it removes the entire race-day save.`
-                : `Delete this session? This will remove only this session's setup data. The rest of the race day will remain saved.`}
+              Delete this session? This will remove only this session's setup data. The race day will remain saved.
             </p>
             <div className="flex justify-end gap-2 mt-5">
               <button onClick={() => setDeleteOpen(false)} className="px-4 py-2 rounded-lg text-sm font-medium text-[#6B7280] hover:bg-[#F5F5F7] transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8]">Cancel</button>
               <button onClick={submitDeleteSession} disabled={deleteBusy} className="px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 hover:bg-red-700 text-white transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-red-500">
-                {deleteBusy ? 'Deleting...' : (isLastSession() ? 'Delete Race Day' : 'Delete Session')}
+                {deleteBusy ? 'Deleting...' : 'Delete Session'}
               </button>
             </div>
           </div>
