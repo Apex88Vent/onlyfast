@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OnlyFast Onboarding Preview</title>
+  <style>
+    * { box-sizing: border-box; }
+    :root { background: #cbd5e1; color: #1a1b23; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { margin: 0; min-height: 100vh; }
+    button { font: inherit; }
+    .phone { width: 100%; max-width: 390px; min-height: 100vh; margin: 0 auto; background: #f5f5f7; overflow: hidden; }
+    .screen { min-height: 100vh; padding: 24px 16px; display: grid; align-items: center; }
+    .card { width: 100%; border: 1px solid #e5e7eb; border-radius: 30px; background: #fff; padding: 20px; box-shadow: 0 24px 60px rgba(15, 23, 42, .12); animation: slideIn .26s ease-out; }
+    .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .logo { height: 64px; width: auto; object-fit: contain; }
+    .skip { border: 0; border-radius: 999px; background: transparent; color: #6b7280; padding: 8px 10px; font-size: 12px; font-weight: 800; cursor: pointer; }
+    .skip.hidden { visibility: hidden; pointer-events: none; }
+    h1 { margin: 18px 4px 0; font-size: 26px; line-height: 1.08; letter-spacing: -.035em; }
+    .visual { margin-top: 16px; min-height: 252px; border: 1px solid #e5e7eb; border-radius: 24px; background: linear-gradient(135deg, #ffffff, #f7fbfd 52%, #eaf7fc); color: #1a1b23; padding: 16px; overflow: hidden; }
+    .eyebrow { display: flex; gap: 8px; align-items: center; color: #007eae; font-size: 11px; font-weight: 900; letter-spacing: .16em; text-transform: uppercase; }
+    .scene { min-height: 200px; margin-top: 16px; }
+    p { margin: 14px 4px 0; color: #6b7280; font-size: 14px; line-height: 1.55; min-height: 88px; }
+    .login { display: block; margin: 14px auto 0; border: 0; background: transparent; color: #007eae; font-size: 12px; font-weight: 800; padding: 0; cursor: pointer; }
+    .dots { display: flex; justify-content: center; gap: 6px; margin-top: 18px; }
+    .dot { width: 8px; height: 8px; border: 0; border-radius: 999px; background: #d1d5db; cursor: pointer; transition: .22s ease; }
+    .dot.active { width: 28px; background: #00a8e8; animation: dotPop .22s ease-out; }
+    .primary { width: 100%; margin-top: 22px; border: 0; border-radius: 18px; background: #00a8e8; color: #fff; padding: 15px 18px; font-size: 16px; font-weight: 900; cursor: pointer; animation: pulse 2.2s ease-in-out infinite; }
+    .panel, .tile, .white { border: 1px solid #d8eef7; border-radius: 18px; background: #fff; padding: 14px; box-shadow: 0 6px 14px rgba(15,23,42,.04); }
+    .stack { display: grid; gap: 10px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .bar { height: 8px; border-radius: 999px; background: #e5e7eb; overflow: hidden; }
+    .bar span { display: block; height: 100%; border-radius: inherit; background: #00a8e8; }
+    .tile strong, .panel strong { display: block; font-size: 14px; }
+    .tile small, .panel small { display: block; margin-top: 4px; color: #6b7280; }
+    .timeline { display: grid; gap: 14px; padding-top: 8px; }
+    .row { display: flex; align-items: center; gap: 12px; }
+    .num { display: grid; place-items: center; flex: 0 0 40px; height: 40px; border-radius: 50%; background: #00a8e8; color: #fff; font-weight: 900; }
+    .quote, .timing { border-radius: 12px; background: #f5f5f7; padding: 9px 11px; margin-top: 8px; font-size: 12px; }
+    .timing { display: grid; grid-template-columns: 1fr 60px; gap: 10px; }
+    .timing b { color: #00a8e8; }
+    .scan { position: relative; overflow: hidden; border-radius: 24px; }
+    .scan-line { position: absolute; inset: 0 0 auto; height: 2px; background: #00a8e8; box-shadow: 0 0 22px rgba(0,168,232,.95); animation: scanLine 2s ease-in-out infinite; }
+    .corner-preview-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+    .corner-preview-head strong { font-size: 14px; }
+    .corner-preview-head span { border-radius: 999px; background: rgba(0,168,232,.1); color: #007eae; padding: 4px 8px; font-size: 10px; font-weight: 800; }
+    .corner-svg-wrap { overflow: hidden; border: 1px solid #e5e7eb; border-radius: 16px; background: #f9fafb; padding: 8px; }
+    .corner-svg-wrap svg { width: 100%; display: block; }
+    .pulse-zone { animation: trackPulse 2.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+    .feel-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+    .feel { border: 1px solid #d8eef7; border-radius: 16px; background: #f5f5f7; color: #4b5563; padding: 9px 6px; font-size: 12px; font-weight: 900; text-align: center; }
+    .feel.active { border-color: #ef4444; background: #ef4444; color: #fff; animation: feelHighlight 2.4s ease-in-out infinite; }
+    .assist-copy { margin-top: 12px; border: 1px solid rgba(0,168,232,.2); border-radius: 16px; background: rgba(0,168,232,.1); color: #007eae; padding: 11px; font-size: 12px; font-weight: 700; line-height: 1.45; }
+    .success { text-align: center; padding: 34px 20px; }
+    .check { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; margin: 0 auto 16px; background: #d1fae5; color: #059669; font-size: 30px; font-weight: 900; }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(22px); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes dotPop { 0% { transform: scale(.8); } 70% { transform: scale(1.18); } 100% { transform: scale(1); } }
+    @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(0,168,232,.32); } 50% { box-shadow: 0 0 0 10px rgba(0,168,232,0); } }
+    @keyframes scanLine { 0% { transform: translateY(-8px); opacity: .25; } 100% { transform: translateY(205px); opacity: .1; } }
+    @keyframes trackPulse { 0%,100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(0,168,232,.28); } 50% { transform: scale(1.08); box-shadow: 0 0 0 8px rgba(0,168,232,0); } }
+    @keyframes feelHighlight { 0%,28%,100% { transform: translateY(0); } 45%,65% { transform: translateY(-2px); } }
+    @media (min-width: 500px) { .phone { min-height: 844px; margin-top: 28px; margin-bottom: 28px; border-radius: 34px; outline: 7px solid #111827; box-shadow: 0 28px 70px rgba(15,23,42,.28); } .screen { min-height: 844px; } }
+  </style>
+</head>
+<body>
+  <main class="phone"><div class="screen"><section class="card" id="app" aria-live="polite"></section></div></main>
+  <script>
+    const requiredSlides = 5;
+    const slides = [
+      ['*','Built for race day','Welcome to OnlyFast',"Your all in one garage tool for every type of racer; dirt track, road racing, pavement ovals, everything. If you race it, it's here! Save setups, get specific adjustments based on real data, manage your calendar, to do lists and a ton more!","Let's Get Faster",'welcome'],
+      ['o','Class-specific setup fields','Choose Your Car Class','Pick the class you race so OnlyFast can load the correct setup sheet, fields, and car-specific options.','Continue','classes'],
+      ['+','Your starting point','Build Your First Setup','Enter your starting setup before you hit the track. Track chassis settings, tire pressures, springs, shocks, stagger, gearing, notes, and custom fields.','Continue','setup'],
+      ['1','Hot Laps - Heat - Main','Race Weekend Workflow','Organize your race day by sessions like Hot Laps, Heat Race, and Main Event. Save changes as the track evolves and compare what worked.','Continue','sessions'],
+      ['?','Setup Assist','Ask OnlyFast','Use the Corner Handling Diagram to mark where the car feels tight, loose, or balanced. Ask OnlyFast combines that feedback with your setup, timing, and weather to suggest smarter changes.','Continue','advice'],
+      ['#','Timing scan','Timing Scan','Upload or scan timing results from MyRacePass or Race Monitor. OnlyFast can pull lap times, fastest lap, average lap, start/finish position, and position gain.','Continue','scan'],
+      ['~','Track conditions','Weather-Aware Adjustments','Weather matters. OnlyFast can use conditions like temperature, humidity, and track changes to help guide smarter setup decisions.','Continue','weather'],
+      ['=','Find the pattern','Save, Compare, Improve','Every saved race weekend helps you build a personal setup library. Look back at what worked at each track and make better decisions next time.','Continue','compare'],
+      ['>','Crew ready','Share and Export','Export setup sheets to PDF or share a setup with a code. Great for teammates, crew chiefs, or keeping printed notes in the trailer.','Continue','share'],
+      ['T','Coming soon','Leaderboards and Practice Timing','Fast lap leaderboards and GPS-based practice timing are being developed to help racers compare laps, tracks, and progress over time.','Continue','timing'],
+      ['$','Pick your lane','Choose How You Race','Rookie is always free and ad-supported. Pro unlocks more tools for individual racers. Team is built for multiple cars and classes.','Continue','plans'],
+      ['!','Ready to race','Ready to Build Speed?','Start with your first setup, save your race weekend, and let OnlyFast help you make better changes every time you hit the track.','Pick My Plan','ready']
+    ];
+    let current = 0;
+    const app = document.querySelector('#app');
+    function visual(type) {
+      if (type === 'welcome') return `<div class="stack"><div class="panel"><strong>Setup notebook</strong><div class="bar"><span style="width:70%"></span></div></div><div class="panel"><strong>Timing results</strong><div class="bar"><span style="width:82%"></span></div></div><div class="panel"><strong>Real setup advice</strong><div class="bar"><span style="width:58%"></span></div></div></div>`;
+      if (type === 'classes') return `<div class="grid">${['Dwarf Car','Sprint Car','Modified','Sport Mod','Pro Stock','Pure Stock','Lightning Sprint'].map(x => `<div class="tile"><strong>${x}</strong><small>Class setup sheet</small></div>`).join('')}</div>`;
+      if (type === 'setup') return `<div class="stack">${['Tire pressures','Springs / shocks','Stagger','Custom notes'].map((x,i) => `<div class="panel"><strong>${x}</strong><div class="bar" style="margin-top:9px"><span style="width:${58+i*9}%"></span></div></div>`).join('')}</div>`;
+      if (type === 'sessions') return `<div class="timeline">${['Hot Laps','Heat Race','Main Event'].map((x,i) => `<div class="row"><span class="num">${i+1}</span><div class="panel" style="flex:1"><strong>${x}</strong><small>Setup + handling notes</small></div></div>`).join('')}</div>`;
+      if (type === 'advice') return `<div class="white"><div class="corner-preview-head"><strong>Corner Handling Diagram</strong></div><div class="corner-svg-wrap"><svg viewBox="0 0 600 280" aria-label="Corner Handling Diagram preview"><defs><linearGradient id="dirt" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#c4a882"></stop><stop offset="100%" stop-color="#b89b72"></stop></linearGradient><linearGradient id="infield" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7cb668"></stop><stop offset="100%" stop-color="#6aa856"></stop></linearGradient></defs><rect x="0" y="0" width="600" height="280" fill="#f9fafb" rx="12"></rect><path d="M 580 40 L 200 40 A 100 100 0 0 0 200 240 L 580 240" fill="url(#dirt)" stroke="#a08560" stroke-width="2"></path><path d="M 580 80 L 240 80 A 60 60 0 0 0 240 200 L 580 200" fill="url(#infield)" stroke="#5a9a48" stroke-width="2"></path><path d="M 580 60 L 220 60 A 80 80 0 0 0 220 220 L 580 220" fill="none" stroke="#1a1b23" stroke-width="1.5" stroke-dasharray="10 5" opacity=".12"></path><path d="M 350 40 L 200 40 A 100 100 0 0 0 140 80 L 210 100 A 60 60 0 0 1 240 80 L 350 80 Z" fill="#9ca3af" opacity=".2" stroke="#9ca3af" stroke-width="2"></path><rect x="270" y="48" width="70" height="24" rx="6" fill="#9ca3af" opacity=".9"></rect><text x="305" y="57" text-anchor="middle" font-size="8" fill="white" font-weight="bold">ENTRY</text><text x="305" y="67" text-anchor="middle" font-size="7" fill="white">Tap to Set</text><path d="M 140 80 A 100 100 0 0 0 140 200 L 195 170 A 60 60 0 0 1 195 110 Z" fill="#3b82f6" opacity=".25" stroke="#3b82f6" stroke-width="2"></path><text x="155" y="145" text-anchor="middle" font-size="12" fill="#3b82f6" font-weight="bold" opacity=".6">|</text><rect x="110" y="128" width="60" height="24" rx="6" fill="#3b82f6" opacity=".9"></rect><text x="140" y="137" text-anchor="middle" font-size="8" fill="white" font-weight="bold">MID</text><text x="140" y="147" text-anchor="middle" font-size="7" fill="white">Tight</text><g class="pulse-zone"><path d="M 140 200 A 100 100 0 0 0 200 240 L 350 240 L 350 200 L 240 200 A 60 60 0 0 1 195 170 Z" fill="#ef4444" opacity=".25" stroke="#ef4444" stroke-width="2"></path><text x="330" y="223" text-anchor="middle" font-size="12" fill="#ef4444" font-weight="bold" opacity=".6">~</text><rect x="270" y="208" width="70" height="24" rx="6" fill="#ef4444" opacity=".9"></rect><text x="305" y="217" text-anchor="middle" font-size="8" fill="white" font-weight="bold">EXIT</text><text x="305" y="227" text-anchor="middle" font-size="7" fill="white">Loose</text></g></svg></div><div class="feel-grid"><span class="feel" style="border-color:#3b82f6">| Tight</span><span class="feel active">~ Loose</span><span class="feel" style="border-color:#22c55e">+ Perfect</span></div><div class="assist-copy">Setup + weather + feedback checked</div></div>`;
+      if (type === 'scan') return `<div class="white scan"><strong style="color:#6b7280">Timing Results</strong>${[1,2,3,4,5].map(i => `<div class="timing"><span>Car #${20+i}</span><b>14.${i}8</b></div>`).join('')}<div class="scan-line"></div></div>`;
+      if (type === 'weather') return `<div class="white">${[['Temperature','78'],['Humidity','42%'],['Track trend','Slicking off']].map(x => `<div class="timing"><span>${x[0]}</span><b>${x[1]}</b></div>`).join('')}</div>`;
+      if (type === 'compare') return `<div class="white"><strong>Setup library</strong>${['Baseline','Heat changes','Main result'].map((x,i) => `<div style="margin-top:14px"><small style="color:#6b7280;font-weight:800">${x}</small><div class="bar" style="margin-top:6px"><span style="width:${48+i*22}%"></span></div></div>`).join('')}</div>`;
+      if (type === 'share') return `<div class="white"><strong>Setup Sheet</strong><div class="quote">PDF export ready</div><div class="quote" style="color:#007eae;background:rgba(0,168,232,.1)">Share code: OF-4827</div></div>`;
+      if (type === 'timing') return `<div class="white">${['Fast lap leaderboard','GPS practice timing','Track progress'].map((x,i) => `<div class="row" style="margin-bottom:12px"><span class="num" style="height:32px;flex-basis:32px;font-size:12px">${i+1}</span><strong>${x}</strong></div>`).join('')}</div>`;
+      if (type === 'plans') return `<div class="stack">${['Rookie','Pro - Recommended','Team'].map((x,i) => `<div class="panel" style="${i===1?'border-color:#00a8e8;background:#eaf7fc':''}"><strong>${x}</strong></div>`).join('')}</div>`;
+      return `<div class="white" style="text-align:center"><strong>First setup -> race weekend -> smarter changes</strong><div class="bar" style="margin-top:20px"><span style="width:100%"></span></div></div>`;
+    }
+    function showResult(kind) {
+      const heading = kind === 'login' ? 'Login link clicked' : 'Sent to membership selection';
+      const body = kind === 'login' ? 'In the app, this opens the existing standard login screen without completing onboarding.' : 'In the app, onboarding is marked complete and the user is sent to the Rookie / Pro / Team membership page.';
+      app.innerHTML = `<div class="success"><div class="check">✓</div><h1>${heading}</h1><p style="min-height:auto">${body}</p><button class="primary" onclick="current=0;render()">Preview again</button></div>`;
+    }
+    function render() {
+      const [icon, eyebrow, title, text, button, type] = slides[current];
+      const final = current === slides.length - 1;
+      const canSkip = current >= requiredSlides && !final;
+      app.innerHTML =
+        `<div class="top"><img class="logo" src="/public/onlyfast-logo.png" alt="OnlyFast"><button class="skip ${canSkip ? '' : 'hidden'}" onclick="showResult('membership')">Skip</button></div>` +
+        `<h1>${title}</h1>` +
+        `<div class="visual"><div class="eyebrow"><span>${icon}</span>${eyebrow}</div><div class="scene">${visual(type)}</div></div>` +
+        `<p>${text}</p>` +
+        `<div class="dots">${slides.map((_, i) => `<button class="dot ${i===current?'active':''}" ${i > current ? 'disabled' : `onclick="current=${i};render()"`} aria-label="${i > current ? `Slide ${i+1}` : `Go to slide ${i+1}`}"></button>`).join('')}</div>` +
+        `<button class="primary" onclick="${final ? "showResult('membership')" : 'current++;render()'}">${button} -></button>` +
+        `${current === 0 ? "<button class=\"login\" onclick=\"showResult('login')\">Already a member? Login here</button>" : ''}`;
+    }
+    render();
+  </script>
+</body>
+</html>

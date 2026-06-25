@@ -321,9 +321,14 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
   };
 
   const handleDelete = async (id: string) => {
+    if (!user) return;
     if (!confirm('Delete this base template?')) return;
     try {
-      await supabase.from('race_setups').delete().eq('id', id);
+      await supabase
+        .from('race_setups')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
       if (editingId === id) {
         setEditingId(null);
         setTemplate(emptyTemplate());

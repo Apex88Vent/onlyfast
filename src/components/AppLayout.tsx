@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import { AnnouncerProvider } from './AccessibleAnnouncer';
 import SkipLink from './SkipLink';
 import SplashScreen from './SplashScreen';
 import OnboardingFlow from './OnboardingFlow';
+import HowOnlyFastWorks from './HowOnlyFastWorks';
 import Header from './Header';
 import SetupDashboard from './SetupDashboard';
 import AuthModal from './AuthModal';
@@ -19,8 +20,72 @@ const AppLayout: React.FC = () => {
   const [selectedCar, setSelectedCar] = useState<string>('');
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [isOnboarded, setIsOnboarded] = useState(false);
+  const [showHowOnlyFastWorks, setShowHowOnlyFastWorks] = useState(false);
+  const [hasCheckedHowOnlyFastWorks, setHasCheckedHowOnlyFastWorks] = useState(false);
+  const [isReplayingHowOnlyFastWorks, setIsReplayingHowOnlyFastWorks] = useState(false);
+  const [skipHowOnlyFastWorksAfterLogin, setSkipHowOnlyFastWorksAfterLogin] = useState(false);
+  const [isLoadingSavedCar, setIsLoadingSavedCar] = useState(false);
   const [legalModal, setLegalModal] = useState<'privacy' | 'terms' | null>(null);
   const [showSplash, setShowSplash] = useState(true);
+  const [authChecked, setAuthChecked] = useState(false);
+  const onboardingLoginEscapeRef = useRef(false);
+
+  const howOnlyFastWorksStorageKey = (userId?: string | null) =>
+    userId ? `onlyfast_onboarding_completed_${userId}` : 'onlyfast_onboarding_completed_guest';
+
+  const closeHowOnlyFastWorksReplay = useCallback(() => {
+    setShowHowOnlyFastWorks(false);
+    setIsReplayingHowOnlyFastWorks(false);
+    setHasCheckedHowOnlyFastWorks(true);
+  }, []);
+
+  const markHowOnlyFastWorksComplete = useCallback(async () => {
+    try {
+      localStorage.setItem(howOnlyFastWorksStorageKey(user?.id), 'true');
+    } catch {/* ignore */}
+
+    if (user) {
+      try {
+        await supabase.auth.updateUser({
+          data: {
+            ...(user.user_metadata || {}),
+            onboarding_completed: true,
+          },
+        });
+      } catch {
+        // Non-fatal: local storage still prevents repeat prompts on this device.
+      }
+    }
+
+    setShowHowOnlyFastWorks(false);
+    setIsReplayingHowOnlyFastWorks(false);
+    setHasCheckedHowOnlyFastWorks(true);
+  }, [user]);
+
+  const hasSelectedMembership = useCallback((signedInUser: User | null | undefined): boolean => {
+    const metadata = (signedInUser?.user_metadata || {}) as Record<string, unknown>;
+    if (
+      metadata.membership_tier ||
+      metadata.has_admin_full_access ||
+      metadata.promo_access_level
+    ) {
+      return true;
+    }
+
+    try {
+      const raw = localStorage.getItem('onlyfast_membership');
+      if (!raw) return false;
+      const saved = JSON.parse(raw) as { membership_tier?: unknown };
+      return Boolean(saved?.membership_tier);
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const handleHowOnlyFastWorksLogin = useCallback(() => {
+    onboardingLoginEscapeRef.current = true;
+    setAuthModalOpen(true);
+  }, []);
 
   const handleSplashComplete = useCallback(() => {
     setShowSplash(false);
@@ -36,19 +101,73 @@ const AppLayout: React.FC = () => {
     }
   }, []);
 
+  const applySelectedCar = useCallback((car: string) => {
+    setSelectedCar(car);
+    setIsOnboarded(true);
+    localStorage.setItem('onlyfast_car', car);
+  }, []);
+
+  useEffect(() => {
+    if (!authChecked) return;
+    if (!user || selectedCar) {
+      setIsLoadingSavedCar(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingSavedCar(true);
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('race_setups')
+          .select('race_class')
+          .eq('user_id', user.id)
+          .not('race_class', 'is', null)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        const savedCar = (data?.[0]?.race_class || '').trim();
+        if (!cancelled && savedCar) {
+          applySelectedCar(savedCar);
+        }
+      } catch {
+        /* Non-fatal: users without a saved class continue to class selection. */
+      } finally {
+        if (!cancelled) setIsLoadingSavedCar(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authChecked, user, selectedCar, applySelectedCar]);
+
   // Auth state listener
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setUser(session?.user ?? null);
+      const isOnboardingLoginEscape = event === 'SIGNED_IN' && onboardingLoginEscapeRef.current;
 
-      // After an unregistered user registers (triggered from a first-save), send
-      // them to the Rookie / Pro / Team selection page, then back to saving.
+      setUser(session?.user ?? null);
+      setAuthChecked(true);
+      setHasCheckedHowOnlyFastWorks(isOnboardingLoginEscape);
+
+      if (!session?.user) {
+        setSkipHowOnlyFastWorksAfterLogin(false);
+      }
+
       if (event === 'SIGNED_IN') {
+        if (isOnboardingLoginEscape) {
+          onboardingLoginEscapeRef.current = false;
+          setSkipHowOnlyFastWorksAfterLogin(true);
+          setShowHowOnlyFastWorks(false);
+          setIsReplayingHowOnlyFastWorks(false);
+          setHasCheckedHowOnlyFastWorks(true);
+          setAuthModalOpen(false);
+        }
+
         try {
           if (localStorage.getItem('pending_plan_redirect')) {
             localStorage.removeItem('pending_plan_redirect');
-            window.location.href = '/pricing';
-            return;
           }
         } catch {/* ignore */}
       }
@@ -78,14 +197,38 @@ const AppLayout: React.FC = () => {
     // Initial check
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
+      setAuthChecked(true);
+      setHasCheckedHowOnlyFastWorks(false);
+    }).catch(() => {
+      setAuthChecked(true);
+      setHasCheckedHowOnlyFastWorks(false);
     });
     return () => subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (showSplash || isReplayingHowOnlyFastWorks) return;
+    if (!authChecked) return;
+
+    if (skipHowOnlyFastWorksAfterLogin || selectedCar || hasSelectedMembership(user)) {
+      setShowHowOnlyFastWorks(false);
+      setHasCheckedHowOnlyFastWorks(true);
+      return;
+    }
+
+    const completedInMetadata = Boolean(user?.user_metadata?.onboarding_completed);
+    let completedLocally = false;
+    try {
+      completedLocally = localStorage.getItem(howOnlyFastWorksStorageKey(user?.id)) === 'true';
+    } catch {/* ignore */}
+
+    const completed = completedInMetadata || completedLocally;
+    setShowHowOnlyFastWorks(!completed);
+    setHasCheckedHowOnlyFastWorks(true);
+  }, [authChecked, user, selectedCar, showSplash, isReplayingHowOnlyFastWorks, skipHowOnlyFastWorksAfterLogin, hasSelectedMembership]);
+
   const handleCarSelect = (car: string) => {
-    setSelectedCar(car);
-    setIsOnboarded(true);
-    localStorage.setItem('onlyfast_car', car);
+    applySelectedCar(car);
   };
 
   const handleBackToCarSelect = () => {
@@ -94,12 +237,48 @@ const AppLayout: React.FC = () => {
     localStorage.removeItem('onlyfast_car');
   };
 
+  const handleOpenHowOnlyFastWorks = () => {
+    setIsReplayingHowOnlyFastWorks(true);
+    setShowHowOnlyFastWorks(true);
+  };
+
   // Show splash screen on first load
   if (showSplash) {
     return <SplashScreen onComplete={handleSplashComplete} />;
   }
 
-  // Show onboarding if not completed
+  if (!hasCheckedHowOnlyFastWorks || showHowOnlyFastWorks) {
+    return (
+      <AnnouncerProvider>
+        <SkipLink />
+        {showHowOnlyFastWorks && (
+          <HowOnlyFastWorks
+            onComplete={isReplayingHowOnlyFastWorks ? closeHowOnlyFastWorksReplay : markHowOnlyFastWorksComplete}
+            onSkip={isReplayingHowOnlyFastWorks ? closeHowOnlyFastWorksReplay : markHowOnlyFastWorksComplete}
+            onLogin={handleHowOnlyFastWorksLogin}
+            isReplay={isReplayingHowOnlyFastWorks}
+          />
+        )}
+        <AuthModal
+          isOpen={authModalOpen}
+          onClose={() => setAuthModalOpen(false)}
+        />
+        <CookieConsent />
+      </AnnouncerProvider>
+    );
+  }
+
+  if (!authChecked || isLoadingSavedCar) {
+    return (
+      <AnnouncerProvider>
+        <SkipLink />
+        <div className="min-h-screen bg-[#F5F5F7]" />
+        <CookieConsent />
+      </AnnouncerProvider>
+    );
+  }
+
+  // Show discipline/class selection when no working class has been chosen yet.
   if (!isOnboarded) {
     return (
       <AnnouncerProvider>
@@ -120,6 +299,7 @@ const AppLayout: React.FC = () => {
           onSignInClick={() => setAuthModalOpen(true)}
           selectedCar={selectedCar}
           onBackToCarSelect={handleBackToCarSelect}
+          onOpenHowOnlyFastWorks={handleOpenHowOnlyFastWorks}
         />
         <main id="main-content" tabIndex={-1} className="flex-1">
           <h1 className="sr-only">OnlyFast Setup Assist - Dirt Track Racing Setup Tracker</h1>

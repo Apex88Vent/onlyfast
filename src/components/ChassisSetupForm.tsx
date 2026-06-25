@@ -16,7 +16,7 @@ interface ChassisSetupFormProps {
   customFields: CustomField[];
   onChange: (field: string, value: string) => void;
   raceClass?: string;
-  activeTab?: 'base' | 'heat' | 'main';
+  activeTab?: 'base' | 'heat' | 'main' | 'extra1' | 'extra2' | 'extra3';
   baseSetup?: SetupData | null; // For highlighting diffs vs the prior tab
   baseLabel?: string;           // Label for the "compared to" banner (e.g. "Hot Laps" or "Heat")
 }

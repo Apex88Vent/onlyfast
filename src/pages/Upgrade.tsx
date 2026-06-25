@@ -134,9 +134,9 @@ const Upgrade: React.FC = () => {
             alt="OnlyFast"
             className="h-12 mx-auto mb-4"
           />
-          <h1 className="text-3xl font-bold text-[#1A1B23]">Choose your plan</h1>
+          <h1 className="text-3xl font-bold text-[#1A1B23]">Choose how you want to use OnlyFast.</h1>
           <p className="text-[#6B7280] mt-2">
-            Start free with Rookie, or unlock more with Pro or Team. You can change anytime.
+            Pro is the best fit for most individual racers, but Rookie stays free and Team is ready for multi-car programs.
           </p>
         </div>
 
@@ -146,7 +146,7 @@ const Upgrade: React.FC = () => {
             <h3 className="text-2xl font-bold text-[#1A1B23]">Rookie</h3>
             <p className="text-3xl font-extrabold text-[#1A1B23] mt-1 mb-1">Free</p>
             <p className="text-xs text-[#6B7280] text-center">
-              Ad supported, we try to keep it unobtrusive.
+              Free, ad-supported, with limited saves. Good for trying OnlyFast.
             </p>
             <FeatureList
               items={[
@@ -171,10 +171,16 @@ const Upgrade: React.FC = () => {
 
           {/* ── PRO ─────────────────────────────────────────────────────── */}
           <div className="flex flex-col items-center rounded-2xl border-2 border-[#00A8E8] p-6 bg-white shadow-xl shadow-[#00A8E8]/15 ring-1 ring-[#00A8E8]/30">
+            <div className="inline-flex items-center gap-2 bg-[#1A1B23] text-white text-xs font-bold uppercase tracking-wide px-4 py-1.5 rounded-full shadow mb-2">
+              Recommended
+            </div>
             <FreeTrialBadge />
             <h3 className="text-2xl font-bold text-[#00A8E8]">Pro</h3>
             <p className="text-3xl font-extrabold text-[#1A1B23] mt-1 mb-1">
               $5<span className="text-base font-medium text-[#6B7280]">/mo</span>
+            </p>
+            <p className="text-xs text-[#6B7280] text-center mt-1">
+              Best for most individual racers. Unlock the full individual racer workflow, more saves, exports, Ask OnlyFast, timing tools, and fewer limits.
             </p>
             <FeatureList
               items={[
@@ -198,6 +204,9 @@ const Upgrade: React.FC = () => {
               $8<span className="text-base font-medium text-[#6B7280]">/mo</span>
             </p>
             <p className="text-xs font-semibold text-[#00A8E8] text-center">Everything in Pro, plus:</p>
+            <p className="text-xs text-[#6B7280] text-center mt-1">
+              For teams, families, or racers managing multiple cars/classes.
+            </p>
             <FeatureList
               items={[
                 'Unlimited types of cars',

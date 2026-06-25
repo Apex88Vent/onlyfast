@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 
-export type MenuAction = 'setup' | 'saved' | 'create-base' | 'todo' | 'compare' | 'parts' | 'schedule' | 'view-shared';
+export type MenuAction = 'home' | 'setup' | 'saved' | 'create-base' | 'todo' | 'compare' | 'parts' | 'schedule' | 'view-shared' | 'how-it-works';
 
 interface AppMenuProps {
   isOpen: boolean;
@@ -10,6 +10,16 @@ interface AppMenuProps {
 }
 
 const items: { action: MenuAction; label: string; description: string; icon: React.ReactNode }[] = [
+  {
+    action: 'home',
+    label: 'Home',
+    description: 'Start here',
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M3 10.5 12 3l9 7.5" /><path d="M5 10v10h14V10" /><path d="M9 20v-6h6v6" />
+      </svg>
+    ),
+  },
   {
     action: 'setup',
     label: 'Current Setup',
@@ -77,6 +87,16 @@ const items: { action: MenuAction; label: string; description: string; icon: Rea
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+      </svg>
+    ),
+  },
+  {
+    action: 'how-it-works',
+    label: 'How OnlyFast Works',
+    description: 'Replay the guided onboarding',
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" />
       </svg>
     ),
   },

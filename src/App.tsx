@@ -10,6 +10,8 @@ import NotFound from "./pages/NotFound";
 import ResetPassword from "./pages/ResetPassword";
 import Upgrade from "./pages/Upgrade";
 import SubscriptionSuccess from "./pages/SubscriptionSuccess";
+import OnboardingPreview from "./pages/OnboardingPreview";
+import RookieAdSlotPreview from "./pages/RookieAdSlotPreview";
 
 const queryClient = new QueryClient();
 
@@ -27,6 +29,10 @@ const App = () => (
             <Route path="/pricing" element={<Upgrade />} />
             <Route path="/checkout" element={<Upgrade />} />
             <Route path="/subscription/success" element={<SubscriptionSuccess />} />
+            <Route path="/onboarding-preview" element={<OnboardingPreview />} />
+            {import.meta.env.DEV && (
+              <Route path="/rookie-ad-slot-preview" element={<RookieAdSlotPreview />} />
+            )}
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

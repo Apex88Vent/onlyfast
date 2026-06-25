@@ -16,6 +16,7 @@ interface HeaderProps {
   onSignInClick: () => void;
   selectedCar: string;
   onBackToCarSelect?: () => void;
+  onOpenHowOnlyFastWorks?: () => void;
 }
 
 const getNickname = (user: User | null, override?: string): string => {
@@ -29,11 +30,11 @@ const getNickname = (user: User | null, override?: string): string => {
   return meta.nickname || (user.email?.split('@')[0] || 'Racer');
 };
 
-const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBackToCarSelect }) => {
+const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBackToCarSelect, onOpenHowOnlyFastWorks }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [activeView, setActiveView] = useState<string>('setup');
+  const [activeView, setActiveView] = useState<string>('home');
   const [nicknameOverride, setNicknameOverride] = useState<string>('');
   const [planLabel, setPlanLabel] = useState<PlanLabel | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -122,6 +123,11 @@ const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBac
   }, [showDropdown]);
 
   const handleMenuSelect = (action: MenuAction) => {
+    if (action === 'how-it-works') {
+      onOpenHowOnlyFastWorks?.();
+      return;
+    }
+
     // Dispatch a global event that SetupDashboard listens for
     window.dispatchEvent(new CustomEvent('onlyfast-menu', { detail: { action } }));
     // 'view-shared' opens a modal — it is NOT a view, so don't change the active
