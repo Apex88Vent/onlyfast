@@ -145,6 +145,7 @@ const TAB_ORDER: SetupType[] = ['base', 'heat', 'main'];
 const AUTOSAVE_MS = 5 * 60 * 1000; // 5 minutes
 const IDLE_HOME_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
 const STATE_STORAGE_KEY = 'onlyfast_setup_state_v2';
+const LAST_OPENED_SETUP_PREFIX = 'onlyfast_last_opened_setup_';
 
 // Single unified meta for the whole setup file (one name, separate DB ids per tab)
 interface UnifiedSavedMeta {
@@ -187,6 +188,8 @@ const parseResultPosition = (value: unknown): number | null => {
   const parsed = Number.parseInt(text, 10);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 };
+
+const lastOpenedSetupKey = (userId: string) => `${LAST_OPENED_SETUP_PREFIX}${userId}`;
 
 const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSignInClick }) => {
   const [activeTab, setActiveTab] = useState<SetupType>('base');
@@ -918,6 +921,10 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       }
 
       setSavedMeta({ name, ids: { ...savedMeta.ids, ...newIds } });
+      const rememberedId = newIds[activeTab] || savedMeta.ids[activeTab] || Object.values(newIds)[0] || Object.values(savedMeta.ids)[0];
+      if (rememberedId) {
+        try { localStorage.setItem(lastOpenedSetupKey(user.id), String(rememberedId)); } catch {}
+      }
       setSetups(prev => {
         const next = { ...prev };
         (Object.keys(next) as SetupType[]).forEach(t => { next[t] = { ...next[t], setup_name: name }; });
@@ -1114,6 +1121,9 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
   // Load the whole "file" — all rows sharing the same setup_name
   const handleLoadSetup = async (setup: any) => {
+    if (user && setup?.id) {
+      try { localStorage.setItem(lastOpenedSetupKey(user.id), String(setup.id)); } catch {}
+    }
     const name = setup.setup_name || setup.track_name || '';
     // Fully-keyed (6-slot) so extra slots are present but blank.
     const newSetups: Record<SetupType, SetupState> = emptyAllSetups();
@@ -1124,7 +1134,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
 
     // Seed at least the clicked row
-    const clickedType = (setup.setup_type || 'base') as SetupType;
+    const clickedType = ALL_SLOTS.includes(setup.setup_type as SetupType) ? (setup.setup_type as SetupType) : 'base';
     newSetups[clickedType] = loadSetupIntoState(setup);
     newIds[clickedType] = setup.id;
     newTiming[clickedType] = setup.timing_data ?? null;
@@ -1142,7 +1152,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
           .order('created_at', { ascending: false });
         if (data) {
           for (const row of data) {
-            const t = (row.setup_type || 'base') as SetupType;
+            const t = ALL_SLOTS.includes(row.setup_type as SetupType) ? (row.setup_type as SetupType) : 'base';
             if (!ALL_SLOTS.includes(t)) continue;
             if (newIds[t]) continue; // prefer most recent per type
             newSetups[t] = loadSetupIntoState(row);
@@ -1658,18 +1668,92 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       ]
     : [];
 
-  const handleHomeAction = (action: HomeAction) => {
+  const openLastSavedSetup = async () => {
+    if (!user) {
+      setActiveView('saved');
+      return;
+    }
+
+    const key = lastOpenedSetupKey(user.id);
+    const lastId = (() => {
+      try { return localStorage.getItem(key); } catch { return null; }
+    })();
+
+    if (lastId) {
+      try {
+        const { data } = await supabase
+          .from('race_setups')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('id', lastId)
+          .maybeSingle();
+        if (data) {
+          await handleLoadSetup(data);
+          return;
+        }
+        try { localStorage.removeItem(key); } catch {}
+      } catch {
+        setActiveView('saved');
+        return;
+      }
+    }
+
+    try {
+      const { data } = await supabase
+        .from('race_setups')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(20);
+      const fallback = (data || []).find((row: any) =>
+        row.setup_type !== 'base_template' &&
+        !String(row.setup_name || '').trim().toUpperCase().startsWith('[BASE TEMPLATE]')
+      );
+      if (fallback) {
+        await handleLoadSetup(fallback);
+        return;
+      }
+    } catch {}
+
+    setActiveView('saved');
+  };
+
+  const handleHomeAction = async (action: HomeAction) => {
     if (action === 'new-setup') {
       handleNewSetupClick();
       return;
     }
 
     if (action === 'continue-weekend') {
+      const activeSavedId = savedMeta.ids[activeTab] || Object.values(savedMeta.ids)[0];
+      if (activeSavedId && user) {
+        try { localStorage.setItem(lastOpenedSetupKey(user.id), String(activeSavedId)); } catch {}
+      }
+      if (!currentWeekend && nextEvent) {
+        setSetups(prev => {
+          const next = { ...prev };
+          (Object.keys(next) as SetupType[]).forEach(t => {
+            next[t] = {
+              ...next[t],
+              trackName: nextEvent.track,
+              raceDate: nextEvent.date,
+              raceClass: selectedCar || next[t].raceClass,
+            };
+          });
+          return next;
+        });
+        setActiveTab('base');
+      }
       setActiveView('setup');
       return;
     }
 
     if (action === 'saved' || action === 'library') {
+      if (action === 'saved') {
+        await openLastSavedSetup();
+        return;
+      }
       setActiveView('saved');
       return;
     }

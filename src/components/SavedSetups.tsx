@@ -21,6 +21,7 @@ interface SavedSetupsProps {
 interface SetupGroup {
   key: string;
   isGroup: boolean;        // true => parent race-day card, false => standalone save
+  isBaseSetup: boolean;
   title: string;           // e.g. "Barona 6-9-26"
   trackName: string;
   raceDate: string;
@@ -30,6 +31,9 @@ interface SetupGroup {
 }
 
 const norm = (v: any) => (v == null ? '' : String(v).trim());
+const isBaseSetupRow = (s: any) =>
+  norm(s.setup_type) === 'base_template' || norm(s.setup_name).toUpperCase().startsWith('[BASE TEMPLATE]');
+const cleanBaseTitle = (name: string) => name.replace(/^\[BASE TEMPLATE\]\s*/i, '').trim();
 
 // A setup can be grouped cleanly only when it has BOTH a track name and a date.
 const canGroup = (s: any) => norm(s.track_name) !== '' && norm(s.race_date) !== '';
@@ -44,13 +48,30 @@ const buildGroupKey = (s: any) =>
 
 const buildGroups = (setups: any[]): SetupGroup[] => {
   const map = new Map<string, SetupGroup>();
+  const baseSetups: SetupGroup[] = [];
   const standalone: SetupGroup[] = [];
 
   setups.forEach((s, idx) => {
+    if (isBaseSetupRow(s)) {
+      baseSetups.push({
+        key: `base-${s.id ?? idx}`,
+        isGroup: false,
+        isBaseSetup: true,
+        title: cleanBaseTitle(norm(s.setup_name)) || norm(s.race_class) || 'Base Setup',
+        trackName: '',
+        raceDate: norm(s.race_date),
+        raceClass: norm(s.race_class),
+        org: norm(s.organization || s.org || ''),
+        setups: [s],
+      });
+      return;
+    }
+
     if (!canGroup(s)) {
       standalone.push({
         key: `solo-${s.id ?? idx}`,
         isGroup: false,
+        isBaseSetup: false,
         title: norm(s.setup_name) || norm(s.track_name) || 'Untitled',
         trackName: norm(s.track_name),
         raceDate: norm(s.race_date),
@@ -65,6 +86,7 @@ const buildGroups = (setups: any[]): SetupGroup[] => {
       map.set(key, {
         key,
         isGroup: true,
+        isBaseSetup: false,
         title: `${norm(s.track_name)} ${norm(s.race_date)}`.trim(),
         trackName: norm(s.track_name),
         raceDate: norm(s.race_date),
@@ -77,7 +99,7 @@ const buildGroups = (setups: any[]): SetupGroup[] => {
   });
 
   const groups = Array.from(map.values());
-  return [...groups, ...standalone];
+  return [...baseSetups, ...groups, ...standalone];
 };
 
 const sessionOrder: Record<string, number> = { base: 1, heat: 2, main: 3, extra1: 4, extra2: 5, extra3: 6 };
@@ -91,10 +113,12 @@ const defaultLabelForType = (type: string) =>
   type === 'extra3' ? 'Session 6' :
   'Hot Laps';
 const sessionLabelOf = (s: any) =>
+  isBaseSetupRow(s) ? 'Base Setup' :
   norm(s.session_label) || defaultLabelForType(s.setup_type);
 
 const getSetupTypeBadge = (type: string) => {
   const colors: Record<string, string> = {
+    base_template: 'bg-[#1A1B23] text-white',
     base: 'bg-[#F0F0F2] text-[#4B5563]',
     heat: 'bg-amber-100 text-amber-700',
     main: 'bg-[#00A8E8]/10 text-[#00A8E8]',
@@ -317,7 +341,14 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
                     {/* Parent race-day title + delete-entire-event trash icon */}
                     <div className="mb-3 flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <div className="font-bold text-base text-[#1A1B23] truncate">{group.title || 'Untitled'}</div>
+                        <div className="flex items-center gap-2 min-w-0">
+                          {group.isBaseSetup && (
+                            <span className="flex-shrink-0 rounded-full bg-[#1A1B23] text-white px-2 py-0.5 text-[10px] font-bold tracking-[0.08em]">
+                              BASE SETUP
+                            </span>
+                          )}
+                          <div className="font-bold text-base text-[#1A1B23] truncate">{group.title || 'Untitled'}</div>
+                        </div>
                         {subtitleParts.length > 0 && (
                           <div className="text-xs text-[#9CA3AF] truncate mt-0.5">
                             {subtitleParts.join(' • ')}
@@ -327,8 +358,8 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
                       <button
                         onClick={() => openDelete(group)}
                         className="flex-shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-lg text-[#9CA3AF] hover:text-red-600 hover:bg-red-50 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500"
-                        aria-label={`Delete entire race event ${group.title} and all its sessions`}
-                        title="Delete entire race event"
+                        aria-label={group.isBaseSetup ? `Delete base setup ${group.title}` : `Delete entire race event ${group.title} and all its sessions`}
+                        title={group.isBaseSetup ? 'Delete base setup' : 'Delete entire race event'}
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                           <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" />
@@ -353,16 +384,18 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
                       ))}
 
                       {/* Trailing [+] add-session button */}
-                      <button
-                        onClick={() => openAdd(group)}
-                        className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-dashed border-[#9CA3AF] text-[#6B7280] hover:text-[#00A8E8] hover:border-[#00A8E8] transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
-                        aria-label={`Add session to ${group.title}`}
-                        title="Add session"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-                        </svg>
-                      </button>
+                      {!group.isBaseSetup && (
+                        <button
+                          onClick={() => openAdd(group)}
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-dashed border-[#9CA3AF] text-[#6B7280] hover:text-[#00A8E8] hover:border-[#00A8E8] transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
+                          aria-label={`Add session to ${group.title}`}
+                          title="Add session"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                          </svg>
+                        </button>
+                      )}
                     </div>
                   </li>
                 );
@@ -399,14 +432,16 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
         </div>
       )}
 
-      {/* DELETE RACE EVENT CONFIRMATION MODAL */}
+      {/* DELETE SAVED SETUP / RACE EVENT CONFIRMATION MODAL */}
       {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-label="Delete Race Event">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-label={deleteTarget.isBaseSetup ? 'Delete Base Setup' : 'Delete Race Event'}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
-            <h4 className="text-lg font-bold text-[#1A1B23] mb-2">Delete this race event?</h4>
+            <h4 className="text-lg font-bold text-[#1A1B23] mb-2">{deleteTarget.isBaseSetup ? 'Delete this base setup?' : 'Delete this race event?'}</h4>
             <p className="text-sm text-[#6B7280] mb-1 font-medium text-[#1A1B23]">{deleteTarget.title || 'Untitled'}</p>
             <p className="text-sm text-[#6B7280]">
-              Delete this entire race event and all {deleteTarget.setups.length} session{deleteTarget.setups.length === 1 ? '' : 's'} inside it? This cannot be undone.
+              {deleteTarget.isBaseSetup
+                ? 'Delete this base setup? This cannot be undone.'
+                : `Delete this entire race event and all ${deleteTarget.setups.length} session${deleteTarget.setups.length === 1 ? '' : 's'} inside it? This cannot be undone.`}
             </p>
             {deleteError && <div className="text-xs text-red-600 mt-3" role="alert">{deleteError}</div>}
             <div className="flex justify-end gap-2 mt-5">
