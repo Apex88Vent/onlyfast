@@ -335,9 +335,26 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
                   const orderB = Number(b.session_order ?? sessionOrder[b.setup_type] ?? 99);
                   return orderA - orderB;
                 });
+                const firstSetup = orderedSetups[0];
+                const openFirstSetup = () => {
+                  if (firstSetup) onLoad(firstSetup);
+                };
 
                 return (
-                  <li key={group.key} className="bg-[#F9FAFB] rounded-xl border border-[#E5E7EB] p-4">
+                  <li
+                    key={group.key}
+                    className="bg-[#F9FAFB] rounded-xl border border-[#E5E7EB] p-4 cursor-pointer focus-within:ring-2 focus-within:ring-[#00A8E8]/30"
+                    role="button"
+                    tabIndex={0}
+                    onClick={openFirstSetup}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openFirstSetup();
+                      }
+                    }}
+                    aria-label={`Open ${group.title || 'saved setup'}`}
+                  >
                     {/* Parent race-day title + delete-entire-event trash icon */}
                     <div className="mb-3 flex items-start justify-between gap-2">
                       <div className="min-w-0">
@@ -356,7 +373,10 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
                         )}
                       </div>
                       <button
-                        onClick={() => openDelete(group)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openDelete(group);
+                        }}
                         className="flex-shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-lg text-[#9CA3AF] hover:text-red-600 hover:bg-red-50 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500"
                         aria-label={group.isBaseSetup ? `Delete base setup ${group.title}` : `Delete entire race event ${group.title} and all its sessions`}
                         title={group.isBaseSetup ? 'Delete base setup' : 'Delete entire race event'}
@@ -374,7 +394,10 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
                       {orderedSetups.map(s => (
                         <button
                           key={`chip-${s.id}`}
-                          onClick={() => onLoad(s)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onLoad(s);
+                          }}
                           className={`inline-flex items-center px-3.5 py-1.5 rounded-full border border-[#E5E7EB] text-xs font-semibold hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-[#00A8E8] ${getSetupTypeBadge(s.setup_type)}`}
                           aria-label={`Load ${sessionLabelOf(s)} for ${group.title}`}
                           title={`Load ${sessionLabelOf(s)}`}
@@ -386,7 +409,10 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
                       {/* Trailing [+] add-session button */}
                       {!group.isBaseSetup && (
                         <button
-                          onClick={() => openAdd(group)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openAdd(group);
+                          }}
                           className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-dashed border-[#9CA3AF] text-[#6B7280] hover:text-[#00A8E8] hover:border-[#00A8E8] transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
                           aria-label={`Add session to ${group.title}`}
                           title="Add session"
