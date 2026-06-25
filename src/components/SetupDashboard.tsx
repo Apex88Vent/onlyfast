@@ -143,7 +143,7 @@ const emptyAllSetups = (): Record<SetupType, SetupState> => ({
 
 const TAB_ORDER: SetupType[] = ['base', 'heat', 'main'];
 const AUTOSAVE_MS = 5 * 60 * 1000; // 5 minutes
-const IDLE_HOME_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour
+const IDLE_HOME_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
 const STATE_STORAGE_KEY = 'onlyfast_setup_state_v2';
 
 // Single unified meta for the whole setup file (one name, separate DB ids per tab)
@@ -151,6 +151,42 @@ interface UnifiedSavedMeta {
   name?: string;
   ids: Partial<Record<SetupType, string>>;
 }
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> => {
+  if (value === null || typeof value !== 'object') return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+};
+
+const cleanJsonValue = (value: unknown): unknown => {
+  if (value === undefined || typeof value === 'function' || typeof value === 'symbol') return null;
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (Array.isArray(value)) return value.map(cleanJsonValue);
+  if (value instanceof Date) return value.toISOString();
+  if (!isPlainObject(value)) return null;
+
+  return Object.entries(value).reduce<Record<string, unknown>>((acc, [key, entry]) => {
+    acc[key] = cleanJsonValue(entry);
+    return acc;
+  }, {});
+};
+
+const cleanPayload = (payload: Record<string, unknown>) =>
+  Object.entries(payload).reduce<Record<string, unknown>>((acc, [key, value]) => {
+    if (value === undefined) return acc;
+    acc[key] = key === 'custom_fields' || key === 'timing_data' ? cleanJsonValue(value) : value;
+    return acc;
+  }, {});
+
+const parseResultPosition = (value: unknown): number | null => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') return Number.isFinite(value) && value >= 0 ? value : null;
+  const text = String(value).trim();
+  if (!text || /^tbd$/i.test(text)) return null;
+  const parsed = Number.parseInt(text, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+};
 
 const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSignInClick }) => {
   const [activeTab, setActiveTab] = useState<SetupType>('base');
@@ -424,6 +460,11 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     };
 
     const markActivity = () => {
+      lastActivityRef.current = Date.now();
+      scheduleIdleTimer();
+    };
+
+    const handleResume = () => {
       const now = Date.now();
       if (now - lastActivityRef.current >= IDLE_HOME_TIMEOUT_MS) {
         sendHome();
@@ -434,20 +475,24 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        markActivity();
+        handleResume();
+      } else {
+        lastActivityRef.current = Date.now();
       }
     };
 
     const events = ['pointerdown', 'keydown', 'touchstart', 'scroll'] as const;
     events.forEach(eventName => window.addEventListener(eventName, markActivity, { passive: true }));
-    window.addEventListener('focus', markActivity);
+    window.addEventListener('focus', handleResume);
+    window.addEventListener('blur', markActivity);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     scheduleIdleTimer();
 
     return () => {
       clearIdleTimer();
       events.forEach(eventName => window.removeEventListener(eventName, markActivity));
-      window.removeEventListener('focus', markActivity);
+      window.removeEventListener('focus', handleResume);
+      window.removeEventListener('blur', markActivity);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
@@ -569,7 +614,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     const customFieldData: Record<string, string> = {};
     customFields.forEach(f => {
       const val = s[`custom_${f.id}`];
-      if (val) customFieldData[f.name] = val;
+      if (val !== undefined && val !== null && String(val).trim() !== '') customFieldData[f.name] = val;
     });
 
     return {
@@ -641,7 +686,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
   // Resilient DB write (handles missing columns gracefully)
   const dbInsert = async (payload: any) => {
-    let p = { ...payload };
+    let p = cleanPayload(payload);
     for (let i = 0; i < 6; i++) {
       const { data, error } = await supabase.from('race_setups').insert(p).select().single();
       if (!error) return data;
@@ -657,7 +702,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   };
 
   const dbUpdate = async (id: string, payload: any) => {
-    let p = { ...payload };
+    let p = cleanPayload(payload);
     delete p.user_id;
     for (let i = 0; i < 6; i++) {
       const { data, error } = await supabase.from('race_setups').update(p).eq('id', id).select().single();
@@ -837,9 +882,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       const newIds: Partial<Record<SetupType, string>> = {};
       let queuedAny = false;
 
-      const saveTabs = ALL_SLOTS.filter(tabKey =>
-        isDisplayableSession(tabKey) || tabHasData(setups[tabKey]) || !!savedMeta.ids[tabKey]
-      );
+      const saveTabs = ALL_SLOTS.filter(tabKey => tabHasData(setups[tabKey]) || !!savedMeta.ids[tabKey]);
 
       for (const tabKey of saveTabs) {
         const setup = setups[tabKey];
@@ -882,6 +925,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       });
 
       setRefreshTrigger(prev => prev + 1);
+      await syncMainEventResultToSchedule(timingDataByTab.main);
       setPendingCount(readPendingQueue().length);
       if (!silent) {
         if (queuedAny) {
@@ -1138,13 +1182,44 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   // Called by ScanTimingScreen after it successfully writes timing_data
   // back to race_setups. Refreshes the visible TimingDataDisplay card for the
   // tab whose setup row was just updated.
+  const syncMainEventResultToSchedule = useCallback(async (timingData?: TimingData | null) => {
+    if (!user || !timingData) return;
+    const finish = parseResultPosition(timingData.finishing_position);
+    if (finish === null) return;
+
+    const raceDate = setups.main?.raceDate;
+    const trackName = setups.main?.trackName?.trim();
+    if (!raceDate || !trackName) return;
+
+    const finishText = String(finish);
+    try {
+      const { data, error } = await supabase
+        .from('race_schedule')
+        .update({ finishing_position: finishText, updated_at: new Date().toISOString() })
+        .eq('user_id', user.id)
+        .eq('race_date', raceDate)
+        .ilike('track', trackName)
+        .select('id,race_date,track,finishing_position');
+
+      if (error || !data || data.length === 0) return;
+
+      const updatedById = new Map((data as { id: string; race_date: string; track: string; finishing_position: string | null }[]).map(row => [row.id, row]));
+      setScheduleRows(prev => prev.map(row => updatedById.has(row.id) ? { ...row, ...updatedById.get(row.id) } : row));
+    } catch {
+      // Schedule sync is best-effort; never block saving setup/timing data.
+    }
+  }, [user, setups.main?.raceDate, setups.main?.trackName]);
+
   const handleTimingDataSaved = useCallback((setupId: string, timingData: any) => {
     // Find which tab corresponds to this setup id
     const tab = (Object.keys(savedMeta.ids) as SetupType[])
       .find(t => savedMeta.ids[t] === setupId);
     if (!tab) return;
     setTimingDataByTab(prev => ({ ...prev, [tab]: timingData ?? null }));
-  }, [savedMeta.ids]);
+    if (tab === 'main') {
+      void syncMainEventResultToSchedule(timingData ?? null);
+    }
+  }, [savedMeta.ids, syncMainEventResultToSchedule]);
 
 
   const handleCopyLastSetup = () => {
@@ -1384,6 +1459,9 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
     setDeleteBusy(false);
     setDeleteOpen(false);
+    if (deletedId) {
+      setSavedSetupsList(prev => prev.filter(setup => setup.id !== deletedId));
+    }
     setRefreshTrigger(prev => prev + 1);
 
     if (remaining.length === 0) {
@@ -1564,18 +1642,21 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     .slice(0, 3)
     .map(r => ({ id: r.id, track: r.track, date: r.race_date }));
   const nextEvent = upcomingEvents[0] || null;
-  const finishedRaces = scheduleRows.filter(r => {
-    const pos = Number.parseInt(String(r.finishing_position || ''), 10);
-    return Number.isFinite(pos) && pos > 0;
-  });
-  const wins = finishedRaces.filter(r => Number.parseInt(String(r.finishing_position), 10) === 1).length;
+  const finishedRaces = scheduleRows
+    .map(r => ({ ...r, resultPosition: parseResultPosition(r.finishing_position) }))
+    .filter(r => r.resultPosition !== null);
+  const wins = finishedRaces.filter(r => r.resultPosition === 1).length;
   const topFives = finishedRaces.filter(r => {
-    const pos = Number.parseInt(String(r.finishing_position), 10);
-    return pos >= 1 && pos <= 5;
+    const pos = r.resultPosition;
+    return pos !== null && pos >= 1 && pos <= 5;
   }).length;
-  const performanceStats = scheduleRows.length > 0
+  const averageFinish = finishedRaces.length > 0
+    ? Math.round((finishedRaces.reduce((sum, r) => sum + (r.resultPosition ?? 0), 0) / finishedRaces.length) * 10) / 10
+    : null;
+  const performanceStats = finishedRaces.length > 0
     ? [
-        { label: 'Events', value: scheduleRows.length },
+        { label: 'Events', value: finishedRaces.length },
+        { label: 'Avg Finish', value: averageFinish ?? 0 },
         { label: 'Top 5s', value: topFives },
         { label: 'Wins', value: wins },
       ]

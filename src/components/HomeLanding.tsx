@@ -213,16 +213,20 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
               </div>
             )}
             {nextEvent && (
-              <div className="flex items-center justify-center gap-2 sm:gap-3 px-1 sm:px-2">
+              <button
+                type="button"
+                onClick={() => onAction('schedule')}
+                className="flex items-center justify-center gap-2 sm:gap-3 px-1 sm:px-2 text-left rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
+              >
                 <CalendarDays className="h-6 w-6 sm:h-8 sm:w-8 text-[#00A8E8] flex-shrink-0" aria-hidden="true" />
                 <div className="text-left min-w-0">
-                  <div className="text-[#00A8E8] text-[12px] sm:text-sm font-semibold tracking-[0.08em] uppercase leading-tight">Next Event:</div>
+                  <div className="text-[#00A8E8] text-[12px] sm:text-sm font-semibold tracking-[0.08em] uppercase leading-tight">Next Race</div>
                   <div className="text-[#1A1B23] text-lg sm:text-xl font-bold leading-tight truncate">
                     {nextEventCountdown || formatDate(nextEvent.date)}
                   </div>
                   <div className="text-[#4B5563] text-xs sm:text-sm font-medium truncate">{nextEvent.track}</div>
                 </div>
-              </div>
+              </button>
             )}
           </div>
         </section>

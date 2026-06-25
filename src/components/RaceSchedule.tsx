@@ -39,7 +39,7 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick }) => {
         race_date: r.race_date,
         track: r.track || '',
         organization: r.organization || '',
-        finishing_position: r.finishing_position || 'TBD',
+        finishing_position: r.finishing_position ?? 'TBD',
       }))));
     } catch (e: any) {
       setError('Could not load your schedule. ' + (e.message || ''));
@@ -75,7 +75,7 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick }) => {
             race_date: entry.race_date,
             track: entry.track,
             organization: entry.organization || null,
-            finishing_position: entry.finishing_position || null,
+            finishing_position: entry.finishing_position === '' ? null : entry.finishing_position,
             updated_at: new Date().toISOString(),
           })
           .eq('id', entry.id)
@@ -89,7 +89,7 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick }) => {
             race_date: entry.race_date,
             track: entry.track,
             organization: entry.organization || null,
-            finishing_position: entry.finishing_position || null,
+            finishing_position: entry.finishing_position === '' ? null : entry.finishing_position,
           });
         if (error) throw error;
       }
@@ -224,7 +224,7 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick }) => {
                   <p className="text-sm text-[#6B7280] truncate">{r.organization || '—'}</p>
                   <p className="text-xs mt-1">
                     <span className="text-[#9CA3AF]">Finish: </span>
-                    <span className="font-semibold text-[#00A8E8]">{r.finishing_position || 'TBD'}</span>
+                    <span className="font-semibold text-[#00A8E8]">{r.finishing_position === '' ? 'TBD' : (r.finishing_position ?? 'TBD')}</span>
                   </p>
                 </div>
 

@@ -18,6 +18,8 @@ export interface TimingData {
   scanned_at?: string;
   fastest_lap_time?: string | number | null;
   fastest_lap_on_lap?: number | null;
+  finishing_position?: number | string | null;
+  starting_position?: number | string | null;
   slowest_lap_time?: string | number | null;
   average_lap_time?: string | number | null;
   positions_gained_lost?: number | null;

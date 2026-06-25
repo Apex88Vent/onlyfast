@@ -519,6 +519,8 @@ const ScanTimingScreen: React.FC<Props> = ({
         // The five "kept" fields the user asked for:
         fastest_lap_time: scan.best_lap_time || null,
         fastest_lap_on_lap: scan.fastest_lap_on_lap ?? null,
+        finishing_position: scan.finishing_position ?? null,
+        starting_position: scan.starting_position ?? null,
         slowest_lap_time: scan.slowest_lap_time || null,
         average_lap_time: scan.average_lap_time || null,
         positions_gained_lost: scan.positions_gained_lost ?? null,
