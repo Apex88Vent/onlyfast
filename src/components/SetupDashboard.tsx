@@ -1347,10 +1347,22 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
   const submitDeleteSession = async () => {
     setDeleteBusy(true);
-    const id = savedMeta.ids[activeTab];
-    if (id) {
+    const deletedTab = activeTab;
+    const deletedId = savedMeta.ids[deletedTab];
+    if (deletedId) {
+      if (!user) {
+        setDeleteBusy(false);
+        setDeleteOpen(false);
+        setSaveMessage('Error deleting session: Please sign in and try again');
+        setTimeout(() => setSaveMessage(''), 5000);
+        return;
+      }
       try {
-        const { error } = await supabase.from('race_setups').delete().eq('id', id);
+        const { error } = await supabase
+          .from('race_setups')
+          .delete()
+          .eq('id', deletedId)
+          .eq('user_id', user.id);
         if (error) throw error;
       } catch (err: any) {
         setDeleteBusy(false);
@@ -1361,9 +1373,9 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       }
     }
 
-    const deletedOrder = orderOf(activeTab);
+    const deletedOrder = orderOf(deletedTab);
     const remaining = ALL_SLOTS.filter(
-      t => t !== activeTab && isDisplayableSession(t)
+      t => t !== deletedTab && isDisplayableSession(t)
     ).sort((a, b) => orderOf(a) - orderOf(b));
     const replacement =
       remaining.find(t => orderOf(t) > deletedOrder) ||
@@ -1375,38 +1387,47 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     setRefreshTrigger(prev => prev + 1);
 
     if (remaining.length === 0) {
-      // Was the last session → the whole race-day save is gone. Reset workspace.
-      doClearAllTabs();
+      // Last real session: reset saved-event state without opening blank standby tabs.
+      const cleared = emptyAllSetups();
+      (Object.keys(cleared) as SetupType[]).forEach(t => {
+        cleared[t] = { ...cleared[t], raceClass: selectedCar };
+      });
+      setSetups(cleared);
+      setSavedMeta({ name: undefined, ids: {} });
+      setTimingDataByTab({});
+      setSessionLabels({});
+      setSessionOrders({});
+      setActiveTab('base');
+      setActiveView('saved');
       setSaveMessage('Race day deleted');
       setTimeout(() => setSaveMessage(''), 4000);
       return;
     }
 
-    // Clear just this tab and move to another available session.
-    const today = new Date().toISOString().split('T')[0];
+    // Clear just this slot and move to another available real session.
     setSetups(prev => ({
       ...prev,
-      [activeTab]: { ...emptySetup(), raceClass: selectedCar, raceDate: today, setup_name: prev[activeTab].setup_name },
+      [deletedTab]: { ...emptySetup(), raceClass: selectedCar },
     }));
     setSavedMeta(prev => {
       const ids = { ...prev.ids };
-      delete ids[activeTab];
+      delete ids[deletedTab];
       return { name: prev.name, ids };
     });
     setSessionLabels(prev => {
       const next = { ...prev };
-      delete next[activeTab];
+      delete next[deletedTab];
       return next;
     });
     setSessionOrders(prev => {
       const next = { ...prev };
-      delete next[activeTab];
+      delete next[deletedTab];
       return next;
     });
 
     setTimingDataByTab(prev => {
       const next = { ...prev };
-      delete next[activeTab];
+      delete next[deletedTab];
       return next;
     });
     if (replacement) setActiveTab(replacement);
@@ -1555,8 +1576,8 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   const performanceStats = scheduleRows.length > 0
     ? [
         { label: 'Events', value: scheduleRows.length },
-        ...(topFives > 0 ? [{ label: 'Top 5s', value: topFives }] : []),
-        ...(wins > 0 ? [{ label: 'Wins', value: wins }] : []),
+        { label: 'Top 5s', value: topFives },
+        { label: 'Wins', value: wins },
       ]
     : [];
 
