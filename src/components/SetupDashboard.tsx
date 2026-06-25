@@ -308,8 +308,15 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   const currentSetup = setups[activeTab];
   const carNumber = readCarNumber(user, carNumberOverride);
 
-  const prefersReducedMotion = typeof window !== 'undefined' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const prefersReducedMotion = (() => {
+    try {
+      return typeof window !== 'undefined' &&
+        typeof window.matchMedia === 'function' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    } catch {
+      return false;
+    }
+  })();
 
   // Load persisted state on mount
   useEffect(() => {

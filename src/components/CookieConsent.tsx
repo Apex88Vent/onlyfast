@@ -5,9 +5,11 @@ const CookieConsent: React.FC = () => {
   const bannerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const consent = localStorage.getItem('onlyfast_cookie_consent');
-    if (!consent) {
-      setVisible(true);
+    try {
+      const consent = localStorage.getItem('onlyfast_cookie_consent');
+      if (!consent) setVisible(true);
+    } catch {
+      setVisible(false);
     }
   }, []);
 
@@ -19,12 +21,12 @@ const CookieConsent: React.FC = () => {
   }, [visible]);
 
   const handleAccept = () => {
-    localStorage.setItem('onlyfast_cookie_consent', 'accepted');
+    try { localStorage.setItem('onlyfast_cookie_consent', 'accepted'); } catch {}
     setVisible(false);
   };
 
   const handleDecline = () => {
-    localStorage.setItem('onlyfast_cookie_consent', 'declined');
+    try { localStorage.setItem('onlyfast_cookie_consent', 'declined'); } catch {}
     setVisible(false);
   };
 

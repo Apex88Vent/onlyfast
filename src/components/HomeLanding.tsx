@@ -213,7 +213,11 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
       return;
     }
 
-    setWeekendStarted(window.localStorage.getItem(weekendStorageKey) === 'true');
+    try {
+      setWeekendStarted(window.localStorage.getItem(weekendStorageKey) === 'true');
+    } catch {
+      setWeekendStarted(false);
+    }
   }, [weekendStorageKey]);
 
   React.useEffect(() => {
@@ -222,7 +226,7 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
 
   const handleWeekendAction = () => {
     if (weekendStorageKey && typeof window !== 'undefined') {
-      window.localStorage.setItem(weekendStorageKey, 'true');
+      try { window.localStorage.setItem(weekendStorageKey, 'true'); } catch {}
     }
     setWeekendStarted(true);
     onAction('continue-weekend');

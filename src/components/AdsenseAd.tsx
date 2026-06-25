@@ -1,12 +1,39 @@
 import React, { useEffect, useRef } from 'react';
 import { ADSENSE_CLIENT } from '@/lib/ads';
 
+const ADSENSE_SCRIPT_SRC = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`;
+
+const loadAdSenseScript = (): Promise<void> => {
+  if (typeof document === 'undefined') return Promise.resolve();
+
+  const existing = document.querySelector<HTMLScriptElement>(
+    'script[data-onlyfast-adsense="true"], script[src^="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"]'
+  );
+  if (existing) {
+    return Promise.resolve();
+  }
+
+  return new Promise(resolve => {
+    const script = document.createElement('script');
+    script.src = ADSENSE_SCRIPT_SRC;
+    script.async = true;
+    script.crossOrigin = 'anonymous';
+    script.dataset.onlyfastAdsense = 'true';
+    script.addEventListener('load', () => {
+      script.dataset.loaded = 'true';
+      resolve();
+    }, { once: true });
+    script.addEventListener('error', () => resolve(), { once: true });
+    document.head.appendChild(script);
+  });
+};
+
 // ---------------------------------------------------------------------------
 // AdsenseAd — reusable responsive Google AdSense display unit.
 //
 // Safe by design:
-//   - Does NOT inject the AdSense script itself (the global script lives in
-//     index.html). It only pushes a request once mounted.
+//   - Loads AdSense only when an ad slot mounts, keeping app startup free of
+//     third-party ad script execution.
 //   - Wrapped in try/catch so a blocked / unavailable / not-yet-loaded AdSense
 //     can never crash the app.
 //   - Reserves a small min-height so there is no jarring layout shift.
@@ -37,14 +64,21 @@ const AdsenseAd: React.FC<AdsenseAdProps> = ({
   useEffect(() => {
     if (pushedRef.current) return;
     pushedRef.current = true;
-    try {
+    let cancelled = false;
+    loadAdSenseScript().then(() => {
+      if (cancelled) return;
+      try {
       // Safely request an ad fill. If adsbygoogle isn't present (blocked /
       // not loaded), initialize it as an array so the push is a no-op.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ((window as any).adsbygoogle = (window as any).adsbygoogle || []).push({});
-    } catch {
+      } catch {
       /* AdSense blocked or unavailable — fail silently, never crash the app. */
-    }
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (

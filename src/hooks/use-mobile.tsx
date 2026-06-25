@@ -6,15 +6,30 @@ export function useIsMobile() {
   const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined);
 
   React.useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
-
     const onChange = () => {
       setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
     };
 
-    mql.addEventListener("change", onChange);
+    if (typeof window.matchMedia !== "function") {
+      onChange();
+      window.addEventListener("resize", onChange);
+      return () => window.removeEventListener("resize", onChange);
+    }
+
+    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
+    if (typeof mql.addEventListener === "function") {
+      mql.addEventListener("change", onChange);
+    } else {
+      mql.addListener(onChange);
+    }
     setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
-    return () => mql.removeEventListener("change", onChange);
+    return () => {
+      if (typeof mql.removeEventListener === "function") {
+        mql.removeEventListener("change", onChange);
+      } else {
+        mql.removeListener(onChange);
+      }
+    };
   }, []);
 
   return !!isMobile;

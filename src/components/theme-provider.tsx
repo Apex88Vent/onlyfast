@@ -13,6 +13,32 @@ type ThemeContextType = {
 
 const ThemeContext = createContext<ThemeContextType | null>(null)
 
+const storageGet = (key: string): string | null => {
+  try {
+    return typeof window !== "undefined" ? window.localStorage.getItem(key) : null
+  } catch {
+    return null
+  }
+}
+
+const storageSet = (key: string, value: string): void => {
+  try {
+    if (typeof window !== "undefined") window.localStorage.setItem(key, value)
+  } catch {
+    /* Storage can be unavailable in restricted WebViews. */
+  }
+}
+
+const matchesMedia = (query: string): boolean => {
+  try {
+    return typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia(query).matches
+  } catch {
+    return false
+  }
+}
+
 export function ThemeProvider({
   children,
   defaultTheme = "system",
@@ -20,12 +46,8 @@ export function ThemeProvider({
   ...props
 }: ThemeProviderProps) {
   const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof window !== "undefined") {
-      const savedTheme = localStorage.getItem("theme")
-      return (savedTheme && (savedTheme === "dark" || savedTheme === "light" || savedTheme === "system")
-        ? savedTheme
-        : defaultTheme) as Theme
-    }
+    const savedTheme = storageGet("theme")
+    if (savedTheme && (savedTheme === "dark" || savedTheme === "light" || savedTheme === "system")) return savedTheme
     return defaultTheme as Theme
   })
 
@@ -34,10 +56,7 @@ export function ThemeProvider({
     root.classList.remove("light", "dark")
 
     if (theme === "system") {
-      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
-        .matches
-        ? "dark"
-        : "light"
+      const systemTheme = matchesMedia("(prefers-color-scheme: dark)") ? "dark" : "light"
       root.classList.add(systemTheme)
       return
     }
@@ -48,7 +67,7 @@ export function ThemeProvider({
   const value: ThemeContextType = {
     theme,
     setTheme: (theme: Theme) => {
-      localStorage.setItem("theme", theme)
+      storageSet("theme", theme)
       setTheme(theme)
     },
   }

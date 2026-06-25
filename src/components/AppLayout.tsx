@@ -94,17 +94,19 @@ const AppLayout: React.FC = () => {
 
   // Check for persisted car selection
   useEffect(() => {
-    const saved = localStorage.getItem('onlyfast_car');
-    if (saved) {
-      setSelectedCar(saved);
-      setIsOnboarded(true);
-    }
+    try {
+      const saved = localStorage.getItem('onlyfast_car');
+      if (saved) {
+        setSelectedCar(saved);
+        setIsOnboarded(true);
+      }
+    } catch {/* Storage can be unavailable in restricted WebViews. */}
   }, []);
 
   const applySelectedCar = useCallback((car: string) => {
     setSelectedCar(car);
     setIsOnboarded(true);
-    localStorage.setItem('onlyfast_car', car);
+    try { localStorage.setItem('onlyfast_car', car); } catch {/* ignore */}
   }, []);
 
   useEffect(() => {
@@ -185,9 +187,14 @@ const AppLayout: React.FC = () => {
         isTestAccount(session?.user?.email)
       ) {
         const marker = `test_reset_done_${session?.user?.id ?? 'x'}`;
-        if (!sessionStorage.getItem(marker)) {
-          sessionStorage.setItem(marker, '1');
-          // Fire-and-forget; failures are logged inside the helper.
+        let shouldReset = true;
+        try {
+          shouldReset = !sessionStorage.getItem(marker);
+          if (shouldReset) sessionStorage.setItem(marker, '1');
+        } catch {
+          shouldReset = true;
+        }
+        if (shouldReset) {
           resetTestAccountData();
         }
       }
@@ -234,7 +241,7 @@ const AppLayout: React.FC = () => {
   const handleBackToCarSelect = () => {
     setIsOnboarded(false);
     setSelectedCar('');
-    localStorage.removeItem('onlyfast_car');
+    try { localStorage.removeItem('onlyfast_car'); } catch {/* ignore */}
   };
 
   const handleOpenHowOnlyFastWorks = () => {
