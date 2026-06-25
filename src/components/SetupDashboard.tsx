@@ -144,9 +144,48 @@ const emptyAllSetups = (): Record<SetupType, SetupState> => ({
 
 const TAB_ORDER: SetupType[] = ['base', 'heat', 'main'];
 const AUTOSAVE_MS = 5 * 60 * 1000; // 5 minutes
-const IDLE_HOME_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
+const IDLE_HOME_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 const STATE_STORAGE_KEY = 'onlyfast_setup_state_v2';
+const LAST_ROUTE_STORAGE_KEY = 'onlyfast_last_route_v1';
 const LAST_OPENED_SETUP_PREFIX = 'onlyfast_last_opened_setup_';
+
+type DashboardView = 'home' | 'setup' | 'saved' | 'compare' | 'create-base' | 'todo' | 'parts' | 'schedule';
+
+interface SavedDashboardRoute {
+  view: DashboardView;
+  activeTab?: SetupType;
+  setupId?: string;
+  timestamp: number;
+}
+
+const VALID_DASHBOARD_VIEWS: DashboardView[] = ['home', 'setup', 'saved', 'compare', 'create-base', 'todo', 'parts', 'schedule'];
+
+const isDashboardView = (value: unknown): value is DashboardView =>
+  typeof value === 'string' && VALID_DASHBOARD_VIEWS.includes(value as DashboardView);
+
+const readSavedDashboardRoute = (): SavedDashboardRoute | null => {
+  try {
+    const raw = localStorage.getItem(LAST_ROUTE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !isDashboardView(parsed.view) || typeof parsed.timestamp !== 'number') return null;
+    const activeTab = ALL_SLOTS.includes(parsed.activeTab as SetupType) ? (parsed.activeTab as SetupType) : undefined;
+    return {
+      view: parsed.view,
+      activeTab,
+      setupId: typeof parsed.setupId === 'string' ? parsed.setupId : undefined,
+      timestamp: parsed.timestamp,
+    };
+  } catch {
+    return null;
+  }
+};
+
+const writeSavedDashboardRoute = (route: SavedDashboardRoute): void => {
+  try {
+    localStorage.setItem(LAST_ROUTE_STORAGE_KEY, JSON.stringify(route));
+  } catch {}
+};
 
 // Single unified meta for the whole setup file (one name, separate DB ids per tab)
 interface UnifiedSavedMeta {
@@ -243,7 +282,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   const [carNumberOverride, setCarNumberOverride] = useState<string | undefined>(undefined);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [baseTemplateRefresh, setBaseTemplateRefresh] = useState(0);
-  const [activeView, setActiveView] = useState<'home' | 'setup' | 'saved' | 'compare' | 'create-base' | 'todo' | 'parts' | 'schedule'>('home');
+  const [activeView, setActiveView] = useState<DashboardView>('home');
 
   const [savedSetupsList, setSavedSetupsList] = useState<any[]>([]);
   const [scheduleRows, setScheduleRows] = useState<any[]>([]);
@@ -318,6 +357,27 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     }
   })();
 
+  const buildCurrentRoute = useCallback((): SavedDashboardRoute => {
+    if (activeView === 'setup') {
+      if (deletedSessionSlots[activeTab]) {
+        return { view: 'home', timestamp: Date.now() };
+      }
+      return {
+        view: 'setup',
+        activeTab,
+        setupId: savedMeta.ids[activeTab],
+        timestamp: Date.now(),
+      };
+    }
+
+    return { view: activeView, timestamp: Date.now() };
+  }, [activeView, activeTab, deletedSessionSlots, savedMeta.ids]);
+
+  const saveCurrentRoute = useCallback(() => {
+    if (!stateLoaded || !resumeAttempted) return;
+    writeSavedDashboardRoute(buildCurrentRoute());
+  }, [buildCurrentRoute, resumeAttempted, stateLoaded]);
+
   // Load persisted state on mount
   useEffect(() => {
     try {
@@ -353,14 +413,6 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
               },
             });
           }
-        }
-
-        const restoredHasData =
-          Boolean(parsed.savedMeta?.name) ||
-          Boolean(parsed.savedMeta?.base?.name || parsed.savedMeta?.heat?.name || parsed.savedMeta?.main?.name) ||
-          Boolean(parsed.setups && ALL_SLOTS.some(t => tabHasData(parsed.setups[t])));
-        if (restoredHasData) {
-          setActiveView('setup');
         }
 
       }
@@ -553,25 +605,6 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     return () => { cancelled = true; };
   }, [user, refreshTrigger, savedMeta.name]);
 
-  // After login, keep a restored in-progress setup open. Otherwise, start at Home
-  // instead of automatically opening the latest saved setup.
-  useEffect(() => {
-    if (!stateLoaded || !user || resumeAttempted) return;
-
-    // If they already have in-progress work (either a named file or data in any tab), skip.
-    const hasInProgress = !!savedMeta.name ||
-      ALL_SLOTS.some(t => tabHasData(setups[t]));
-    if (hasInProgress) {
-      setResumeAttempted(true);
-      return;
-    }
-
-    setResumeAttempted(true);
-    setActiveView('home');
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, stateLoaded]);
-
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
@@ -649,6 +682,29 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   useEffect(() => {
     window.dispatchEvent(new CustomEvent('onlyfast-view-changed', { detail: { view: activeView } }));
   }, [activeView]);
+
+  useEffect(() => {
+    saveCurrentRoute();
+  }, [saveCurrentRoute]);
+
+  useEffect(() => {
+    if (!stateLoaded || !resumeAttempted) return;
+
+    const saveOnExit = () => saveCurrentRoute();
+    const saveOnVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') saveCurrentRoute();
+    };
+
+    document.addEventListener('visibilitychange', saveOnVisibilityChange);
+    window.addEventListener('pagehide', saveOnExit);
+    window.addEventListener('beforeunload', saveOnExit);
+
+    return () => {
+      document.removeEventListener('visibilitychange', saveOnVisibilityChange);
+      window.removeEventListener('pagehide', saveOnExit);
+      window.removeEventListener('beforeunload', saveOnExit);
+    };
+  }, [resumeAttempted, saveCurrentRoute, stateLoaded]);
 
   // Carry-forward: when switching to heat/main, if that tab is essentially empty
   // (no chassis data), pre-fill it from the previous session (base→heat, heat→main).
@@ -1817,6 +1873,87 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     )
     .sort((a, b) => orderOf(a) - orderOf(b));
   const orderedSessionKey = orderedSessions.join('|');
+
+  useEffect(() => {
+    if (!stateLoaded || resumeAttempted) return;
+    let cancelled = false;
+
+    const finish = (view: DashboardView, tab?: SetupType) => {
+      if (cancelled) return;
+      if (tab) setActiveTab(tab);
+      setActiveView(view);
+      setResumeAttempted(true);
+    };
+
+    const restoreSavedRoute = async () => {
+      const savedRoute = readSavedDashboardRoute();
+      if (!savedRoute || Date.now() - savedRoute.timestamp >= IDLE_HOME_TIMEOUT_MS) {
+        finish('home');
+        return;
+      }
+
+      if (savedRoute.view !== 'setup') {
+        finish(savedRoute.view);
+        return;
+      }
+
+      const targetTab = savedRoute.activeTab && ALL_SLOTS.includes(savedRoute.activeTab)
+        ? savedRoute.activeTab
+        : activeTab;
+
+      if (deletedSessionSlots[targetTab]) {
+        finish('home');
+        return;
+      }
+
+      if (savedRoute.setupId) {
+        if (!user) {
+          finish('home');
+          return;
+        }
+
+        try {
+          const { data } = await supabase
+            .from('race_setups')
+            .select('id,setup_type')
+            .eq('user_id', user.id)
+            .eq('id', savedRoute.setupId)
+            .maybeSingle();
+
+          if (!data) {
+            finish('home');
+            return;
+          }
+
+          const dbTab = ALL_SLOTS.includes(data.setup_type as SetupType)
+            ? (data.setup_type as SetupType)
+            : targetTab;
+          finish('setup', dbTab);
+          return;
+        } catch {
+          const localFallbackIsValid =
+            savedMeta.ids[targetTab] === savedRoute.setupId ||
+            orderedSessions.includes(targetTab) ||
+            tabHasData(setups[targetTab]);
+          finish(localFallbackIsValid ? 'setup' : 'home', localFallbackIsValid ? targetTab : undefined);
+          return;
+        }
+      }
+
+      const localSetupRouteIsValid =
+        !savedMeta.name ||
+        orderedSessions.includes(targetTab) ||
+        tabHasData(setups[targetTab]);
+
+      finish(localSetupRouteIsValid ? 'setup' : 'home', localSetupRouteIsValid ? targetTab : undefined);
+    };
+
+    restoreSavedRoute();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, orderedSessionKey, resumeAttempted, savedMeta.name, setups, stateLoaded, user, deletedSessionSlots]);
 
   useEffect(() => {
     if (activeView !== 'setup') return;
