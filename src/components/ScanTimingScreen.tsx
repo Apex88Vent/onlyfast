@@ -53,6 +53,9 @@ const SESSION_TYPES = [
 const FRONTEND_TIMEOUT_MS = 45_000;
 const MAX_IMAGE_WIDTH = 1200;
 const JPEG_QUALITY = 0.7;
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+const IMAGE_ACCEPT = 'image/*,.png,.jpg,.jpeg,.webp';
+const SUPPORTED_IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp'];
 
 interface Props {
   user: User | null;
@@ -115,6 +118,12 @@ async function compressImage(
   return { dataUrl, base64, mimeType, width: w, height: h, bytes };
 }
 
+const fileHasSupportedImageType = (file: File): boolean => {
+  if (file.type && file.type.startsWith('image/')) return true;
+  const name = file.name.toLowerCase();
+  return SUPPORTED_IMAGE_EXTENSIONS.some(ext => name.endsWith(ext));
+};
+
 const ScanTimingScreen: React.FC<Props> = ({
   user,
   currentSetupName,
@@ -135,7 +144,8 @@ const ScanTimingScreen: React.FC<Props> = ({
   const [attachToCurrent, setAttachToCurrent] = useState<boolean>(true);
   const [savedMessage, setSavedMessage] = useState<string>('');
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const prefix = useId();
   const isSavingStep = step === 'saving';
 
@@ -149,7 +159,8 @@ const ScanTimingScreen: React.FC<Props> = ({
     setRawResponse(null);
     setShowDebug(false);
     setSavedMessage('');
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (uploadInputRef.current) uploadInputRef.current.value = '';
+    if (cameraInputRef.current) cameraInputRef.current.value = '';
   }, []);
 
   // Wraps supabase.functions.invoke in a hard frontend timeout (Promise.race).
@@ -378,22 +389,37 @@ const ScanTimingScreen: React.FC<Props> = ({
     setRawResponse(null);
     setSavedMessage('');
 
-    if (!file.type.startsWith('image/')) {
-      setError('Please choose an image file (PNG, JPG, etc.).');
+    // eslint-disable-next-line no-console
+    console.log('file selected');
+    // eslint-disable-next-line no-console
+    console.log('selected file name/type/size', {
+      name: file.name || '(unnamed)',
+      type: file.type || '(missing type)',
+      size: file.size,
+    });
+
+    if (!fileHasSupportedImageType(file)) {
+      setError('Unsupported file type. Please choose a PNG, JPG, JPEG, WEBP, or phone screenshot image.');
+      setErrorDetail(`Selected file: ${file.name || '(unnamed)'} · ${file.type || 'unknown type'}`);
       setErrorStage('client-validation');
       return;
     }
-    if (file.size > 25 * 1024 * 1024) {
+    if (file.size > MAX_UPLOAD_BYTES) {
       setError('Image is too large. Please keep it under 25 MB.');
+      setErrorDetail(`Selected file size: ${(file.size / (1024 * 1024)).toFixed(1)} MB`);
       setErrorStage('client-validation');
       return;
     }
     if (!(await canUseTimingUpload())) return;
 
     try {
+      // eslint-disable-next-line no-console
+      console.log('upload started');
       // Compress: max 1200px wide, JPEG q=0.7
       const compressed = await compressImage(file, MAX_IMAGE_WIDTH, JPEG_QUALITY);
       setPreviewUrl(compressed.dataUrl);
+      // eslint-disable-next-line no-console
+      console.log('image preview loaded');
       setStep('scanning');
 
       // eslint-disable-next-line no-console
@@ -406,12 +432,18 @@ const ScanTimingScreen: React.FC<Props> = ({
         original_file_size: file.size,
         file_name: file.name,
       });
+      // eslint-disable-next-line no-console
+      console.log('upload complete');
 
+      // eslint-disable-next-line no-console
+      console.log('scan started');
       const result = await invokeWithTimeout({
         imageBase64: compressed.base64,
         mimeType: compressed.mimeType,
       });
       handleInvokeResult(result);
+      // eslint-disable-next-line no-console
+      console.log('scan complete');
     } catch (err: any) {
       // eslint-disable-next-line no-console
       console.error('[ScanTimingScreen] Scan failed:', err);
@@ -419,7 +451,12 @@ const ScanTimingScreen: React.FC<Props> = ({
         setErrorStage('frontend-timeout');
         setError('Scan timed out. Try a smaller or clearer screenshot.');
         setErrorDetail(`The Edge Function did not respond within ${FRONTEND_TIMEOUT_MS / 1000} seconds.`);
+      } else if (/read|decode|canvas|data url|load/i.test(err?.message || '')) {
+        setErrorStage('image-read');
+        setError('Could not load that image. Please try a PNG, JPG, WEBP, or a clearer screenshot from your photo library.');
+        setErrorDetail(err?.message || null);
       } else {
+        setErrorStage(prev => prev || 'scan-failed');
         setError(err?.message || 'Scan failed. Please try again.');
       }
       setStep('idle');
@@ -455,16 +492,60 @@ const ScanTimingScreen: React.FC<Props> = ({
   };
 
 
+  const openUploadPicker = () => {
+    // eslint-disable-next-line no-console
+    console.log('upload button clicked');
+    setError(null);
+    setErrorDetail(null);
+    setErrorStage(null);
+    if (uploadInputRef.current) {
+      uploadInputRef.current.value = '';
+      uploadInputRef.current.click();
+      // eslint-disable-next-line no-console
+      console.log('file picker opened');
+    } else {
+      setError('Upload is not ready. Please try again.');
+      setErrorStage('file-picker');
+    }
+  };
+
+  const openCameraPicker = () => {
+    // eslint-disable-next-line no-console
+    console.log('upload button clicked');
+    setError(null);
+    setErrorDetail(null);
+    setErrorStage(null);
+    if (cameraInputRef.current) {
+      cameraInputRef.current.value = '';
+      cameraInputRef.current.click();
+      // eslint-disable-next-line no-console
+      console.log('file picker opened');
+    } else {
+      setError('Camera upload is not ready. Please try again.');
+      setErrorStage('file-picker');
+    }
+  };
+
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    if (f) handleFile(f);
+    if (f) {
+      handleFile(f);
+      return;
+    }
+    setError('No file selected.');
+    setErrorStage('no-file-selected');
   };
 
   const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     const f = e.dataTransfer.files?.[0];
-    if (f) handleFile(f);
+    if (f) {
+      handleFile(f);
+      return;
+    }
+    setError('No file selected.');
+    setErrorStage('no-file-selected');
   };
 
   const updateScan = (patch: Partial<ScanResult>) => {
@@ -542,6 +623,8 @@ const ScanTimingScreen: React.FC<Props> = ({
         setupType: currentSetupType,
         timingData,
       });
+      // eslint-disable-next-line no-console
+      console.log('upload started');
 
       const { data: updated, error: updErr } = await supabase
         .from('race_setups')
@@ -552,6 +635,8 @@ const ScanTimingScreen: React.FC<Props> = ({
         .single();
 
       if (updErr) throw updErr;
+      // eslint-disable-next-line no-console
+      console.log('upload complete');
 
       setStep('saved');
       setSavedMessage(
@@ -569,6 +654,7 @@ const ScanTimingScreen: React.FC<Props> = ({
       // eslint-disable-next-line no-console
       console.error('[ScanTimingScreen] Save failed:', err);
       setError(err?.message || 'Could not save timing data to setup.');
+      setErrorDetail(err?.message || null);
       setErrorStage('save-failed');
       setStep('review');
     }
@@ -866,10 +952,16 @@ const ScanTimingScreen: React.FC<Props> = ({
             <p className="text-sm font-semibold text-[#1A1B23] mb-1">Drop a screenshot here, or</p>
             <div className="flex items-center justify-center gap-2 flex-wrap">
               <button
-                onClick={() => fileInputRef.current?.click()}
+                onClick={openUploadPicker}
                 className="bg-[#00A8E8] hover:bg-[#0090c7] text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
               >
-                Choose image
+                Upload Screenshot
+              </button>
+              <button
+                onClick={openCameraPicker}
+                className="bg-white hover:bg-[#F5F5F7] text-[#6B7280] border border-[#E5E7EB] px-4 py-2 rounded-lg text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
+              >
+                Take Photo
               </button>
               {SHOW_TEST_MODE_BUTTON && (
                 <button
@@ -883,10 +975,18 @@ const ScanTimingScreen: React.FC<Props> = ({
 
             </div>
             <input
-              ref={fileInputRef}
+              ref={uploadInputRef}
               type="file"
-              accept="image/*"
-              className="hidden"
+              accept={IMAGE_ACCEPT}
+              className="sr-only"
+              onChange={onFileChange}
+            />
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept={IMAGE_ACCEPT}
+              capture="environment"
+              className="sr-only"
               onChange={onFileChange}
             />
             <p className="text-[11px] text-[#9CA3AF] mt-3">

@@ -2135,8 +2135,15 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     }
   };
 
-  // Base setup for diff highlighting on Heat/Main (Hot Laps is the reference)
-  const baseSetupForDiff = setups.base;
+  // Diff highlighting compares against the immediately previous real session.
+  const activeSessionIndex = orderedSessions.indexOf(activeTab);
+  const previousSessionForDiff = activeSessionIndex > 0 ? orderedSessions[activeSessionIndex - 1] : undefined;
+  const previousSetupForDiff = previousSessionForDiff ? setups[previousSessionForDiff] : undefined;
+  const baseSetupForDiff =
+    previousSetupForDiff && sessionHasSpecificData(previousSetupForDiff)
+      ? previousSetupForDiff
+      : undefined;
+  const baseLabelForDiff = previousSessionForDiff ? labelForTab(previousSessionForDiff) : 'previous session';
 
   return (
     <div className="min-h-screen bg-[#F5F5F7]">
@@ -2523,7 +2530,8 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
                 onChange={handleChange}
                 raceClass={selectedCar}
                 activeTab={activeTab}
-                baseSetup={activeTab === 'base' ? undefined : baseSetupForDiff}
+                baseSetup={baseSetupForDiff}
+                baseLabel={baseLabelForDiff}
               />
 
               <CustomFieldManager
