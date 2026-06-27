@@ -150,43 +150,47 @@ const TrackInfoSection: React.FC<TrackInfoProps> = ({
 
       <fieldset>
         <legend className="sr-only">Track information</legend>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-4">
           <div>
             <label htmlFor={`${prefix}-trackName`} className={labelClass}>Track Name</label>
             <input id={`${prefix}-trackName`} type="text" value={trackName} onChange={(e) => onChange('trackName', e.target.value)} className={inputClass} placeholder="Enter track name" autoComplete="off" />
           </div>
-          <div>
-            <label htmlFor={`${prefix}-raceDate`} className={labelClass}>Date</label>
-            <input id={`${prefix}-raceDate`} type="date" value={raceDate} onChange={(e) => onChange('raceDate', e.target.value)} className={inputClass} />
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
+            <div>
+              <label htmlFor={`${prefix}-raceDate`} className={labelClass}>Date</label>
+              <input id={`${prefix}-raceDate`} type="date" value={raceDate} onChange={(e) => onChange('raceDate', e.target.value)} className={inputClass} />
+            </div>
+            <div>
+              <label htmlFor={`${prefix}-trackShape`} className={labelClass}>Track Shape</label>
+              <select id={`${prefix}-trackShape`} value={trackShape} onChange={(e) => onChange('trackShape', e.target.value)} className={inputClass}>
+                <option value="">Select shape</option>
+                {TRACK_SHAPES.map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
           </div>
-          <div>
-            <label htmlFor={`${prefix}-trackShape`} className={labelClass}>Track Shape</label>
-            <select id={`${prefix}-trackShape`} value={trackShape} onChange={(e) => onChange('trackShape', e.target.value)} className={inputClass}>
-              <option value="">Select shape</option>
-              {TRACK_SHAPES.map(s => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor={`${prefix}-trackLength`} className={labelClass}>Length</label>
-            <select id={`${prefix}-trackLength`} value={trackLength} onChange={(e) => onChange('trackLength', e.target.value)} className={inputClass}>
-              <option value="">Select length</option>
-              {TRACK_LENGTHS.map(l => (
-                <option key={l} value={l}>{l}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor={`${prefix}-trackCondition`} className={labelClass}>Track Condition</label>
-            <select id={`${prefix}-trackCondition`} value={trackCondition} onChange={(e) => onChange('trackCondition', e.target.value)} className={inputClass}>
-              <option value="">Select condition</option>
-              <option value="heavy">Heavy / Wet</option>
-              <option value="tacky">Tacky</option>
-              <option value="rubbered-in">Rubbered In</option>
-              <option value="dry-slick">Dry Slick</option>
-              <option value="dusty">Dusty</option>
-            </select>
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
+            <div>
+              <label htmlFor={`${prefix}-trackLength`} className={labelClass}>Length</label>
+              <select id={`${prefix}-trackLength`} value={trackLength} onChange={(e) => onChange('trackLength', e.target.value)} className={inputClass}>
+                <option value="">Select length</option>
+                {TRACK_LENGTHS.map(l => (
+                  <option key={l} value={l}>{l}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor={`${prefix}-trackCondition`} className={labelClass}>Track Condition</label>
+              <select id={`${prefix}-trackCondition`} value={trackCondition} onChange={(e) => onChange('trackCondition', e.target.value)} className={inputClass}>
+                <option value="">Select condition</option>
+                <option value="heavy">Heavy / Wet</option>
+                <option value="tacky">Tacky</option>
+                <option value="rubbered-in">Rubbered In</option>
+                <option value="dry-slick">Dry Slick</option>
+                <option value="dusty">Dusty</option>
+              </select>
+            </div>
           </div>
         </div>
       </fieldset>

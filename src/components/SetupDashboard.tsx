@@ -78,6 +78,14 @@ const ALL_SLOTS: SetupType[] = ['base', 'heat', 'main', 'extra1', 'extra2', 'ext
 const DEFAULT_SESSION_SLOTS: SetupType[] = ['base', 'heat', 'main'];
 const MAX_SESSIONS = 6;
 
+const isOnlyFastFilePickerOpen = (): boolean => {
+  try {
+    return Boolean((window as any).__onlyfastFilePickerOpen);
+  } catch {
+    return false;
+  }
+};
+
 // Default session_order for the built-in slots (Hot Laps=1, Heat=2, Main=3).
 const DEFAULT_ORDER: Record<SetupType, number> = {
   base: 1, heat: 2, main: 3, extra1: 4, extra2: 5, extra3: 6,
@@ -632,6 +640,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     };
 
     const sendHome = () => {
+      if (isOnlyFastFilePickerOpen()) return;
       setActiveView('home');
     };
 
@@ -641,11 +650,17 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     };
 
     const markActivity = () => {
+      if (isOnlyFastFilePickerOpen()) return;
       lastActivityRef.current = Date.now();
       scheduleIdleTimer();
     };
 
     const handleResume = () => {
+      if (isOnlyFastFilePickerOpen()) {
+        lastActivityRef.current = Date.now();
+        scheduleIdleTimer();
+        return;
+      }
       const now = Date.now();
       if (now - lastActivityRef.current >= IDLE_HOME_TIMEOUT_MS) {
         sendHome();
@@ -655,6 +670,10 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     };
 
     const handleVisibilityChange = () => {
+      if (isOnlyFastFilePickerOpen()) {
+        if (document.visibilityState === 'visible') scheduleIdleTimer();
+        return;
+      }
       if (document.visibilityState === 'visible') {
         handleResume();
       } else {
@@ -690,9 +709,11 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   useEffect(() => {
     if (!stateLoaded || !resumeAttempted) return;
 
-    const saveOnExit = () => saveCurrentRoute();
+    const saveOnExit = () => {
+      if (!isOnlyFastFilePickerOpen()) saveCurrentRoute();
+    };
     const saveOnVisibilityChange = () => {
-      if (document.visibilityState !== 'visible') saveCurrentRoute();
+      if (document.visibilityState !== 'visible' && !isOnlyFastFilePickerOpen()) saveCurrentRoute();
     };
 
     document.addEventListener('visibilitychange', saveOnVisibilityChange);

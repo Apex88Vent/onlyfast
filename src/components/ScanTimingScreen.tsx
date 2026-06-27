@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useId } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useId } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import { getEffectiveTier, readMembership, tierLimits } from '@/lib/membership';
@@ -54,8 +54,16 @@ const FRONTEND_TIMEOUT_MS = 45_000;
 const MAX_IMAGE_WIDTH = 1200;
 const JPEG_QUALITY = 0.7;
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
-const IMAGE_ACCEPT = 'image/*,.png,.jpg,.jpeg,.webp';
-const SUPPORTED_IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp'];
+const IMAGE_ACCEPT = 'image/*,.png,.jpg,.jpeg,.webp,.heic,.heif';
+const SUPPORTED_IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.heic', '.heif'];
+const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.heic': 'image/heic',
+  '.heif': 'image/heif',
+};
 
 interface Props {
   user: User | null;
@@ -75,6 +83,24 @@ const SHOW_TEST_MODE_BUTTON = false;
 
 type Step = 'idle' | 'scanning' | 'review' | 'saving' | 'saved';
 
+const getImageExtension = (file: File): string => {
+  const name = file.name.toLowerCase();
+  return SUPPORTED_IMAGE_EXTENSIONS.find(ext => name.endsWith(ext)) || '';
+};
+
+const inferImageMimeType = (file: File): string => {
+  if (file.type && file.type.startsWith('image/')) return file.type;
+  return IMAGE_MIME_BY_EXTENSION[getImageExtension(file)] || 'image/jpeg';
+};
+
+const parseImageDataUrl = (dataUrl: string, fallbackMimeType: string) => {
+  const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  const mimeType = m?.[1] || fallbackMimeType;
+  const base64 = m?.[2] || dataUrl.replace(/^data:[^,]+,/, '');
+  const bytes = Math.floor(base64.length * 0.75);
+  return { mimeType, base64, bytes };
+};
+
 // Compress an image File to a JPEG data URL with a max width.
 // Returns { dataUrl, base64, mimeType, width, height, bytes }
 async function compressImage(
@@ -82,6 +108,7 @@ async function compressImage(
   maxWidth = MAX_IMAGE_WIDTH,
   quality = JPEG_QUALITY,
 ): Promise<{ dataUrl: string; base64: string; mimeType: string; width: number; height: number; bytes: number }> {
+  const fallbackMimeType = inferImageMimeType(file);
   const dataUrlOrig: string = await new Promise((resolve, reject) => {
     const r = new FileReader();
     r.onload = () => resolve(r.result as string);
@@ -89,39 +116,42 @@ async function compressImage(
     r.readAsDataURL(file);
   });
 
-  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-    const i = new Image();
-    i.onload = () => resolve(i);
-    i.onerror = () => reject(new Error('Could not decode image'));
-    i.src = dataUrlOrig;
-  });
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error('Could not decode image preview'));
+      i.src = dataUrlOrig;
+    });
 
-  const scale = img.width > maxWidth ? maxWidth / img.width : 1;
-  const w = Math.round(img.width * scale);
-  const h = Math.round(img.height * scale);
+    const scale = img.width > maxWidth ? maxWidth / img.width : 1;
+    const w = Math.round(img.width * scale);
+    const h = Math.round(img.height * scale);
 
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Canvas 2D context unavailable');
-  // White background in case the source has transparency (JPEG has no alpha)
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, w, h);
-  ctx.drawImage(img, 0, 0, w, h);
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas 2D context unavailable');
+    // White background in case the source has transparency (JPEG has no alpha)
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
 
-  const dataUrl = canvas.toDataURL('image/jpeg', quality);
-  const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
-  const mimeType = m?.[1] || 'image/jpeg';
-  const base64 = m?.[2] || dataUrl.replace(/^data:[^,]+,/, '');
-  const bytes = Math.floor(base64.length * 0.75);
-  return { dataUrl, base64, mimeType, width: w, height: h, bytes };
+    const dataUrl = canvas.toDataURL('image/jpeg', quality);
+    const parsed = parseImageDataUrl(dataUrl, 'image/jpeg');
+    return { dataUrl, base64: parsed.base64, mimeType: parsed.mimeType, width: w, height: h, bytes: parsed.bytes };
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[ScanTimingScreen] Preview/compression failed; scanning original image instead.', err);
+    const parsed = parseImageDataUrl(dataUrlOrig, fallbackMimeType);
+    return { dataUrl: dataUrlOrig, base64: parsed.base64, mimeType: parsed.mimeType, width: 0, height: 0, bytes: parsed.bytes };
+  }
 }
 
 const fileHasSupportedImageType = (file: File): boolean => {
   if (file.type && file.type.startsWith('image/')) return true;
-  const name = file.name.toLowerCase();
-  return SUPPORTED_IMAGE_EXTENSIONS.some(ext => name.endsWith(ext));
+  return Boolean(getImageExtension(file));
 };
 
 const ScanTimingScreen: React.FC<Props> = ({
@@ -143,11 +173,24 @@ const ScanTimingScreen: React.FC<Props> = ({
   const [showDebug, setShowDebug] = useState<boolean>(false);
   const [attachToCurrent, setAttachToCurrent] = useState<boolean>(true);
   const [savedMessage, setSavedMessage] = useState<string>('');
+  const [uploadStatus, setUploadStatus] = useState<string>('Ready to upload screenshot');
+  const [selectedFileInfo, setSelectedFileInfo] = useState<string | null>(null);
 
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const isPickingFileRef = useRef(false);
+  const pickerChangeReceivedRef = useRef(false);
   const prefix = useId();
   const isSavingStep = step === 'saving';
+
+  const setFilePickingActive = useCallback((active: boolean) => {
+    isPickingFileRef.current = active;
+    try {
+      (window as any).__onlyfastFilePickerOpen = active;
+    } catch {
+      // Ignore WebView globals that cannot be written.
+    }
+  }, []);
 
   const reset = useCallback(() => {
     setStep('idle');
@@ -159,9 +202,42 @@ const ScanTimingScreen: React.FC<Props> = ({
     setRawResponse(null);
     setShowDebug(false);
     setSavedMessage('');
+    setUploadStatus('Ready to upload screenshot');
+    setSelectedFileInfo(null);
+    pickerChangeReceivedRef.current = false;
+    setFilePickingActive(false);
     if (uploadInputRef.current) uploadInputRef.current.value = '';
     if (cameraInputRef.current) cameraInputRef.current.value = '';
-  }, []);
+  }, [setFilePickingActive]);
+
+  useEffect(() => {
+    const handlePickerReturn = () => {
+      if (!isPickingFileRef.current) return;
+      window.setTimeout(() => {
+        if (!isPickingFileRef.current || pickerChangeReceivedRef.current) return;
+        const message = 'No image was received from the picker.';
+        setUploadStatus(message);
+        setError(message);
+        setErrorDetail(null);
+        setErrorStage('no-file-selected');
+        setSelectedFileInfo(null);
+        setFilePickingActive(false);
+      }, 1200);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') handlePickerReturn();
+    };
+
+    window.addEventListener('focus', handlePickerReturn);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', handlePickerReturn);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      setFilePickingActive(false);
+    };
+  }, [setFilePickingActive]);
 
   // Wraps supabase.functions.invoke in a hard frontend timeout (Promise.race).
   // If the edge function doesn't respond in time, we throw a synthetic timeout error.
@@ -388,6 +464,11 @@ const ScanTimingScreen: React.FC<Props> = ({
     setErrorStage(null);
     setRawResponse(null);
     setSavedMessage('');
+    const fileName = file.name || 'selected image';
+    const fileType = file.type || '(missing type)';
+    const fileSizeMb = (file.size / (1024 * 1024)).toFixed(2);
+    setUploadStatus(`File selected: ${fileName}`);
+    setSelectedFileInfo(`${fileName} - ${fileType} - ${fileSizeMb} MB`);
 
     // eslint-disable-next-line no-console
     console.log('file selected');
@@ -399,20 +480,26 @@ const ScanTimingScreen: React.FC<Props> = ({
     });
 
     if (!fileHasSupportedImageType(file)) {
-      setError('Unsupported file type. Please choose a PNG, JPG, JPEG, WEBP, or phone screenshot image.');
-      setErrorDetail(`Selected file: ${file.name || '(unnamed)'} · ${file.type || 'unknown type'}`);
+      setUploadStatus('Upload failed: Unsupported file type');
+      setError('Unsupported file type. Please choose a PNG, JPG, JPEG, WEBP, HEIC, HEIF, or phone screenshot image.');
+      setErrorDetail(`Selected file: ${file.name || '(unnamed)'} - ${file.type || 'unknown type'}`);
       setErrorStage('client-validation');
       return;
     }
     if (file.size > MAX_UPLOAD_BYTES) {
+      setUploadStatus('Upload failed: Image is too large');
       setError('Image is too large. Please keep it under 25 MB.');
       setErrorDetail(`Selected file size: ${(file.size / (1024 * 1024)).toFixed(1)} MB`);
       setErrorStage('client-validation');
       return;
     }
-    if (!(await canUseTimingUpload())) return;
+    if (!(await canUseTimingUpload())) {
+      setUploadStatus('Upload failed: Could not start timing scan');
+      return;
+    }
 
     try {
+      setUploadStatus('Preparing screenshot');
       // eslint-disable-next-line no-console
       console.log('upload started');
       // Compress: max 1200px wide, JPEG q=0.7
@@ -420,6 +507,7 @@ const ScanTimingScreen: React.FC<Props> = ({
       setPreviewUrl(compressed.dataUrl);
       // eslint-disable-next-line no-console
       console.log('image preview loaded');
+      setUploadStatus('Uploading screenshot');
       setStep('scanning');
 
       // eslint-disable-next-line no-console
@@ -435,6 +523,7 @@ const ScanTimingScreen: React.FC<Props> = ({
       // eslint-disable-next-line no-console
       console.log('upload complete');
 
+      setUploadStatus('Scanning screenshot');
       // eslint-disable-next-line no-console
       console.log('scan started');
       const result = await invokeWithTimeout({
@@ -442,6 +531,7 @@ const ScanTimingScreen: React.FC<Props> = ({
         mimeType: compressed.mimeType,
       });
       handleInvokeResult(result);
+      setUploadStatus('Scan complete');
       // eslint-disable-next-line no-console
       console.log('scan complete');
     } catch (err: any) {
@@ -451,13 +541,16 @@ const ScanTimingScreen: React.FC<Props> = ({
         setErrorStage('frontend-timeout');
         setError('Scan timed out. Try a smaller or clearer screenshot.');
         setErrorDetail(`The Edge Function did not respond within ${FRONTEND_TIMEOUT_MS / 1000} seconds.`);
+        setUploadStatus('Upload failed: Scan timed out');
       } else if (/read|decode|canvas|data url|load/i.test(err?.message || '')) {
         setErrorStage('image-read');
-        setError('Could not load that image. Please try a PNG, JPG, WEBP, or a clearer screenshot from your photo library.');
+        setError('Could not load that image. Please try a PNG, JPG, WEBP, HEIC, HEIF, or a clearer screenshot from your photo library.');
         setErrorDetail(err?.message || null);
+        setUploadStatus('Upload failed: Image read failure');
       } else {
         setErrorStage(prev => prev || 'scan-failed');
         setError(err?.message || 'Scan failed. Please try again.');
+        setUploadStatus(`Upload failed: ${err?.message || 'Scan failed'}`);
       }
       setStep('idle');
     }
@@ -498,14 +591,20 @@ const ScanTimingScreen: React.FC<Props> = ({
     setError(null);
     setErrorDetail(null);
     setErrorStage(null);
+    setSelectedFileInfo(null);
+    setUploadStatus('Opening photo picker');
+    pickerChangeReceivedRef.current = false;
+    setFilePickingActive(true);
     if (uploadInputRef.current) {
       uploadInputRef.current.value = '';
       uploadInputRef.current.click();
       // eslint-disable-next-line no-console
       console.log('file picker opened');
     } else {
+      setFilePickingActive(false);
       setError('Upload is not ready. Please try again.');
       setErrorStage('file-picker');
+      setUploadStatus('Upload failed: Upload is not ready');
     }
   };
 
@@ -515,25 +614,44 @@ const ScanTimingScreen: React.FC<Props> = ({
     setError(null);
     setErrorDetail(null);
     setErrorStage(null);
+    setSelectedFileInfo(null);
+    setUploadStatus('Opening photo picker');
+    pickerChangeReceivedRef.current = false;
+    setFilePickingActive(true);
     if (cameraInputRef.current) {
       cameraInputRef.current.value = '';
       cameraInputRef.current.click();
       // eslint-disable-next-line no-console
       console.log('file picker opened');
     } else {
+      setFilePickingActive(false);
       setError('Camera upload is not ready. Please try again.');
       setErrorStage('file-picker');
+      setUploadStatus('Upload failed: Camera upload is not ready');
     }
   };
 
-  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setUploadStatus('Returned from photo picker');
+    pickerChangeReceivedRef.current = true;
     const f = e.target.files?.[0];
-    if (f) {
-      handleFile(f);
+    if (!f) {
+      const message = 'No image was received from the picker.';
+      setUploadStatus(message);
+      setError(message);
+      setErrorDetail(null);
+      setErrorStage('no-file-selected');
+      setSelectedFileInfo(null);
+      setFilePickingActive(false);
+      e.target.value = '';
       return;
     }
-    setError('No file selected.');
-    setErrorStage('no-file-selected');
+    try {
+      await handleFile(f);
+    } finally {
+      setFilePickingActive(false);
+      e.target.value = '';
+    }
   };
 
   const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -544,8 +662,11 @@ const ScanTimingScreen: React.FC<Props> = ({
       handleFile(f);
       return;
     }
-    setError('No file selected.');
+    const message = 'No image was received from the picker.';
+    setUploadStatus(message);
+    setError(message);
     setErrorStage('no-file-selected');
+    setSelectedFileInfo(null);
   };
 
   const updateScan = (patch: Partial<ScanResult>) => {
@@ -935,6 +1056,9 @@ const ScanTimingScreen: React.FC<Props> = ({
             <p className="text-xs text-[#6B7280]">
               Extracting track, class, lap times and finishing position
             </p>
+            <p className="text-[11px] font-medium text-[#6B7280]" role="status" aria-live="polite">
+              {uploadStatus}
+            </p>
             <p className="text-[10px] text-[#9CA3AF]">
               Times out after {FRONTEND_TIMEOUT_MS / 1000}s if the AI doesn't respond
             </p>
@@ -974,6 +1098,12 @@ const ScanTimingScreen: React.FC<Props> = ({
               )}
 
             </div>
+            <div className="mt-3 text-center" role="status" aria-live="polite">
+              <p className="text-[11px] font-medium text-[#6B7280]">{uploadStatus}</p>
+              {selectedFileInfo && (
+                <p className="text-[10px] text-[#9CA3AF] break-all mt-1">{selectedFileInfo}</p>
+              )}
+            </div>
             <input
               ref={uploadInputRef}
               type="file"
@@ -990,7 +1120,7 @@ const ScanTimingScreen: React.FC<Props> = ({
               onChange={onFileChange}
             />
             <p className="text-[11px] text-[#9CA3AF] mt-3">
-              PNG · JPG · WEBP. Auto-compressed to {MAX_IMAGE_WIDTH}px wide JPEG before upload.
+              PNG / JPG / WEBP / HEIC. Auto-compressed to {MAX_IMAGE_WIDTH}px wide JPEG before upload when possible.
             </p>
           </>
         )}
