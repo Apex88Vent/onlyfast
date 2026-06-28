@@ -39,6 +39,23 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
+async function getStripeCustomerFromSubscription(
+  stripeSecretKey: string,
+  subscriptionId: string,
+): Promise<string | null> {
+  const res = await fetch(
+    `https://api.stripe.com/v1/subscriptions/${encodeURIComponent(subscriptionId)}`,
+    {
+      headers: { Authorization: `Bearer ${stripeSecretKey}` },
+    },
+  );
+  const subscription = await res.json();
+  if (!res.ok) return null;
+
+  const customer = subscription?.customer;
+  return typeof customer === 'string' ? customer : customer?.id || null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -77,7 +94,7 @@ Deno.serve(async (req) => {
     // ----- 2. Look up the Stripe customer id -----
     const { data: sub, error: subErr } = await admin
       .from('user_subscriptions')
-      .select('stripe_customer_id')
+      .select('stripe_customer_id, stripe_subscription_id')
       .eq('user_id', userId)
       .maybeSingle();
 
@@ -85,10 +102,21 @@ Deno.serve(async (req) => {
       return json({ error: 'Could not load your subscription. Please try again.' }, 500);
     }
 
-    const customerId = sub?.stripe_customer_id;
+    let customerId = sub?.stripe_customer_id || null;
+    const subscriptionId = sub?.stripe_subscription_id || null;
+    if (!customerId && subscriptionId) {
+      customerId = await getStripeCustomerFromSubscription(STRIPE_SECRET_KEY, subscriptionId);
+      if (customerId) {
+        await admin
+          .from('user_subscriptions')
+          .update({ stripe_customer_id: customerId, updated_at: new Date().toISOString() })
+          .eq('user_id', userId);
+      }
+    }
+
     if (!customerId) {
       return json(
-        { error: 'No Stripe billing account was found for your account.' },
+        { error: 'No Stripe billing account was found for your account. Please contact support to cancel this subscription.' },
         404,
       );
     }

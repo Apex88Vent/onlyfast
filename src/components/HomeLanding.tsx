@@ -1,7 +1,7 @@
 import React from 'react';
-import { ArrowRight, BarChart3, CalendarDays, CheckCircle2, CircleDashed, Library, Plus, Save, Trophy, Wrench, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BarChart3, CalendarDays, CheckCircle2, CircleDashed, Library, Plus, Save, Trophy, Wrench, type LucideIcon } from 'lucide-react';
 
-export type HomeAction = 'new-setup' | 'saved' | 'schedule' | 'todo' | 'parts' | 'library' | 'continue-weekend';
+export type HomeAction = 'new-setup' | 'saved' | 'schedule' | 'todo' | 'parts' | 'library' | 'continue-weekend' | 'previous-weekend' | 'next-race-weekend';
 
 interface CurrentWeekend {
   trackName?: string;
@@ -28,6 +28,7 @@ interface HomeLandingProps {
   carNumber?: string;
   nextEvent?: UpcomingEvent | null;
   currentWeekend?: CurrentWeekend | null;
+  currentWeekendTitle?: 'Current Race Weekend' | 'Next Race Weekend';
   performanceStats?: PerformanceStat[];
   upcomingEvents?: UpcomingEvent[];
   middleSlot?: React.ReactNode;
@@ -42,7 +43,7 @@ const actionCards: {
 }[] = [
   { action: 'new-setup', label: 'New Setup', icon: Plus },
   { action: 'saved', label: 'Continue Saved Setup', icon: Save },
-  { action: 'schedule', label: 'Calendar', icon: CalendarDays },
+  { action: 'schedule', label: 'Schedule', icon: CalendarDays },
   { action: 'todo', label: 'To-Do List', icon: CheckCircle2 },
   { action: 'parts', label: 'Parts Reference', icon: Wrench },
   { action: 'library', label: 'Setup Library', icon: Library },
@@ -179,29 +180,22 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
   carNumber,
   nextEvent,
   currentWeekend,
+  currentWeekendTitle,
   performanceStats = [],
   upcomingEvents = [],
   middleSlot,
   bottomSlot,
   onAction,
 }) => {
-  const nextRaceWeekend = nextEvent ? {
-    trackName: nextEvent.track,
-    date: nextEvent.date,
-    sessions: [
-      { label: 'Hot Laps', status: 'not-started' as const },
-      { label: 'Heat', status: 'not-started' as const },
-      { label: 'Main', status: 'not-started' as const },
-    ],
-  } : null;
-  const [raceCardMode, setRaceCardMode] = React.useState<'current' | 'next'>('current');
-  const displayedWeekend = raceCardMode === 'next' && nextRaceWeekend ? nextRaceWeekend : currentWeekend;
+  const displayedWeekend = currentWeekend;
   const nextEventCountdown = getEventCountdown(nextEvent?.date);
   const showNextEventCountdown = Boolean(nextEvent && nextEventCountdown && nextEvent.track);
   const showTopInfoCard = Boolean(selectedCar || showNextEventCountdown);
   const showCurrentRaceWeekendCard = Boolean(
     displayedWeekend && (displayedWeekend.trackName || displayedWeekend.date || displayedWeekend.sessions?.length)
   );
+  const displayedWeekendTitle = currentWeekendTitle || 'Current Race Weekend';
+  const showingFutureNextRace = displayedWeekendTitle === 'Next Race Weekend';
   const topInfoCount = (selectedCar ? 1 : 0) + (showNextEventCountdown ? 1 : 0);
   const formattedCarNumber = formatCarNumber(carNumber);
   const weekendStorageKey = getWeekendStorageKey(currentWeekend);
@@ -220,11 +214,11 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
     }
   }, [weekendStorageKey]);
 
-  React.useEffect(() => {
-    setRaceCardMode('current');
-  }, [weekendStorageKey]);
-
   const handleWeekendAction = () => {
+    if (showingFutureNextRace) {
+      onAction('previous-weekend');
+      return;
+    }
     if (weekendStorageKey && typeof window !== 'undefined') {
       try { window.localStorage.setItem(weekendStorageKey, 'true'); } catch {}
     }
@@ -232,8 +226,7 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
     onAction('continue-weekend');
   };
   const handleNextRaceAction = () => {
-    if (!nextRaceWeekend) return;
-    setRaceCardMode(mode => mode === 'next' ? 'current' : 'next');
+    onAction('next-race-weekend');
   };
 
   return (
@@ -312,7 +305,7 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
             <TrackLogoPanel trackName={displayedWeekend.trackName} />
             <div className="p-2.5 sm:p-5">
               <div className="text-[#00A8E8] text-[11px] sm:text-sm font-semibold uppercase tracking-[0.08em]">
-                {raceCardMode === 'next' ? 'Next Race' : 'Current Race Weekend'}
+                {displayedWeekendTitle}
               </div>
               <div className="flex items-center gap-2 mt-1 sm:mt-3">
                 <div className="sm:hidden">
@@ -355,15 +348,23 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
                   onClick={handleWeekendAction}
                   className="bg-[#00A8E8] hover:bg-[#0090c7] text-white px-3 py-1.5 sm:py-3 rounded-xl text-xs sm:text-lg font-bold transition-colors flex items-center justify-center gap-1.5 sm:gap-3 focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
                 >
-                  Continue Weekend
-                  <ArrowRight className="h-4 w-4 sm:h-6 sm:w-6" aria-hidden="true" />
+                  {showingFutureNextRace ? (
+                    <>
+                      <ArrowLeft className="h-4 w-4 sm:h-6 sm:w-6" aria-hidden="true" />
+                      Previous Weekend
+                    </>
+                  ) : (
+                    <>
+                      Continue Weekend
+                      <ArrowRight className="h-4 w-4 sm:h-6 sm:w-6" aria-hidden="true" />
+                    </>
+                  )}
                 </button>
                 <button
                   onClick={handleNextRaceAction}
-                  disabled={!nextRaceWeekend}
                   className="border border-[#00A8E8] text-[#00A8E8] hover:bg-[#00A8E8]/10 px-3 py-1.5 sm:py-3 rounded-xl text-xs sm:text-lg font-bold transition-colors flex items-center justify-center gap-1.5 sm:gap-3 focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
                 >
-                  {raceCardMode === 'next' ? 'Current Weekend' : 'Next Race'}
+                  {showingFutureNextRace ? 'Next Race' : 'Current Weekend'}
                   <ArrowRight className="h-4 w-4 sm:h-6 sm:w-6" aria-hidden="true" />
                 </button>
               </div>

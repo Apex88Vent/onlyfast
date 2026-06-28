@@ -1,4 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { User } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
+import {
+  daysFromToday,
+  getNextScheduledRace,
+  sortScheduleEntriesByDate,
+  type ScheduleRaceEntry,
+} from '@/lib/scheduleSelection';
 
 interface TodoItem {
   id: string;
@@ -10,10 +18,13 @@ interface TodoItem {
 interface UpcomingRace {
   track: string;
   date: string; // YYYY-MM-DD
+  organization: string;
+  scheduleId?: string;
 }
 
 const TODO_KEY = 'onlyfast_todos_v1';
 const RACE_KEY = 'onlyfast_upcoming_race_v1';
+const RACE_MANUAL_KEY = 'onlyfast_upcoming_race_manual_v1';
 
 const loadTodos = (): TodoItem[] => {
   try {
@@ -27,36 +38,89 @@ const loadTodos = (): TodoItem[] => {
 const loadRace = (): UpcomingRace => {
   try {
     const raw = localStorage.getItem(RACE_KEY);
-    if (!raw) return { track: '', date: '' };
+    if (!raw) return { track: '', date: '', organization: '' };
     const parsed = JSON.parse(raw);
-    return { track: parsed.track || '', date: parsed.date || '' };
-  } catch { return { track: '', date: '' }; }
+    return {
+      track: parsed.track || '',
+      date: parsed.date || '',
+      organization: parsed.organization || '',
+      scheduleId: parsed.scheduleId,
+    };
+  } catch { return { track: '', date: '', organization: '' }; }
 };
 
-const daysUntil = (dateStr: string): number | null => {
-  if (!dateStr) return null;
-  const target = new Date(dateStr + 'T00:00:00');
-  if (isNaN(target.getTime())) return null;
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  return Math.round((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+const loadRaceManual = (): boolean => {
+  try {
+    if (localStorage.getItem(RACE_MANUAL_KEY) === 'true') return true;
+    const raw = localStorage.getItem(RACE_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    return !parsed.scheduleId;
+  } catch { return false; }
 };
+
+const raceFromSchedule = (race: ScheduleRaceEntry | null): UpcomingRace => ({
+  scheduleId: race?.id,
+  track: race?.track || '',
+  date: race?.race_date || '',
+  organization: race?.organization || '',
+});
 
 interface TodoListProps {
+  user?: User | null;
   onClose?: () => void;
   variant?: 'panel' | 'page';
 }
 
-const TodoList: React.FC<TodoListProps> = ({ onClose, variant = 'page' }) => {
+const TodoList: React.FC<TodoListProps> = ({ user, onClose, variant = 'page' }) => {
   const [todos, setTodos] = useState<TodoItem[]>(() => loadTodos());
   const [race, setRace] = useState<UpcomingRace>(() => loadRace());
   const [raceDraft, setRaceDraft] = useState<UpcomingRace>(() => loadRace());
+  const [raceWasManuallySet, setRaceWasManuallySet] = useState(() => loadRaceManual());
+  const [scheduleRaces, setScheduleRaces] = useState<ScheduleRaceEntry[]>([]);
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+  const [raceEditOpen, setRaceEditOpen] = useState(false);
   const [newTodo, setNewTodo] = useState('');
   const [raceMsg, setRaceMsg] = useState('');
 
   useEffect(() => {
     try { localStorage.setItem(TODO_KEY, JSON.stringify(todos)); } catch {}
   }, [todos]);
+
+  useEffect(() => {
+    if (!user) {
+      setScheduleRaces([]);
+      return;
+    }
+
+    let cancelled = false;
+    setScheduleLoading(true);
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('race_schedule')
+          .select('id,race_date,track,organization,finishing_position')
+          .eq('user_id', user.id)
+          .order('race_date', { ascending: true });
+        if (error) throw error;
+        if (!cancelled) setScheduleRaces(sortScheduleEntriesByDate(data || []));
+      } catch {
+        if (!cancelled) setScheduleRaces([]);
+      } finally {
+        if (!cancelled) setScheduleLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [user]);
+
+  useEffect(() => {
+    if (raceWasManuallySet) return;
+    const nextRace = raceFromSchedule(getNextScheduledRace(scheduleRaces));
+    setRace(nextRace);
+    setRaceDraft(nextRace);
+    try { localStorage.setItem(RACE_KEY, JSON.stringify(nextRace)); } catch {}
+  }, [raceWasManuallySet, scheduleRaces]);
 
   const addTodo = () => {
     const text = newTodo.trim();
@@ -83,18 +147,24 @@ const TodoList: React.FC<TodoListProps> = ({ onClose, variant = 'page' }) => {
   const saveRace = () => {
     setRace(raceDraft);
     try { localStorage.setItem(RACE_KEY, JSON.stringify(raceDraft)); } catch {}
+    setRaceWasManuallySet(true);
+    try { localStorage.setItem(RACE_MANUAL_KEY, 'true'); } catch {}
+    setRaceEditOpen(false);
     setRaceMsg('Saved upcoming race');
     setTimeout(() => setRaceMsg(''), 2500);
   };
 
-  const clearRace = () => {
-    const empty = { track: '', date: '' };
-    setRace(empty);
-    setRaceDraft(empty);
-    try { localStorage.removeItem(RACE_KEY); } catch {}
+  const markManualRaceEdit = () => {
+    setRaceWasManuallySet(true);
+    try { localStorage.setItem(RACE_MANUAL_KEY, 'true'); } catch {}
   };
 
-  const days = daysUntil(race.date);
+  const openRaceEditor = () => {
+    setRaceDraft(race);
+    setRaceEditOpen(true);
+  };
+
+  const days = daysFromToday(race.date);
   const raceHappened = days !== null && days < 0;
   const raceToday = days === 0;
 
@@ -120,62 +190,24 @@ const TodoList: React.FC<TodoListProps> = ({ onClose, variant = 'page' }) => {
           Upcoming Race
         </h3>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-semibold text-[#6B7280] uppercase tracking-wider mb-1">Track</label>
-            <input
-              type="text"
-              value={raceDraft.track}
-              onChange={(e) => setRaceDraft(d => ({ ...d, track: e.target.value }))}
-              placeholder="e.g. Eldora Speedway"
-              className="w-full px-3 py-2 border border-[#E5E7EB] rounded-lg focus:ring-2 focus:ring-[#00A8E8] focus:border-[#00A8E8] outline-none text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-[#6B7280] uppercase tracking-wider mb-1">Date</label>
-            <input
-              type="date"
-              value={raceDraft.date}
-              onChange={(e) => setRaceDraft(d => ({ ...d, date: e.target.value }))}
-              className="w-full px-3 py-2 border border-[#E5E7EB] rounded-lg focus:ring-2 focus:ring-[#00A8E8] focus:border-[#00A8E8] outline-none text-sm"
-            />
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between mt-3 flex-wrap gap-2">
-          <div className="text-xs text-[#6B7280]">
-            {raceMsg && <span className="text-green-700 font-medium">{raceMsg}</span>}
-          </div>
-          <div className="flex items-center gap-2">
-            {(race.track || race.date) && (
-              <button
-                onClick={clearRace}
-                className="text-xs text-[#9CA3AF] hover:text-red-500 underline"
-              >
-                Clear
-              </button>
-            )}
-            <button
-              onClick={saveRace}
-              className="bg-[#00A8E8] hover:bg-[#0090c7] text-white px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors"
-            >
-              Save
-            </button>
-          </div>
-        </div>
-
-        {race.date && (
-          <div className="mt-4 bg-gradient-to-r from-[#00A8E8]/10 to-[#00A8E8]/5 border border-[#00A8E8]/30 rounded-xl px-4 py-3">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div>
-                <div className="text-[10px] uppercase tracking-wider text-[#00A8E8] font-bold">Next Race</div>
-                <div className="text-base font-bold text-[#1A1B23]">
-                  {race.track || 'Unnamed track'}
-                </div>
+        <div className="bg-gradient-to-r from-[#00A8E8]/10 to-[#00A8E8]/5 border border-[#00A8E8]/30 rounded-xl px-4 py-3">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div>
+              <div className="text-base font-bold text-[#1A1B23]">
+                {race.track || (scheduleLoading ? 'Loading schedule...' : 'No upcoming race scheduled')}
+              </div>
+              {race.date ? (
                 <div className="text-xs text-[#6B7280]">
                   {new Date(race.date + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
                 </div>
-              </div>
+              ) : (
+                <div className="text-xs text-[#6B7280]">Use Edit Next Race to add one manually.</div>
+              )}
+              {race.organization && (
+                <div className="text-xs text-[#6B7280]">{race.organization}</div>
+              )}
+            </div>
+            {race.date && (
               <div className="text-right">
                 {raceToday ? (
                   <span className="inline-block bg-red-500 text-white px-3 py-1.5 rounded-full text-xs font-bold">
@@ -194,10 +226,81 @@ const TodoList: React.FC<TodoListProps> = ({ onClose, variant = 'page' }) => {
                   </>
                 )}
               </div>
+            )}
+          </div>
+        </div>
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <div className="text-xs text-[#6B7280]">
+            {raceMsg && <span className="text-green-700 font-medium">{raceMsg}</span>}
+          </div>
+          <button
+            onClick={openRaceEditor}
+            className="text-xs font-semibold text-[#00A8E8] hover:text-[#0090c7] underline"
+          >
+            Edit Next Race
+          </button>
+        </div>
+      </section>
+
+      {raceEditOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50" role="dialog" aria-modal="true" aria-labelledby="todo-race-edit-title">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 id="todo-race-edit-title" className="text-lg font-bold text-[#1A1B23]">Edit Next Race</h2>
+              <button
+                onClick={() => setRaceEditOpen(false)}
+                aria-label="Close"
+                className="text-[#9CA3AF] hover:text-[#1A1B23] p-1 rounded focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-[#6B7280] uppercase tracking-wider mb-1">Track</label>
+                <input
+                  type="text"
+                  value={raceDraft.track}
+                  onChange={(e) => {
+                    markManualRaceEdit();
+                    setRaceDraft(d => ({ ...d, track: e.target.value, organization: '', scheduleId: undefined }));
+                  }}
+                  placeholder="e.g. Ventura Raceway"
+                  className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-lg focus:ring-2 focus:ring-[#00A8E8] focus:border-[#00A8E8] outline-none text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-[#6B7280] uppercase tracking-wider mb-1">Date</label>
+                <input
+                  type="date"
+                  value={raceDraft.date}
+                  onChange={(e) => {
+                    markManualRaceEdit();
+                    setRaceDraft(d => ({ ...d, date: e.target.value, organization: '', scheduleId: undefined }));
+                  }}
+                  className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-lg focus:ring-2 focus:ring-[#00A8E8] focus:border-[#00A8E8] outline-none text-sm"
+                />
+              </div>
+            </div>
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setRaceEditOpen(false)}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-[#6B7280] hover:bg-[#F5F5F7] transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveRace}
+                className="bg-[#00A8E8] hover:bg-[#0090c7] text-white px-5 py-2 rounded-lg text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
+              >
+                Save
+              </button>
             </div>
           </div>
-        )}
-      </section>
+        </div>
+      )}
 
       {/* Todo list */}
       <section className="bg-white rounded-2xl border border-[#E5E7EB] p-4 sm:p-5 shadow-sm">

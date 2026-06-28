@@ -15,6 +15,28 @@ import LegalModal from './LegalModal';
 // --- DEV/DEMO test-account reset (remove/disable before production) ---
 import { isTestAccount, ENABLE_TEST_ACCOUNT_RESET, resetTestAccountData } from '@/lib/testAccount';
 
+const FILE_PICKER_ACTIVE_KEY = 'onlyfast_file_picker_active';
+const FILE_PICKER_STARTED_AT_KEY = 'onlyfast_file_picker_started_at';
+const FILE_PICKER_ACTIVE_MS = 2 * 60 * 1000;
+
+const isOnlyFastFilePickerOpen = (): boolean => {
+  try {
+    const globalActive = Boolean((window as any).__onlyfastFilePickerOpen);
+    const storedActive = localStorage.getItem(FILE_PICKER_ACTIVE_KEY) === 'true';
+    const startedAtRaw =
+      localStorage.getItem(FILE_PICKER_STARTED_AT_KEY) ||
+      String((window as any).__onlyfastFilePickerStartedAt || '');
+    const startedAt = Number(startedAtRaw);
+
+    if (!globalActive && !storedActive) return false;
+    if (!Number.isFinite(startedAt) || Date.now() - startedAt >= FILE_PICKER_ACTIVE_MS) return false;
+
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const AppLayout: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [selectedCar, setSelectedCar] = useState<string>('');
@@ -26,7 +48,7 @@ const AppLayout: React.FC = () => {
   const [skipHowOnlyFastWorksAfterLogin, setSkipHowOnlyFastWorksAfterLogin] = useState(false);
   const [isLoadingSavedCar, setIsLoadingSavedCar] = useState(false);
   const [legalModal, setLegalModal] = useState<'privacy' | 'terms' | null>(null);
-  const [showSplash, setShowSplash] = useState(true);
+  const [showSplash, setShowSplash] = useState(() => !isOnlyFastFilePickerOpen());
   const [authChecked, setAuthChecked] = useState(false);
   const onboardingLoginEscapeRef = useRef(false);
 
@@ -90,6 +112,13 @@ const AppLayout: React.FC = () => {
   const handleSplashComplete = useCallback(() => {
     setShowSplash(false);
   }, []);
+
+  useEffect(() => {
+    if (!showSplash || !isOnlyFastFilePickerOpen()) return;
+    // eslint-disable-next-line no-console
+    console.log('route reset blocked', { source: 'splash' });
+    setShowSplash(false);
+  }, [showSplash]);
 
 
   // Check for persisted car selection
@@ -216,6 +245,14 @@ const AppLayout: React.FC = () => {
   useEffect(() => {
     if (showSplash || isReplayingHowOnlyFastWorks) return;
     if (!authChecked) return;
+
+    if (isOnlyFastFilePickerOpen()) {
+      // eslint-disable-next-line no-console
+      console.log('route reset blocked', { source: 'howOnlyFastWorksGate' });
+      setShowHowOnlyFastWorks(false);
+      setHasCheckedHowOnlyFastWorks(true);
+      return;
+    }
 
     if (skipHowOnlyFastWorksAfterLogin || selectedCar || hasSelectedMembership(user)) {
       setShowHowOnlyFastWorks(false);

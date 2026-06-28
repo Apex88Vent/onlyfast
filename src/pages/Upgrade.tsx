@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { safeBack } from '@/lib/safeBack';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import {
@@ -86,7 +87,7 @@ const Upgrade: React.FC = () => {
     } catch {
       /* non-fatal — localStorage default already keeps them on rookie */
     }
-    navigate('/');
+    safeBack(navigate);
   };
 
   if (loadingAuth) {
@@ -115,7 +116,7 @@ const Upgrade: React.FC = () => {
           Sign in / Register
         </button>
         <button
-          onClick={() => navigate('/')}
+          onClick={() => safeBack(navigate)}
           className="mt-3 text-sm text-[#6B7280] hover:text-[#00A8E8] transition-colors"
         >
           Back to app
@@ -239,7 +240,7 @@ const Upgrade: React.FC = () => {
 
         <div className="text-center mt-8">
           <button
-            onClick={() => navigate('/')}
+            onClick={() => safeBack(navigate)}
             className="text-sm text-[#6B7280] hover:text-[#00A8E8] transition-colors"
           >
             ← Back to app

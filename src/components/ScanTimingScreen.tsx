@@ -56,6 +56,9 @@ const JPEG_QUALITY = 0.7;
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const IMAGE_ACCEPT = 'image/*,.png,.jpg,.jpeg,.webp,.heic,.heif';
 const SUPPORTED_IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.heic', '.heif'];
+const FILE_PICKER_ACTIVE_KEY = 'onlyfast_file_picker_active';
+const FILE_PICKER_STARTED_AT_KEY = 'onlyfast_file_picker_started_at';
+const FILE_PICKER_ACTIVE_MS = 2 * 60 * 1000;
 const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
@@ -154,6 +157,17 @@ const fileHasSupportedImageType = (file: File): boolean => {
   return Boolean(getImageExtension(file));
 };
 
+const readStoredFilePickerActive = (): boolean => {
+  try {
+    const active = localStorage.getItem(FILE_PICKER_ACTIVE_KEY) === 'true';
+    const startedAt = Number(localStorage.getItem(FILE_PICKER_STARTED_AT_KEY) || 0);
+    if (!active || !Number.isFinite(startedAt) || Date.now() - startedAt >= FILE_PICKER_ACTIVE_MS) return false;
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const ScanTimingScreen: React.FC<Props> = ({
   user,
   currentSetupName,
@@ -187,8 +201,22 @@ const ScanTimingScreen: React.FC<Props> = ({
     isPickingFileRef.current = active;
     try {
       (window as any).__onlyfastFilePickerOpen = active;
+      (window as any).__onlyfastFilePickerStartedAt = active ? Date.now() : null;
     } catch {
       // Ignore WebView globals that cannot be written.
+    }
+    try {
+      if (active) {
+        localStorage.setItem(FILE_PICKER_ACTIVE_KEY, 'true');
+        localStorage.setItem(FILE_PICKER_STARTED_AT_KEY, String(Date.now()));
+        // eslint-disable-next-line no-console
+        console.log('file picker active set');
+      } else {
+        localStorage.removeItem(FILE_PICKER_ACTIVE_KEY);
+        localStorage.removeItem(FILE_PICKER_STARTED_AT_KEY);
+      }
+    } catch {
+      // Ignore storage failures in restricted WebViews.
     }
   }, []);
 
@@ -211,6 +239,16 @@ const ScanTimingScreen: React.FC<Props> = ({
   }, [setFilePickingActive]);
 
   useEffect(() => {
+    if (readStoredFilePickerActive()) {
+      isPickingFileRef.current = true;
+      try {
+        (window as any).__onlyfastFilePickerOpen = true;
+      } catch {
+        // Ignore WebView globals that cannot be written.
+      }
+      setUploadStatus('Opening photo picker');
+    }
+
     const handlePickerReturn = () => {
       if (!isPickingFileRef.current) return;
       window.setTimeout(() => {
@@ -221,7 +259,6 @@ const ScanTimingScreen: React.FC<Props> = ({
         setErrorDetail(null);
         setErrorStage('no-file-selected');
         setSelectedFileInfo(null);
-        setFilePickingActive(false);
       }, 1200);
     };
 
@@ -235,7 +272,6 @@ const ScanTimingScreen: React.FC<Props> = ({
     return () => {
       window.removeEventListener('focus', handlePickerReturn);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      setFilePickingActive(false);
     };
   }, [setFilePickingActive]);
 
@@ -632,6 +668,8 @@ const ScanTimingScreen: React.FC<Props> = ({
   };
 
   const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    // eslint-disable-next-line no-console
+    console.log('file input change fired');
     setUploadStatus('Returned from photo picker');
     pickerChangeReceivedRef.current = true;
     const f = e.target.files?.[0];
@@ -646,6 +684,8 @@ const ScanTimingScreen: React.FC<Props> = ({
       e.target.value = '';
       return;
     }
+    // eslint-disable-next-line no-console
+    console.log('selected file received');
     try {
       await handleFile(f);
     } finally {

@@ -4,14 +4,12 @@ import { User } from '@supabase/supabase-js';
 import RaceScheduleForm, { RaceEntry } from './RaceScheduleForm';
 import RaceScheduleExport from './RaceScheduleExport';
 import RookieAdSlot from './RookieAdSlot';
+import { sortScheduleEntriesByDate } from '@/lib/scheduleSelection';
 
 interface RaceScheduleProps {
   user: User | null;
   onSignInClick: () => void;
 }
-
-const sortByDate = (rows: RaceEntry[]) =>
-  [...rows].sort((a, b) => (a.race_date < b.race_date ? -1 : a.race_date > b.race_date ? 1 : 0));
 
 const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick }) => {
   const [races, setRaces] = useState<RaceEntry[]>([]);
@@ -34,7 +32,7 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick }) => {
         .eq('user_id', user.id)
         .order('race_date', { ascending: true });
       if (error) throw error;
-      setRaces(sortByDate((data || []).map((r: any) => ({
+      setRaces(sortScheduleEntriesByDate((data || []).map((r: any) => ({
         id: r.id,
         race_date: r.race_date,
         track: r.track || '',

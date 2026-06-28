@@ -125,6 +125,22 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
     setSaving(false);
   };
 
+  const readFunctionError = async (error: any): Promise<string> => {
+    const context = error?.context;
+    if (context && typeof context.clone === 'function') {
+      try {
+        const body = await context.clone().json();
+        if (body?.error) return String(body.error);
+      } catch {
+        try {
+          const text = await context.clone().text();
+          if (text) return text;
+        } catch {/* ignore */}
+      }
+    }
+    return error?.message || 'Unable to open billing portal. Please try again.';
+  };
+
   // Open the Stripe Billing Portal so the user can manage / cancel.
   const handleManageBilling = async () => {
     setSubError('');
@@ -140,7 +156,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
       const { data, error } = await supabase.functions.invoke('create-billing-portal-session', {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      if (error) throw error;
+      if (error) {
+        throw new Error(await readFunctionError(error));
+      }
       const url = (data as any)?.url;
       if (!url) {
         throw new Error((data as any)?.error || 'Could not open the billing portal.');

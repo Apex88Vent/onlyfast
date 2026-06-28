@@ -12,6 +12,7 @@ import Upgrade from "./pages/Upgrade";
 import SubscriptionSuccess from "./pages/SubscriptionSuccess";
 import OnboardingPreview from "./pages/OnboardingPreview";
 import RookieAdSlotPreview from "./pages/RookieAdSlotPreview";
+import SafeBackHandler from "./components/SafeBackHandler";
 
 const queryClient = new QueryClient();
 
@@ -22,6 +23,7 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
+          <SafeBackHandler />
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/account" element={<Index />} />

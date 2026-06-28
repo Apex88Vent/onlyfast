@@ -19,6 +19,13 @@ import TimingDataDisplay, { TimingData } from './TimingDataDisplay';
 import PartsReference from './PartsReference';
 import RaceSchedule from './RaceSchedule';
 import HomeLanding, { HomeAction } from './HomeLanding';
+import {
+  daysFromToday,
+  getRaceWeekendScheduleSelection,
+  sortScheduleEntriesByDate,
+  type ScheduleRaceEntry,
+} from '@/lib/scheduleSelection';
+import { SAFE_BACK_DASHBOARD_EVENT, consumePendingSafeBackDashboardView } from '@/lib/safeBack';
 
 import {
   enqueue as enqueuePending,
@@ -77,10 +84,31 @@ const TAB_LABELS: Record<SetupType, { full: string; short: string }> = {
 const ALL_SLOTS: SetupType[] = ['base', 'heat', 'main', 'extra1', 'extra2', 'extra3'];
 const DEFAULT_SESSION_SLOTS: SetupType[] = ['base', 'heat', 'main'];
 const MAX_SESSIONS = 6;
+const FILE_PICKER_ACTIVE_KEY = 'onlyfast_file_picker_active';
+const FILE_PICKER_STARTED_AT_KEY = 'onlyfast_file_picker_started_at';
+const FILE_PICKER_ACTIVE_MS = 2 * 60 * 1000;
 
 const isOnlyFastFilePickerOpen = (): boolean => {
   try {
-    return Boolean((window as any).__onlyfastFilePickerOpen);
+    const globalActive = Boolean((window as any).__onlyfastFilePickerOpen);
+    const storedActive = localStorage.getItem(FILE_PICKER_ACTIVE_KEY) === 'true';
+    const startedAtRaw =
+      localStorage.getItem(FILE_PICKER_STARTED_AT_KEY) ||
+      String((window as any).__onlyfastFilePickerStartedAt || '');
+    const startedAt = Number(startedAtRaw);
+
+    if (!globalActive && !storedActive) return false;
+    if (!Number.isFinite(startedAt) || Date.now() - startedAt >= FILE_PICKER_ACTIVE_MS) {
+      try {
+        localStorage.removeItem(FILE_PICKER_ACTIVE_KEY);
+        localStorage.removeItem(FILE_PICKER_STARTED_AT_KEY);
+        (window as any).__onlyfastFilePickerOpen = false;
+        (window as any).__onlyfastFilePickerStartedAt = null;
+      } catch {/* ignore */}
+      return false;
+    }
+
+    return true;
   } catch {
     return false;
   }
@@ -383,6 +411,11 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
   const saveCurrentRoute = useCallback(() => {
     if (!stateLoaded || !resumeAttempted) return;
+    if (isOnlyFastFilePickerOpen()) {
+      // eslint-disable-next-line no-console
+      console.log('route reset blocked', { source: 'saveCurrentRoute' });
+      return;
+    }
     writeSavedDashboardRoute(buildCurrentRoute());
   }, [buildCurrentRoute, resumeAttempted, stateLoaded]);
 
@@ -485,7 +518,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       try {
         const { data } = await supabase
           .from('race_schedule')
-          .select('id,race_date,track,finishing_position')
+          .select('id,race_date,track,organization,finishing_position')
           .eq('user_id', user.id)
           .order('race_date', { ascending: true })
           .limit(20);
@@ -632,6 +665,23 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   }, []);
 
   useEffect(() => {
+    const applySafeBackView = (view: unknown) => {
+      if (isDashboardView(view)) {
+        setActiveView(view);
+      }
+    };
+
+    applySafeBackView(consumePendingSafeBackDashboardView());
+
+    const handler = (e: Event) => {
+      applySafeBackView((e as CustomEvent).detail?.view);
+    };
+
+    window.addEventListener(SAFE_BACK_DASHBOARD_EVENT, handler);
+    return () => window.removeEventListener(SAFE_BACK_DASHBOARD_EVENT, handler);
+  }, []);
+
+  useEffect(() => {
     const clearIdleTimer = () => {
       if (idleTimerRef.current) {
         clearTimeout(idleTimerRef.current);
@@ -639,8 +689,17 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       }
     };
 
+    const blockForFilePicker = (source: string) => {
+      if (!isOnlyFastFilePickerOpen()) return false;
+      // eslint-disable-next-line no-console
+      console.log(source.includes('resume') || source.includes('focus') || source.includes('visibility') || source.includes('pageshow')
+        ? 'app resume/focus skipped because picker is active'
+        : 'route reset blocked', { source });
+      return true;
+    };
+
     const sendHome = () => {
-      if (isOnlyFastFilePickerOpen()) return;
+      if (blockForFilePicker('sendHome')) return;
       setActiveView('home');
     };
 
@@ -650,13 +709,13 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     };
 
     const markActivity = () => {
-      if (isOnlyFastFilePickerOpen()) return;
+      if (blockForFilePicker('markActivity')) return;
       lastActivityRef.current = Date.now();
       scheduleIdleTimer();
     };
 
     const handleResume = () => {
-      if (isOnlyFastFilePickerOpen()) {
+      if (blockForFilePicker('resume/focus')) {
         lastActivityRef.current = Date.now();
         scheduleIdleTimer();
         return;
@@ -670,7 +729,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     };
 
     const handleVisibilityChange = () => {
-      if (isOnlyFastFilePickerOpen()) {
+      if (blockForFilePicker('visibilitychange')) {
         if (document.visibilityState === 'visible') scheduleIdleTimer();
         return;
       }
@@ -685,6 +744,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     events.forEach(eventName => window.addEventListener(eventName, markActivity, { passive: true }));
     window.addEventListener('focus', handleResume);
     window.addEventListener('blur', markActivity);
+    window.addEventListener('pageshow', handleResume);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     scheduleIdleTimer();
 
@@ -693,6 +753,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       events.forEach(eventName => window.removeEventListener(eventName, markActivity));
       window.removeEventListener('focus', handleResume);
       window.removeEventListener('blur', markActivity);
+      window.removeEventListener('pageshow', handleResume);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
@@ -710,10 +771,21 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     if (!stateLoaded || !resumeAttempted) return;
 
     const saveOnExit = () => {
-      if (!isOnlyFastFilePickerOpen()) saveCurrentRoute();
+      if (isOnlyFastFilePickerOpen()) {
+        // eslint-disable-next-line no-console
+        console.log('route reset blocked', { source: 'saveOnExit' });
+        return;
+      }
+      saveCurrentRoute();
     };
     const saveOnVisibilityChange = () => {
-      if (document.visibilityState !== 'visible' && !isOnlyFastFilePickerOpen()) saveCurrentRoute();
+      if (document.visibilityState === 'visible') return;
+      if (isOnlyFastFilePickerOpen()) {
+        // eslint-disable-next-line no-console
+        console.log('route reset blocked', { source: 'saveOnVisibilityChange' });
+        return;
+      }
+      saveCurrentRoute();
     };
 
     document.addEventListener('visibilitychange', saveOnVisibilityChange);
@@ -1901,12 +1973,25 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
     const finish = (view: DashboardView, tab?: SetupType) => {
       if (cancelled) return;
+      if (isOnlyFastFilePickerOpen()) {
+        // eslint-disable-next-line no-console
+        console.log('route reset blocked', { source: 'restoreSavedRoute.finish', view, tab });
+        setResumeAttempted(true);
+        return;
+      }
       if (tab) setActiveTab(tab);
       setActiveView(view);
       setResumeAttempted(true);
     };
 
     const restoreSavedRoute = async () => {
+      if (isOnlyFastFilePickerOpen()) {
+        // eslint-disable-next-line no-console
+        console.log('route reset blocked', { source: 'restoreSavedRoute' });
+        setResumeAttempted(true);
+        return;
+      }
+
       const savedRoute = readSavedDashboardRoute();
       if (!savedRoute || Date.now() - savedRoute.timestamp >= IDLE_HOME_TIMEOUT_MS) {
         finish('home');
@@ -1978,6 +2063,11 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
   useEffect(() => {
     if (activeView !== 'setup') return;
+    if (isOnlyFastFilePickerOpen()) {
+      // eslint-disable-next-line no-console
+      console.log('route reset blocked', { source: 'activeTabCorrection' });
+      return;
+    }
     if (orderedSessions.length > 0 && !orderedSessions.includes(activeTab)) {
       setActiveTab(orderedSessions[0]);
     }
@@ -2034,10 +2124,28 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       })),
     };
   })();
-  const currentWeekend = activeWeekend || lastOpenedWeekend;
-  const today = new Date().toISOString().split('T')[0];
-  const upcomingEvents = scheduleRows
-    .filter(r => r.race_date >= today && r.track)
+  const scheduleWeekendSelection = getRaceWeekendScheduleSelection(scheduleRows);
+  const defaultWeekendSessions = [
+    { label: 'Hot Laps', status: 'not-started' as const },
+    { label: 'Heat', status: 'not-started' as const },
+    { label: 'Main', status: 'not-started' as const },
+  ];
+  const currentWeekend = scheduleWeekendSelection
+    ? {
+        trackName: scheduleWeekendSelection.race.track || '',
+        date: scheduleWeekendSelection.race.race_date || '',
+        sessions:
+          (scheduleWeekendSelection.mode === 'current'
+            ? (activeWeekend?.sessions || lastOpenedWeekend?.sessions)
+            : undefined) || defaultWeekendSessions,
+      }
+    : activeWeekend || lastOpenedWeekend;
+  const currentWeekendTitle = scheduleWeekendSelection?.title;
+  const upcomingEvents = sortScheduleEntriesByDate(scheduleRows)
+    .filter(r => {
+      const days = daysFromToday(r.race_date);
+      return days !== null && days >= 0 && r.track;
+    })
     .slice(0, 3)
     .map(r => ({ id: r.id, track: r.track, date: r.race_date }));
   const nextEvent = upcomingEvents[0] || null;
@@ -2123,9 +2231,85 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     setActiveView('saved');
   };
 
+  const setupMatchesScheduleRace = (setup: SetupState | undefined, race: ScheduleRaceEntry) => {
+    const track = (race.track || '').trim().toLowerCase();
+    if (!setup || !track || !race.race_date) return false;
+    return setup.raceDate === race.race_date && setup.trackName.trim().toLowerCase() === track;
+  };
+
+  const openScheduledRaceWeekend = async () => {
+    const race = scheduleWeekendSelection?.race;
+    const track = (race?.track || '').trim();
+    const raceDate = race?.race_date || '';
+    if (!race || !track || !raceDate) {
+      setActiveView('schedule');
+      return;
+    }
+
+    const currentMatch = ALL_SLOTS.find(t => setupMatchesScheduleRace(setups[t], race));
+    if (currentMatch) {
+      setActiveTab(currentMatch);
+      setActiveView('setup');
+      return;
+    }
+
+    if (user) {
+      try {
+        const { data } = await supabase
+          .from('race_setups')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('race_date', raceDate)
+          .eq('track_name', track)
+          .order('updated_at', { ascending: false })
+          .order('created_at', { ascending: false })
+          .limit(20);
+        const existing = (data || []).find((row: any) =>
+          row.setup_type !== 'base_template' &&
+          !String(row.setup_name || '').trim().toUpperCase().startsWith('[BASE TEMPLATE]')
+        );
+        if (existing) {
+          await handleLoadSetup(existing);
+          return;
+        }
+      } catch {
+        // Fall through to a local prefilled setup if lookup fails.
+      }
+    }
+
+    const prefilled = emptyAllSetups();
+    DEFAULT_SESSION_SLOTS.forEach(t => {
+      prefilled[t] = {
+        ...prefilled[t],
+        trackName: track,
+        raceDate,
+        raceClass: selectedCar,
+      };
+    });
+    setSetups(prefilled);
+    setSavedMeta({ name: undefined, ids: {} });
+    setTimingDataByTab({});
+    setSessionLabels({});
+    setSessionOrders({});
+    setDeletedSessionSlots({});
+    setAddedSessionSlots({});
+    setActiveTab('base');
+    setActiveView('setup');
+  };
+
   const handleHomeAction = async (action: HomeAction) => {
     if (action === 'new-setup') {
       handleNewSetupClick();
+      return;
+    }
+
+    if (action === 'previous-weekend') {
+      await openLastSavedSetup();
+      return;
+    }
+
+    if (action === 'next-race-weekend') {
+      await openScheduledRaceWeekend();
       return;
     }
 
@@ -2262,6 +2446,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
             carNumber={carNumber}
             nextEvent={nextEvent}
             currentWeekend={currentWeekend}
+            currentWeekendTitle={currentWeekendTitle}
             performanceStats={performanceStats}
             upcomingEvents={upcomingEvents}
             middleSlot={<RookieAdSlot placement="home_middle" user={user} />}
@@ -2276,7 +2461,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
             <RookieAdSlot placement="setup_dashboard_bottom" user={user} />
           </div>
         ) : activeView === 'todo' ? (
-          <TodoList variant="page" />
+          <TodoList user={user} variant="page" />
         ) : activeView === 'parts' ? (
           <PartsReference user={user} onSignInClick={onSignInClick} />
         ) : activeView === 'schedule' ? (
