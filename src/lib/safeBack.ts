@@ -92,6 +92,11 @@ export const recordSafeBackTarget = (target: SafeBackTarget) => {
 export const safeBack = (navigate: NavigateFunction) => {
   const current = currentTarget();
 
+  if (isHomeTarget(current)) {
+    armSafeBackGuard();
+    return;
+  }
+
   while (internalStack.length && targetsMatch(internalStack[internalStack.length - 1], current)) {
     internalStack.pop();
   }

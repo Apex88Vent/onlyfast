@@ -32,12 +32,19 @@ const SafeBackHandler: React.FC = () => {
       }, 0);
     };
 
+    const handleNativeBack = (event: Event) => {
+      event.preventDefault();
+      safeBack(navigate);
+    };
+
     window.addEventListener('onlyfast-view-changed', handleDashboardView);
     window.addEventListener('popstate', handlePopState);
+    document.addEventListener('backbutton', handleNativeBack);
 
     return () => {
       window.removeEventListener('onlyfast-view-changed', handleDashboardView);
       window.removeEventListener('popstate', handlePopState);
+      document.removeEventListener('backbutton', handleNativeBack);
     };
   }, [navigate]);
 
