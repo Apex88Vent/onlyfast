@@ -442,7 +442,7 @@ export function checkSavePermission(ctx: SavePermissionContext): SavePermission 
           allowed: false,
           reason: 'car_type_locked',
           upgradeText:
-            'Pro accounts are limited to one racecar type. Upgrade to Teams to save setups for multiple car types.',
+            'Pro is limited to one car class. Upgrade to Team to manage multiple car classes.',
         };
       }
       return {

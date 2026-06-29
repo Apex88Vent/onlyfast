@@ -222,10 +222,9 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
           )
         );
       } catch {
-        // Fall back to locally-loaded templates if the lookup fails.
-        existingCarTypes = templates
-          .map((t: any) => (t.race_class || '').trim())
-          .filter(Boolean);
+        setMessage('Could not verify your saved car classes. Please try again.');
+        setTimeout(() => setMessage(''), 5000);
+        return;
       }
 
       const perm = checkSavePermission({

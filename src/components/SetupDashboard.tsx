@@ -1189,8 +1189,12 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
           }
         }
       } catch {
-        // Never block a legitimate save due to a transient lookup error —
-        // fall through and let the save proceed.
+        if (!silent) {
+          setSaveMessage('Could not verify your saved car classes. Please try again.');
+          setTimeout(() => setSaveMessage(''), 5000);
+        }
+        setSaving(false);
+        return null;
       }
     }
 
