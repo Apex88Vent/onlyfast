@@ -220,7 +220,15 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
     setLoading(true);
     setSuggestions('');
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) {
+        setSuggestions('Sign in to use OnlyFast Setup Assist.');
+        setLoading(false);
+        return;
+      }
       const { data, error } = await supabase.functions.invoke('get-suggestions', {
+        headers: { Authorization: `Bearer ${accessToken}` },
         body: {
           entry_handling: entryHandling,
           mid_handling: midHandling,
@@ -260,7 +268,15 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
     setWhatIfLoading(true);
     setWhatIfResponse('');
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) {
+        setWhatIfResponse('Sign in to use OnlyFast Setup Assist.');
+        setWhatIfLoading(false);
+        return;
+      }
       const { data, error } = await supabase.functions.invoke('get-suggestions', {
+        headers: { Authorization: `Bearer ${accessToken}` },
         body: {
           entry_handling: entryHandling,
           mid_handling: midHandling,

@@ -278,8 +278,16 @@ const ScanTimingScreen: React.FC<Props> = ({
   // Wraps supabase.functions.invoke in a hard frontend timeout (Promise.race).
   // If the edge function doesn't respond in time, we throw a synthetic timeout error.
   const invokeWithTimeout = async (payload: any, timeoutMs = FRONTEND_TIMEOUT_MS) => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) {
+      throw new Error('Sign in to use timing scan.');
+    }
     return await Promise.race([
-      supabase.functions.invoke('scan-timing-screen', { body: payload }),
+      supabase.functions.invoke('scan-timing-screen', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: payload,
+      }),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('FRONTEND_TIMEOUT')), timeoutMs)
       ),
