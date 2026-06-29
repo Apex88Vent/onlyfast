@@ -79,28 +79,6 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
     }
   };
 
-  // Record ONE successful assist for this race weekend. Called ONLY after a
-  // suggestion call succeeds, so failed/errored calls never consume the assist.
-  const recordAssistUsage = async (key: string) => {
-    if (!user) return;
-    try {
-      const current = await fetchAssistUsage(key);
-      await supabase
-        .from('setup_assist_usage')
-        .upsert(
-          {
-            user_id: user.id,
-            race_weekend_key: key,
-            used_count: current + 1,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'user_id,race_weekend_key' }
-        );
-    } catch {
-      /* non-fatal — usage tracking best-effort */
-    }
-  };
-
   /**
    * Gate an assist request. Returns { allowed, key } where key is the usage
    * scope to record against on success. When blocked, sets an inline notice
@@ -110,11 +88,6 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
     setAssistNotice('');
     const tier = effectiveTier();
 
-    // Pro / Team / test / admin → unlimited; never gated, no scope needed.
-    if (checkSetupAssistPermission(tier, 0).allowed && tier !== 'rookie') {
-      return { allowed: true, key: scopeKey() };
-    }
-
     // Non-signed-in users can't save race weekends and have no usage scope —
     // ask them to sign in so their single free assist can be tracked.
     if (!user) {
@@ -122,11 +95,15 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
       return { allowed: false, key: '' };
     }
 
-    // Rookie: needs a saved race weekend so the 1 free assist can be scoped.
+    // Setup Assist needs a saved race weekend so the server can enforce usage safely.
     const key = scopeKey();
     if (!key) {
       setAssistNotice('Save your race weekend first to use your free Setup Assist for it.');
       return { allowed: false, key: '' };
+    }
+
+    if (checkSetupAssistPermission(tier, 0).allowed && tier !== 'rookie') {
+      return { allowed: true, key };
     }
 
     const used = await fetchAssistUsage(key);
@@ -196,9 +173,9 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
         '',
         'Quick version:',
         '1. Open https://supabase.com/dashboard/project/thpyjvwtfvfxiufchrxn/functions',
-        '2. Deploy a new function named exactly "get-suggestions" (Verify JWT: OFF)',
+        '2. Deploy a new function named exactly "get-suggestions" (Verify JWT: ON)',
         '3. Paste the code from DEPLOY_AI_FUNCTION.md (or docs/edge-functions/get-suggestions.ts)',
-        '4. Project Settings → Edge Functions → Secrets → add OPENAI_API_KEY',
+        '4. Project Settings > Edge Functions > Secrets > add OPENAI_API_KEY and SUPABASE_SERVICE_ROLE_KEY',
         '',
         'Note: GPS / weather autofill no longer needs an edge function — it now calls Open-Meteo directly from the browser.'
       );
@@ -235,17 +212,21 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
           exit_handling: exitHandling,
           currentSetup: setupData,
           raceClass,
+          race_weekend_key: gate.key,
         }
       });
       if (data?.suggestion) {
         setSuggestions(data.suggestion);
-        // Only consume the Rookie assist AFTER a successful response.
-        if (gate.key) await recordAssistUsage(gate.key);
       } else if (error) {
         const diag = await describeInvokeError(error);
         // eslint-disable-next-line no-console
         console.error('[get-suggestions] invoke failed:', error, diag);
-        setSuggestions(buildErrorMessage(diag));
+        if (diag.status === 400 || diag.status === 429) {
+          setAssistNotice(diag.detail);
+          setSuggestions(diag.detail);
+        } else {
+          setSuggestions(buildErrorMessage(diag));
+        }
       } else {
         setSuggestions('No response from the suggestion service. Please try again.');
       }
@@ -284,17 +265,21 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
           currentSetup: setupData,
           raceClass,
           whatIfQuestion: whatIfQuestion.trim(),
+          race_weekend_key: gate.key,
         }
       });
       if (data?.suggestion) {
         setWhatIfResponse(data.suggestion);
-        // Only consume the Rookie assist AFTER a successful response.
-        if (gate.key) await recordAssistUsage(gate.key);
       } else if (error) {
         const diag = await describeInvokeError(error);
         // eslint-disable-next-line no-console
         console.error('[get-suggestions what-if] invoke failed:', error, diag);
-        setWhatIfResponse(buildErrorMessage(diag));
+        if (diag.status === 400 || diag.status === 429) {
+          setAssistNotice(diag.detail);
+          setWhatIfResponse(diag.detail);
+        } else {
+          setWhatIfResponse(buildErrorMessage(diag));
+        }
       } else {
         setWhatIfResponse('No response from the suggestion service. Please try again.');
       }

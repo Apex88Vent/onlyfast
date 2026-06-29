@@ -2,6 +2,7 @@
 // - OPENAI_API_KEY
 // - SUPABASE_URL
 // - SUPABASE_ANON_KEY
+// - SUPABASE_SERVICE_ROLE_KEY
 //
 // Recommended Supabase setting:
 // - Verify JWT: ON after the frontend is confirmed to send user JWTs correctly.
@@ -12,16 +13,17 @@
 //
 // Deploy to YOUR database project (thpyjvwtfvfxiufchrxn) by either:
 //   A) Dashboard -> Edge Functions -> Create a new function
-//        Name: get-suggestions   |   Verify JWT: OFF
+//        Name: get-suggestions   |   Verify JWT: ON
 //        Paste the contents below, click Deploy.
 //        Then add the secret: Project Settings -> Edge Functions -> Secrets
 //          OPENAI_API_KEY = sk-your-real-openai-key
+//          SUPABASE_SERVICE_ROLE_KEY = your-service-role-key
 //   B) Via CLI:
 //        mkdir -p database/functions/get-suggestions
 //        cp docs/edge-functions/get-suggestions.ts database/functions/get-suggestions/index.ts
 //        database link --project-ref thpyjvwtfvfxiufchrxn
-//        database secrets set OPENAI_API_KEY=sk-your-real-openai-key
-//        database functions deploy get-suggestions --no-verify-jwt
+//        database secrets set OPENAI_API_KEY=sk-your-real-openai-key SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+//        database functions deploy get-suggestions
 //
 // Accepts:
 //   {
@@ -42,6 +44,11 @@ export const corsHeaders = {
 };
 
 interface SetupShape { [key: string]: unknown }
+type MembershipTier = 'rookie' | 'pro' | 'team';
+interface AuthContext {
+  user: any;
+  admin: any;
+}
 
 function buildSetupDetails(currentSetup: SetupShape | null | undefined, raceClass: string): string {
   if (!currentSetup) return '';
@@ -109,10 +116,11 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-async function requireUser(req: Request): Promise<Response | null> {
+async function requireUser(req: Request): Promise<AuthContext | Response> {
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
-  if (!supabaseUrl || !supabaseAnonKey) {
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!supabaseUrl || !supabaseAnonKey || !serviceRoleKey) {
     return json({ error: 'Server auth configuration is missing.' }, 500);
   }
 
@@ -126,6 +134,119 @@ async function requireUser(req: Request): Promise<Response | null> {
   });
   const { data, error } = await authClient.auth.getUser(token);
   if (error || !data?.user) return json({ error: 'Your session is invalid. Please sign in again.' }, 401);
+
+  const admin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  return { user: data.user, admin };
+}
+
+function isResponse(value: AuthContext | Response): value is Response {
+  return value instanceof Response;
+}
+
+function normalizePlan(plan: unknown): MembershipTier | 'free' {
+  const value = String(plan || '').trim().toLowerCase();
+  if (value === 'team' || value === 'teams') return 'team';
+  if (value === 'pro') return 'pro';
+  return 'free';
+}
+
+async function resolveEffectiveTier(admin: any, user: any): Promise<MembershipTier> {
+  const email = String(user?.email || '').trim().toLowerCase();
+  const testEmail = String(Deno.env.get('TEST_ACCOUNT_EMAIL') || 'test@test.com').trim().toLowerCase();
+  const adminEmails = String(Deno.env.get('ONLYFAST_ADMIN_EMAILS') || '')
+    .split(',')
+    .map((v) => v.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (email && email === testEmail) return 'team';
+  if (email && adminEmails.includes(email)) return 'team';
+  if (user?.app_metadata?.has_admin_full_access === true) return 'team';
+  if (user?.user_metadata?.has_admin_full_access === true) return 'team';
+
+  const { data, error } = await admin
+    .from('user_subscriptions')
+    .select('plan, status')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (error || !data) return 'rookie';
+
+  const status = String(data.status || '').trim().toLowerCase();
+  if (status !== 'active' && status !== 'trialing') return 'rookie';
+
+  const plan = normalizePlan(data.plan);
+  if (plan === 'team') return 'team';
+  if (plan === 'pro') return 'pro';
+  return 'rookie';
+}
+
+async function enforceSetupAssistUsage(
+  admin: any,
+  userId: string,
+  tier: MembershipTier,
+  raceWeekendKey: string,
+): Promise<Response | null> {
+  if (tier !== 'rookie') return null;
+
+  const { data, error } = await admin
+    .from('setup_assist_usage')
+    .select('used_count')
+    .eq('user_id', userId)
+    .eq('race_weekend_key', raceWeekendKey)
+    .maybeSingle();
+
+  if (error) {
+    return json({ error: 'Could not verify your Setup Assist usage. Please try again.' }, 503);
+  }
+
+  const used = Number(data?.used_count || 0);
+  if (used >= 1) {
+    return json(
+      {
+        error: 'Rookie accounts include 1 Setup Assist per race weekend. Upgrade to Pro for unlimited Setup Assist.',
+        code: 'setup_assist_limit',
+      },
+      429,
+    );
+  }
+  return null;
+}
+
+async function recordSetupAssistUsage(
+  admin: any,
+  userId: string,
+  tier: MembershipTier,
+  raceWeekendKey: string,
+): Promise<Response | null> {
+  if (tier !== 'rookie') return null;
+
+  const { data, error: readError } = await admin
+    .from('setup_assist_usage')
+    .select('used_count')
+    .eq('user_id', userId)
+    .eq('race_weekend_key', raceWeekendKey)
+    .maybeSingle();
+  if (readError) {
+    return json({ error: 'Could not update your Setup Assist usage. Please try again.' }, 503);
+  }
+
+  const used = Number(data?.used_count || 0);
+  const { error: writeError } = await admin
+    .from('setup_assist_usage')
+    .upsert(
+      {
+        user_id: userId,
+        race_weekend_key: raceWeekendKey,
+        used_count: used + 1,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id,race_weekend_key' },
+    );
+  if (writeError) {
+    return json({ error: 'Could not update your Setup Assist usage. Please try again.' }, 503);
+  }
   return null;
 }
 
@@ -135,8 +256,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const authError = await requireUser(req);
-    if (authError) return authError;
+    const auth = await requireUser(req);
+    if (isResponse(auth)) return auth;
 
     const openaiKey = Deno.env.get('OPENAI_API_KEY');
     if (!openaiKey) {
@@ -152,7 +273,18 @@ Deno.serve(async (req) => {
       raceClass,
       communityData,
       whatIfQuestion,
+      race_weekend_key,
+      raceWeekendKey,
     } = body || {};
+
+    const raceWeekendScope = String(race_weekend_key || raceWeekendKey || '').trim();
+    if (!raceWeekendScope) {
+      return json({ error: 'Save your race weekend first to use Setup Assist.' }, 400);
+    }
+
+    const tier = await resolveEffectiveTier(auth.admin, auth.user);
+    const usageError = await enforceSetupAssistUsage(auth.admin, auth.user.id, tier, raceWeekendScope);
+    if (usageError) return usageError;
 
     const setupDetails = buildSetupDetails(currentSetup, raceClass || '');
     const communityContext = buildCommunityContext(communityData, raceClass || '');
@@ -223,11 +355,10 @@ Keep suggestions practical and specific to dirt track oval racing${classNote}. F
     });
 
     if (!aiResponse.ok) {
-      const errText = await aiResponse.text().catch(() => '');
+      await aiResponse.text().catch(() => '');
       return json(
         {
-          error: `OpenAI request failed (${aiResponse.status})`,
-          details: errText.slice(0, 500),
+          error: 'Setup Assist could not generate suggestions right now. Please try again.',
         },
         502,
       );
@@ -237,9 +368,12 @@ Keep suggestions practical and specific to dirt track oval racing${classNote}. F
     const suggestion =
       data?.choices?.[0]?.message?.content?.trim() || 'Unable to generate suggestions at this time.';
 
+    const recordError = await recordSetupAssistUsage(auth.admin, auth.user.id, tier, raceWeekendScope);
+    if (recordError) return recordError;
+
     return json({ suggestion });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return json({ error: message }, 500);
+    console.error('get-suggestions failed', error);
+    return json({ error: 'Setup Assist could not generate suggestions right now. Please try again.' }, 500);
   }
 });
