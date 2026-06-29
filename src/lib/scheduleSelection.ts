@@ -8,7 +8,7 @@ export interface ScheduleRaceEntry {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PRE_RACE_WEEKEND_WINDOW_DAYS = 2;
-const POST_RACE_WEEKEND_WINDOW_DAYS = 1;
+const POST_RACE_WEEKEND_WINDOW_DAYS = 2;
 
 export const toLocalDateOnly = (date = new Date()): Date => {
   const local = new Date(date);

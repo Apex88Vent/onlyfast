@@ -154,11 +154,6 @@ const TodoList: React.FC<TodoListProps> = ({ user, onClose, variant = 'page' }) 
     setTimeout(() => setRaceMsg(''), 2500);
   };
 
-  const markManualRaceEdit = () => {
-    setRaceWasManuallySet(true);
-    try { localStorage.setItem(RACE_MANUAL_KEY, 'true'); } catch {}
-  };
-
   const openRaceEditor = () => {
     setRaceDraft(race);
     setRaceEditOpen(true);
@@ -264,7 +259,6 @@ const TodoList: React.FC<TodoListProps> = ({ user, onClose, variant = 'page' }) 
                   type="text"
                   value={raceDraft.track}
                   onChange={(e) => {
-                    markManualRaceEdit();
                     setRaceDraft(d => ({ ...d, track: e.target.value, organization: '', scheduleId: undefined }));
                   }}
                   placeholder="e.g. Ventura Raceway"
@@ -277,7 +271,6 @@ const TodoList: React.FC<TodoListProps> = ({ user, onClose, variant = 'page' }) 
                   type="date"
                   value={raceDraft.date}
                   onChange={(e) => {
-                    markManualRaceEdit();
                     setRaceDraft(d => ({ ...d, date: e.target.value, organization: '', scheduleId: undefined }));
                   }}
                   className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-lg focus:ring-2 focus:ring-[#00A8E8] focus:border-[#00A8E8] outline-none text-sm"
