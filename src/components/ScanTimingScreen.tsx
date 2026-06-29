@@ -1,7 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, useId } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
-import { getEffectiveTier, readMembership, tierLimits } from '@/lib/membership';
 
 interface LapRow {
   lap: number;
@@ -294,57 +293,43 @@ const ScanTimingScreen: React.FC<Props> = ({
     ]);
   };
 
-  const canUseTimingUpload = async (): Promise<boolean> => {
-    if (!user) return true;
-
-    const tier = getEffectiveTier(readMembership(user.user_metadata || {}));
-    const limit = tierLimits[tier].timingUploadsPerMonth;
-    if (limit === 'unlimited') return true;
-
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
-
+  const describeInvokeError = async (
+    error: any
+  ): Promise<{ detail: string; stage: string; status?: number }> => {
+    let detail = error?.message || 'Network error calling scan-timing-screen';
+    let stage = 'transport';
+    let status: number | undefined;
     try {
-      const { data, error } = await supabase
-        .from('race_setups')
-        .select('timing_data')
-        .eq('user_id', user.id)
-        .not('timing_data', 'is', null);
-
-      if (error) throw error;
-
-      const usedThisMonth = (data || []).filter((row: any) => {
-        const scannedAt = row?.timing_data?.scanned_at;
-        if (!scannedAt) return false;
-        const scannedDate = new Date(scannedAt);
-        return !Number.isNaN(scannedDate.getTime()) && scannedDate >= startOfMonth;
-      }).length;
-
-      if (usedThisMonth >= limit) {
-        setError(`Rookie accounts include ${limit} timing scans per month. Upgrade to Pro for unlimited timing scans.`);
-        setErrorStage('timing-limit');
-        return false;
+      const ctx = error?.context;
+      if (ctx) {
+        if (typeof ctx.status === 'number') status = ctx.status;
+        if (typeof ctx.text === 'function') {
+          const txt = await ctx.text();
+          try {
+            const parsed = JSON.parse(txt);
+            if (parsed?.error) detail = String(parsed.error);
+            if (parsed?.stage) stage = String(parsed.stage);
+          } catch {
+            if (txt) detail = txt.slice(0, 300);
+          }
+        }
       }
-
-      return true;
-    } catch (err: any) {
-      setError('Could not verify your timing scan limit. Please try again.');
-      setErrorDetail(err?.message || null);
-      setErrorStage('timing-limit');
-      return false;
+    } catch {
+      /* ignore */
     }
+    return { detail, stage, status };
   };
 
-  const handleInvokeResult = (result: any, opts: { testMode?: boolean } = {}) => {
+  const handleInvokeResult = async (result: any, opts: { testMode?: boolean } = {}) => {
     const { data, error: fnErr } = result || {};
     // eslint-disable-next-line no-console
     console.log('[ScanTimingScreen] invoke returned', { fnErr, data, sentTestMode: !!opts.testMode });
     setRawResponse(data ?? { _transport_error: fnErr?.message || null });
 
     if (fnErr) {
-      setErrorStage('transport');
-      throw new Error(fnErr.message || 'Network error calling scan-timing-screen');
+      const diag = await describeInvokeError(fnErr);
+      setErrorStage(diag.stage);
+      throw new Error(diag.detail);
     }
 
     if (!data || typeof data !== 'object') {
@@ -537,11 +522,6 @@ const ScanTimingScreen: React.FC<Props> = ({
       setErrorStage('client-validation');
       return;
     }
-    if (!(await canUseTimingUpload())) {
-      setUploadStatus('Upload failed: Could not start timing scan');
-      return;
-    }
-
     try {
       setUploadStatus('Preparing screenshot');
       // eslint-disable-next-line no-console
@@ -574,7 +554,7 @@ const ScanTimingScreen: React.FC<Props> = ({
         imageBase64: compressed.base64,
         mimeType: compressed.mimeType,
       });
-      handleInvokeResult(result);
+      await handleInvokeResult(result);
       setUploadStatus('Scan complete');
       // eslint-disable-next-line no-console
       console.log('scan complete');
@@ -613,7 +593,7 @@ const ScanTimingScreen: React.FC<Props> = ({
       // eslint-disable-next-line no-console
       console.log('TEST MODE PAYLOAD', payload);
       const result = await invokeWithTimeout(payload, 15_000);
-      handleInvokeResult(result, { testMode: true });
+      await handleInvokeResult(result, { testMode: true });
     } catch (err: any) {
 
       // eslint-disable-next-line no-console

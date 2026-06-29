@@ -2,6 +2,7 @@
 // - OPENAI_API_KEY
 // - SUPABASE_URL
 // - SUPABASE_ANON_KEY
+// - SUPABASE_SERVICE_ROLE_KEY
 //
 // Recommended Supabase setting:
 // - Verify JWT: ON after the frontend is confirmed to send user JWTs correctly.
@@ -23,11 +24,11 @@
 //   1. Open: https://supabase.com/dashboard/project/thpyjvwtfvfxiufchrxn/functions
 //   2. Find the function named exactly:  scan-timing-screen
 //      (If it does not exist, click "Create a new function" and name it
-//       exactly "scan-timing-screen". Turn "Verify JWT" OFF.)
+//       exactly "scan-timing-screen". Turn "Verify JWT" ON.)
 //   3. Open the function and DELETE everything in the editor.
 //   4. Paste THIS ENTIRE FILE into the editor.
 //   5. Click "Deploy function".
-//   6. Make sure the secret OPENAI_API_KEY is set under
+//   6. Make sure OPENAI_API_KEY and SUPABASE_SERVICE_ROLE_KEY are set under
 //      Project Settings → Edge Functions → Secrets.
 //
 // ──────────────────────────────────────────────────────────────────────────
@@ -37,8 +38,8 @@
 //   supabase link --project-ref thpyjvwtfvfxiufchrxn
 //   mkdir -p supabase/functions/scan-timing-screen
 //   cp docs/edge-functions/scan-timing-screen.ts supabase/functions/scan-timing-screen/index.ts
-//   supabase secrets set OPENAI_API_KEY=sk-...    # only if not already set
-//   supabase functions deploy scan-timing-screen --no-verify-jwt
+//   supabase secrets set OPENAI_API_KEY=sk-... SUPABASE_SERVICE_ROLE_KEY=...
+//   supabase functions deploy scan-timing-screen
 //
 // ──────────────────────────────────────────────────────────────────────────
 // VERIFY DEPLOYMENT
@@ -66,6 +67,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const FUNCTION_VERSION = 'scan-v3-testmode';
 const OPENAI_TIMEOUT_MS = 30_000;
+const ROOKIE_TIMING_SCANS_PER_MONTH = 2;
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -88,10 +90,18 @@ function json(body: Record<string, unknown>, status = 200): Response {
   });
 }
 
-async function requireUser(req: Request): Promise<Response | null> {
+type MembershipTier = 'rookie' | 'pro' | 'team';
+
+interface AuthContext {
+  user: any;
+  admin: any;
+}
+
+async function requireUser(req: Request): Promise<AuthContext | Response> {
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
-  if (!supabaseUrl || !supabaseAnonKey) {
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!supabaseUrl || !supabaseAnonKey || !serviceRoleKey) {
     return json({ success: false, stage: 'auth-config', error: 'Server auth configuration is missing.' }, 500);
   }
 
@@ -106,6 +116,137 @@ async function requireUser(req: Request): Promise<Response | null> {
   const { data, error } = await authClient.auth.getUser(token);
   if (error || !data?.user) {
     return json({ success: false, stage: 'auth', error: 'Your session is invalid. Please sign in again.' }, 401);
+  }
+
+  const admin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  return { user: data.user, admin };
+}
+
+function isResponse(value: AuthContext | Response): value is Response {
+  return value instanceof Response;
+}
+
+function normalizePlan(plan: unknown): MembershipTier | 'free' {
+  const value = String(plan || '').trim().toLowerCase();
+  if (value === 'team' || value === 'teams') return 'team';
+  if (value === 'pro') return 'pro';
+  return 'free';
+}
+
+async function resolveEffectiveTier(admin: any, user: any): Promise<MembershipTier> {
+  const email = String(user?.email || '').trim().toLowerCase();
+  const testEmail = String(Deno.env.get('TEST_ACCOUNT_EMAIL') || 'test@test.com').trim().toLowerCase();
+  const adminEmails = String(Deno.env.get('ONLYFAST_ADMIN_EMAILS') || '')
+    .split(',')
+    .map((v) => v.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (email && email === testEmail) return 'team';
+  if (email && adminEmails.includes(email)) return 'team';
+  if (user?.app_metadata?.has_admin_full_access === true) return 'team';
+  if (user?.user_metadata?.has_admin_full_access === true) return 'team';
+
+  const { data, error } = await admin
+    .from('user_subscriptions')
+    .select('plan, status')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (error || !data) return 'rookie';
+
+  const status = String(data.status || '').trim().toLowerCase();
+  if (status !== 'active' && status !== 'trialing') return 'rookie';
+
+  const plan = normalizePlan(data.plan);
+  if (plan === 'team') return 'team';
+  if (plan === 'pro') return 'pro';
+  return 'rookie';
+}
+
+function usageMonthKey(now = new Date()): string {
+  const year = now.getUTCFullYear();
+  const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+}
+
+async function enforceTimingScanUsage(
+  admin: any,
+  userId: string,
+  tier: MembershipTier,
+  monthKey: string,
+): Promise<Response | null> {
+  if (tier !== 'rookie') return null;
+
+  const { data, error } = await admin
+    .from('timing_scan_usage')
+    .select('used_count')
+    .eq('user_id', userId)
+    .eq('usage_month', monthKey)
+    .maybeSingle();
+
+  if (error) {
+    return json({
+      success: false,
+      stage: 'timing-limit',
+      error: 'Could not verify your timing scan limit. Please try again.',
+    }, 503);
+  }
+
+  const used = Number(data?.used_count || 0);
+  if (used >= ROOKIE_TIMING_SCANS_PER_MONTH) {
+    return json({
+      success: false,
+      stage: 'timing-limit',
+      error: `Rookie accounts include ${ROOKIE_TIMING_SCANS_PER_MONTH} timing scans per month. Upgrade to Pro for unlimited timing scans.`,
+      code: 'timing_scan_limit',
+    }, 429);
+  }
+  return null;
+}
+
+async function recordTimingScanUsage(
+  admin: any,
+  userId: string,
+  tier: MembershipTier,
+  monthKey: string,
+): Promise<Response | null> {
+  if (tier !== 'rookie') return null;
+
+  const { data, error: readError } = await admin
+    .from('timing_scan_usage')
+    .select('used_count')
+    .eq('user_id', userId)
+    .eq('usage_month', monthKey)
+    .maybeSingle();
+  if (readError) {
+    return json({
+      success: false,
+      stage: 'timing-limit',
+      error: 'Could not update your timing scan usage. Please try again.',
+    }, 503);
+  }
+
+  const used = Number(data?.used_count || 0);
+  const { error: writeError } = await admin
+    .from('timing_scan_usage')
+    .upsert(
+      {
+        user_id: userId,
+        usage_month: monthKey,
+        used_count: used + 1,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id,usage_month' },
+    );
+
+  if (writeError) {
+    return json({
+      success: false,
+      stage: 'timing-limit',
+      error: 'Could not update your timing scan usage. Please try again.',
+    }, 503);
   }
   return null;
 }
@@ -155,8 +296,8 @@ serve(async (req: Request): Promise<Response> => {
     );
   }
 
-  const authError = await requireUser(req);
-  if (authError) return authError;
+  const auth = await requireUser(req);
+  if (isResponse(auth)) return auth;
 
   // ── Parse body ──────────────────────────────────────────────────────────
   let body: any = {};
@@ -196,6 +337,11 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   // ── Config ──────────────────────────────────────────────────────────────
+  const tier = await resolveEffectiveTier(auth.admin, auth.user);
+  const monthKey = usageMonthKey();
+  const usageError = await enforceTimingScanUsage(auth.admin, auth.user.id, tier, monthKey);
+  if (usageError) return usageError;
+
   // @ts-ignore - Deno global
   const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
   if (!OPENAI_API_KEY) {
@@ -382,6 +528,9 @@ If a field is not visible, return null (or [] / "" for arrays/strings) and list 
     parsed.positions_gained_lost =
       parsed.starting_position - parsed.finish_position;
   }
+
+  const recordError = await recordTimingScanUsage(auth.admin, auth.user.id, tier, monthKey);
+  if (recordError) return recordError;
 
   return json(
     {
