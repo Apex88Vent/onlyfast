@@ -13,6 +13,33 @@ interface SettingsModalProps {
   user: User;
 }
 
+const SUPPORT_EMAIL = 'admin@onlyfast.app';
+
+const clearDeletedAccountLocalState = (userId: string) => {
+  const shouldRemoveKey = (key: string) => (
+    key.startsWith('onlyfast_') ||
+    key.startsWith('nickname_override_') ||
+    key.startsWith('car_number_override_') ||
+    (key.startsWith('sb-') && key.endsWith('-auth-token')) ||
+    key === 'pending_plan_redirect' ||
+    key.includes(userId)
+  );
+
+  const clearStorage = (storage: Storage) => {
+    const keys: string[] = [];
+    for (let i = 0; i < storage.length; i += 1) {
+      const key = storage.key(i);
+      if (key) keys.push(key);
+    }
+    keys.forEach((key) => {
+      if (shouldRemoveKey(key)) storage.removeItem(key);
+    });
+  };
+
+  try { clearStorage(localStorage); } catch { /* ignore */ }
+  try { clearStorage(sessionStorage); } catch { /* ignore */ }
+};
+
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) => {
   const [nickname, setNickname] = useState('');
   const [carNumber, setCarNumber] = useState('');
@@ -26,6 +53,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
   const [portalLoading, setPortalLoading] = useState(false);
   // Smaller "Cancel Subscription" secondary action → confirm before acting.
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
 
   useEffect(() => {
@@ -41,6 +72,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
       setCarNumber(localCarNumber !== null ? localCarNumber : (meta.car_number || ''));
       setMessage('');
       setSubError('');
+      setDeleteError('');
+      setDeleteConfirmText('');
+      setDeleteConfirmOpen(false);
 
       // Load subscription status from public.user_subscriptions.
       setSubLoading(true);
@@ -125,7 +159,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
     setSaving(false);
   };
 
-  const readFunctionError = async (error: any): Promise<string> => {
+  const readFunctionError = async (error: any, fallback: string): Promise<string> => {
     const context = error?.context;
     if (context && typeof context.clone === 'function') {
       try {
@@ -138,7 +172,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
         } catch {/* ignore */}
       }
     }
-    return error?.message || 'Unable to open billing portal. Please try again.';
+    return error?.message || fallback;
   };
 
   // Open the Stripe Billing Portal so the user can manage / cancel.
@@ -157,7 +191,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (error) {
-        throw new Error(await readFunctionError(error));
+        throw new Error(await readFunctionError(error, 'Unable to open billing portal. Please try again.'));
       }
       const url = (data as any)?.url;
       if (!url) {
@@ -167,6 +201,45 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
     } catch (err: any) {
       setSubError(err?.message || 'Unable to open billing portal. Please try again.');
       setPortalLoading(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText.trim() !== 'DELETE') {
+      setDeleteError('Type DELETE to confirm account deletion.');
+      return;
+    }
+
+    setDeleteLoading(true);
+    setDeleteError('');
+    setMessage('');
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      if (!accessToken) {
+        throw new Error('You must be logged in to delete your account.');
+      }
+
+      const { data, error } = await supabase.functions.invoke('delete-account', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      if (error) {
+        throw new Error(await readFunctionError(error, 'Unable to delete your account. Please try again.'));
+      }
+      if (!(data as any)?.ok) {
+        throw new Error((data as any)?.error || 'Unable to delete your account. Please try again.');
+      }
+
+      try { await supabase.auth.signOut(); } catch { /* auth user may already be deleted */ }
+      clearDeletedAccountLocalState(user.id);
+      setDeleteConfirmOpen(false);
+      setMessage('Account deleted. Returning to OnlyFast...');
+      setTimeout(() => { window.location.assign('/'); }, 300);
+    } catch (err: any) {
+      setDeleteError(err?.message || `Unable to delete your account. Please contact ${SUPPORT_EMAIL}.`);
+      setDeleteLoading(false);
     }
   };
 
@@ -346,7 +419,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
           <section>
             <h3 className="text-sm font-bold text-[#1A1B23] mb-2">Support</h3>
             <a
-              href="mailto:admin@onlyfast.app"
+              href={`mailto:${SUPPORT_EMAIL}`}
               className="block rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-3 text-sm font-semibold text-[#00A8E8] hover:border-[#00A8E8]/40 hover:bg-[#00A8E8]/5 transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
             >
               Contact Support
@@ -355,8 +428,89 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
               For account, billing, privacy, or data requests.
             </p>
           </section>
+
+          <section>
+            <h3 className="text-sm font-bold text-[#1A1B23] mb-2">Account deletion</h3>
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+              <p className="text-xs text-red-800">
+                Permanently delete your OnlyFast account and app data. This does not cancel any
+                active Stripe subscription, so manage billing first or contact support.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteError('');
+                  setDeleteConfirmText('');
+                  setDeleteConfirmOpen(true);
+                }}
+                className="mt-3 rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500"
+              >
+                Delete Account
+              </button>
+            </div>
+          </section>
         </div>
       </div>
+
+      {/* DELETE ACCOUNT CONFIRMATION */}
+      {deleteConfirmOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-label="Delete account">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <h4 className="text-lg font-bold text-[#1A1B23] mb-2">Delete your account?</h4>
+            <p className="text-sm text-[#374151]">
+              This permanently deletes your OnlyFast account, saved setups, schedule, parts,
+              shared setup links, and usage records.
+            </p>
+            <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Deleting your account does not cancel an active Stripe subscription. Manage or
+              cancel billing first, or contact {SUPPORT_EMAIL}.
+            </p>
+            <label htmlFor="delete-account-confirm" className="mt-4 block text-xs font-semibold text-[#6B7280]">
+              Type DELETE to confirm
+            </label>
+            <input
+              id="delete-account-confirm"
+              type="text"
+              value={deleteConfirmText}
+              onChange={(e) => {
+                setDeleteConfirmText(e.target.value);
+                if (deleteError) setDeleteError('');
+              }}
+              disabled={deleteLoading}
+              className="mt-1 w-full rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-2 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500 disabled:opacity-60"
+              autoComplete="off"
+            />
+            {deleteError && (
+              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                {deleteError}
+              </div>
+            )}
+            <div className="flex justify-end gap-2 mt-5">
+              <button
+                type="button"
+                onClick={() => {
+                  if (deleteLoading) return;
+                  setDeleteConfirmOpen(false);
+                  setDeleteConfirmText('');
+                  setDeleteError('');
+                }}
+                disabled={deleteLoading}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-[#6B7280] hover:bg-[#F5F5F7] transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8] disabled:opacity-50"
+              >
+                Keep Account
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={deleteLoading || deleteConfirmText.trim() !== 'DELETE'}
+                className="px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 hover:bg-red-700 text-white transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-red-500"
+              >
+                {deleteLoading ? 'Deleting...' : 'Delete Account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* CANCEL SUBSCRIPTION CONFIRMATION */}
       {cancelConfirmOpen && (
