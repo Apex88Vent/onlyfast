@@ -18,6 +18,9 @@ import { isTestAccount, ENABLE_TEST_ACCOUNT_RESET, resetTestAccountData } from '
 const FILE_PICKER_ACTIVE_KEY = 'onlyfast_file_picker_active';
 const FILE_PICKER_STARTED_AT_KEY = 'onlyfast_file_picker_started_at';
 const FILE_PICKER_ACTIVE_MS = 2 * 60 * 1000;
+const devLog = (...args: unknown[]) => {
+  if (import.meta.env.DEV) console.log(...args);
+};
 
 const isOnlyFastFilePickerOpen = (): boolean => {
   try {
@@ -115,8 +118,7 @@ const AppLayout: React.FC = () => {
 
   useEffect(() => {
     if (!showSplash || !isOnlyFastFilePickerOpen()) return;
-    // eslint-disable-next-line no-console
-    console.log('route reset blocked', { source: 'splash' });
+    devLog('route reset blocked', { source: 'splash' });
     setShowSplash(false);
   }, [showSplash]);
 
@@ -247,8 +249,7 @@ const AppLayout: React.FC = () => {
     if (!authChecked) return;
 
     if (isOnlyFastFilePickerOpen()) {
-      // eslint-disable-next-line no-console
-      console.log('route reset blocked', { source: 'howOnlyFastWorksGate' });
+      devLog('route reset blocked', { source: 'howOnlyFastWorksGate' });
       setShowHowOnlyFastWorks(false);
       setHasCheckedHowOnlyFastWorks(true);
       return;

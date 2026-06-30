@@ -88,6 +88,10 @@ const FILE_PICKER_ACTIVE_KEY = 'onlyfast_file_picker_active';
 const FILE_PICKER_STARTED_AT_KEY = 'onlyfast_file_picker_started_at';
 const FILE_PICKER_ACTIVE_MS = 2 * 60 * 1000;
 
+const devLog = (...args: unknown[]) => {
+  if (import.meta.env.DEV) console.log(...args);
+};
+
 const isOnlyFastFilePickerOpen = (): boolean => {
   try {
     const globalActive = Boolean((window as any).__onlyfastFilePickerOpen);
@@ -413,8 +417,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   const saveCurrentRoute = useCallback(() => {
     if (!stateLoaded || !resumeAttempted) return;
     if (isOnlyFastFilePickerOpen()) {
-      // eslint-disable-next-line no-console
-      console.log('route reset blocked', { source: 'saveCurrentRoute' });
+      devLog('route reset blocked', { source: 'saveCurrentRoute' });
       return;
     }
     writeSavedDashboardRoute(buildCurrentRoute());
@@ -692,8 +695,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
     const blockForFilePicker = (source: string) => {
       if (!isOnlyFastFilePickerOpen()) return false;
-      // eslint-disable-next-line no-console
-      console.log(source.includes('resume') || source.includes('focus') || source.includes('visibility') || source.includes('pageshow')
+      devLog(source.includes('resume') || source.includes('focus') || source.includes('visibility') || source.includes('pageshow')
         ? 'app resume/focus skipped because picker is active'
         : 'route reset blocked', { source });
       return true;
@@ -773,8 +775,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
     const saveOnExit = () => {
       if (isOnlyFastFilePickerOpen()) {
-        // eslint-disable-next-line no-console
-        console.log('route reset blocked', { source: 'saveOnExit' });
+        devLog('route reset blocked', { source: 'saveOnExit' });
         return;
       }
       saveCurrentRoute();
@@ -782,8 +783,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     const saveOnVisibilityChange = () => {
       if (document.visibilityState === 'visible') return;
       if (isOnlyFastFilePickerOpen()) {
-        // eslint-disable-next-line no-console
-        console.log('route reset blocked', { source: 'saveOnVisibilityChange' });
+        devLog('route reset blocked', { source: 'saveOnVisibilityChange' });
         return;
       }
       saveCurrentRoute();
@@ -2003,8 +2003,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     const finish = (view: DashboardView, tab?: SetupType) => {
       if (cancelled) return;
       if (isOnlyFastFilePickerOpen()) {
-        // eslint-disable-next-line no-console
-        console.log('route reset blocked', { source: 'restoreSavedRoute.finish', view, tab });
+        devLog('route reset blocked', { source: 'restoreSavedRoute.finish', view, tab });
         setResumeAttempted(true);
         return;
       }
@@ -2015,8 +2014,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
     const restoreSavedRoute = async () => {
       if (isOnlyFastFilePickerOpen()) {
-        // eslint-disable-next-line no-console
-        console.log('route reset blocked', { source: 'restoreSavedRoute' });
+        devLog('route reset blocked', { source: 'restoreSavedRoute' });
         setResumeAttempted(true);
         return;
       }
@@ -2093,8 +2091,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   useEffect(() => {
     if (activeView !== 'setup') return;
     if (isOnlyFastFilePickerOpen()) {
-      // eslint-disable-next-line no-console
-      console.log('route reset blocked', { source: 'activeTabCorrection' });
+      devLog('route reset blocked', { source: 'activeTabCorrection' });
       return;
     }
     if (orderedSessions.length > 0 && !orderedSessions.includes(activeTab)) {

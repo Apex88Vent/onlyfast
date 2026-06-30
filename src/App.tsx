@@ -13,6 +13,7 @@ import SubscriptionSuccess from "./pages/SubscriptionSuccess";
 import OnboardingPreview from "./pages/OnboardingPreview";
 import RookieAdSlotPreview from "./pages/RookieAdSlotPreview";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import DeleteAccount from "./pages/DeleteAccount";
 import SafeBackHandler from "./components/SafeBackHandler";
 
 const queryClient = new QueryClient();
@@ -32,10 +33,13 @@ const App = () => (
             <Route path="/pricing" element={<Upgrade />} />
             <Route path="/checkout" element={<Upgrade />} />
             <Route path="/subscription/success" element={<SubscriptionSuccess />} />
-            <Route path="/onboarding-preview" element={<OnboardingPreview />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+            <Route path="/delete-account" element={<DeleteAccount />} />
             {import.meta.env.DEV && (
-              <Route path="/rookie-ad-slot-preview" element={<RookieAdSlotPreview />} />
+              <>
+                <Route path="/onboarding-preview" element={<OnboardingPreview />} />
+                <Route path="/rookie-ad-slot-preview" element={<RookieAdSlotPreview />} />
+              </>
             )}
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="*" element={<NotFound />} />

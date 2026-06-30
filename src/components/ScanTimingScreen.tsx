@@ -67,6 +67,18 @@ const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
   '.heif': 'image/heif',
 };
 
+const devLog = (...args: unknown[]) => {
+  if (import.meta.env.DEV) console.log(...args);
+};
+
+const devWarn = (...args: unknown[]) => {
+  if (import.meta.env.DEV) console.warn(...args);
+};
+
+const devError = (...args: unknown[]) => {
+  if (import.meta.env.DEV) console.error(...args);
+};
+
 interface Props {
   user: User | null;
   currentSetupName?: string;
@@ -144,8 +156,7 @@ async function compressImage(
     const parsed = parseImageDataUrl(dataUrl, 'image/jpeg');
     return { dataUrl, base64: parsed.base64, mimeType: parsed.mimeType, width: w, height: h, bytes: parsed.bytes };
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.warn('[ScanTimingScreen] Preview/compression failed; scanning original image instead.', err);
+    devWarn('[ScanTimingScreen] Preview/compression failed; scanning original image instead.', err);
     const parsed = parseImageDataUrl(dataUrlOrig, fallbackMimeType);
     return { dataUrl: dataUrlOrig, base64: parsed.base64, mimeType: parsed.mimeType, width: 0, height: 0, bytes: parsed.bytes };
   }
@@ -209,8 +220,7 @@ const ScanTimingScreen: React.FC<Props> = ({
       if (active) {
         localStorage.setItem(FILE_PICKER_ACTIVE_KEY, 'true');
         localStorage.setItem(FILE_PICKER_STARTED_AT_KEY, String(Date.now()));
-        // eslint-disable-next-line no-console
-        console.log('file picker active set');
+        devLog('file picker active set');
       } else {
         localStorage.removeItem(FILE_PICKER_ACTIVE_KEY);
         localStorage.removeItem(FILE_PICKER_STARTED_AT_KEY);
@@ -329,8 +339,7 @@ const ScanTimingScreen: React.FC<Props> = ({
 
   const handleInvokeResult = async (result: any, opts: { testMode?: boolean } = {}) => {
     const { data, error: fnErr } = result || {};
-    // eslint-disable-next-line no-console
-    console.log('[ScanTimingScreen] invoke returned', { fnErr, data, sentTestMode: !!opts.testMode });
+    devLog('[ScanTimingScreen] invoke returned', { fnErr, data, sentTestMode: !!opts.testMode });
     setRawResponse(data ?? { _transport_error: fnErr?.message || null });
 
     if (fnErr) {
@@ -468,8 +477,7 @@ const ScanTimingScreen: React.FC<Props> = ({
       mapped.fastest_lap_on_lap, mapped.positions_gained_lost,
     ].filter(v => v !== null && v !== '' && v !== undefined).length;
 
-    // eslint-disable-next-line no-console
-    console.log('[ScanTimingScreen] Mapped result', {
+    devLog('[ScanTimingScreen] Mapped result', {
       isTestMode,
       function_version: mapped.function_version,
       populated_fields: populated,
@@ -506,10 +514,8 @@ const ScanTimingScreen: React.FC<Props> = ({
     setUploadStatus(`File selected: ${fileName}`);
     setSelectedFileInfo(`${fileName} - ${fileType} - ${fileSizeMb} MB`);
 
-    // eslint-disable-next-line no-console
-    console.log('file selected');
-    // eslint-disable-next-line no-console
-    console.log('selected file name/type/size', {
+    devLog('file selected');
+    devLog('selected file name/type/size', {
       name: file.name || '(unnamed)',
       type: file.type || '(missing type)',
       size: file.size,
@@ -531,8 +537,7 @@ const ScanTimingScreen: React.FC<Props> = ({
     }
     try {
       setUploadStatus('Preparing screenshot');
-      // eslint-disable-next-line no-console
-      console.log('upload started');
+      devLog('upload started');
       const immediatePreview = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
@@ -543,13 +548,11 @@ const ScanTimingScreen: React.FC<Props> = ({
       // Compress: max 1200px wide, JPEG q=0.7
       const compressed = await compressImage(file, MAX_IMAGE_WIDTH, JPEG_QUALITY);
       setPreviewUrl(compressed.dataUrl);
-      // eslint-disable-next-line no-console
-      console.log('image preview loaded');
+      devLog('image preview loaded');
       setUploadStatus('Uploading screenshot');
       setStep('scanning');
 
-      // eslint-disable-next-line no-console
-      console.log('[ScanTimingScreen] Compressed & invoking scan-timing-screen', {
+      devLog('[ScanTimingScreen] Compressed & invoking scan-timing-screen', {
         mimeType: compressed.mimeType,
         base64_length: compressed.base64.length,
         compressed_bytes: compressed.bytes,
@@ -558,23 +561,19 @@ const ScanTimingScreen: React.FC<Props> = ({
         original_file_size: file.size,
         file_name: file.name,
       });
-      // eslint-disable-next-line no-console
-      console.log('upload complete');
+      devLog('upload complete');
 
       setUploadStatus('Scanning screenshot');
-      // eslint-disable-next-line no-console
-      console.log('scan started');
+      devLog('scan started');
       const result = await invokeWithTimeout({
         imageBase64: compressed.base64,
         mimeType: compressed.mimeType,
       });
       await handleInvokeResult(result);
       setUploadStatus('Scan complete');
-      // eslint-disable-next-line no-console
-      console.log('scan complete');
+      devLog('scan complete');
     } catch (err: any) {
-      // eslint-disable-next-line no-console
-      console.error('[ScanTimingScreen] Scan failed:', err);
+      devError('[ScanTimingScreen] Scan failed:', err);
       if (err?.message === 'FRONTEND_TIMEOUT') {
         setErrorStage('frontend-timeout');
         setError('Scan timed out. Try a smaller or clearer screenshot.');
@@ -604,14 +603,12 @@ const ScanTimingScreen: React.FC<Props> = ({
     setStep('scanning');
     try {
       const payload = { testMode: true };
-      // eslint-disable-next-line no-console
-      console.log('TEST MODE PAYLOAD', payload);
+      devLog('TEST MODE PAYLOAD', payload);
       const result = await invokeWithTimeout(payload, 15_000);
       await handleInvokeResult(result, { testMode: true });
     } catch (err: any) {
 
-      // eslint-disable-next-line no-console
-      console.error('[ScanTimingScreen] Test mode failed:', err);
+      devError('[ScanTimingScreen] Test mode failed:', err);
       if (err?.message === 'FRONTEND_TIMEOUT') {
         setErrorStage('frontend-timeout');
         setError('Test mode timed out — the edge function is not reachable.');
@@ -624,8 +621,7 @@ const ScanTimingScreen: React.FC<Props> = ({
 
 
   const openUploadPicker = () => {
-    // eslint-disable-next-line no-console
-    console.log('upload button clicked');
+    devLog('upload button clicked');
     setError(null);
     setErrorDetail(null);
     setErrorStage(null);
@@ -636,8 +632,7 @@ const ScanTimingScreen: React.FC<Props> = ({
     if (uploadInputRef.current) {
       uploadInputRef.current.value = '';
       uploadInputRef.current.click();
-      // eslint-disable-next-line no-console
-      console.log('file picker opened');
+      devLog('file picker opened');
     } else {
       setFilePickingActive(false);
       setError('Upload is not ready. Please try again.');
@@ -647,8 +642,7 @@ const ScanTimingScreen: React.FC<Props> = ({
   };
 
   const openCameraPicker = () => {
-    // eslint-disable-next-line no-console
-    console.log('upload button clicked');
+    devLog('upload button clicked');
     setError(null);
     setErrorDetail(null);
     setErrorStage(null);
@@ -659,8 +653,7 @@ const ScanTimingScreen: React.FC<Props> = ({
     if (cameraInputRef.current) {
       cameraInputRef.current.value = '';
       cameraInputRef.current.click();
-      // eslint-disable-next-line no-console
-      console.log('file picker opened');
+      devLog('file picker opened');
     } else {
       setFilePickingActive(false);
       setError('Camera upload is not ready. Please try again.');
@@ -670,8 +663,7 @@ const ScanTimingScreen: React.FC<Props> = ({
   };
 
   const handleFileInputSelection = async (input: HTMLInputElement) => {
-    // eslint-disable-next-line no-console
-    console.log('file input selection fired');
+    devLog('file input selection fired');
     setUploadStatus('Returned from photo picker');
     pickerChangeReceivedRef.current = true;
     const f = input.files?.[0];
@@ -689,8 +681,7 @@ const ScanTimingScreen: React.FC<Props> = ({
     const signature = `${f.name || 'image'}|${f.size}|${f.lastModified}`;
     if (processingFileSignatureRef.current === signature) return;
     processingFileSignatureRef.current = signature;
-    // eslint-disable-next-line no-console
-    console.log('selected file received');
+    devLog('selected file received');
     try {
       await handleFile(f);
     } finally {
@@ -791,15 +782,13 @@ const ScanTimingScreen: React.FC<Props> = ({
         function_version: scan.function_version || null,
       };
 
-      // eslint-disable-next-line no-console
-      console.log('[ScanTimingScreen] Saving timing_data to race_setups', {
+      devLog('[ScanTimingScreen] Saving timing_data to race_setups', {
         setupId: currentSetupId,
         setupName: currentSetupName,
         setupType: currentSetupType,
         timingData,
       });
-      // eslint-disable-next-line no-console
-      console.log('upload started');
+      devLog('upload started');
 
       const { data: updated, error: updErr } = await supabase
         .from('race_setups')
@@ -810,8 +799,7 @@ const ScanTimingScreen: React.FC<Props> = ({
         .single();
 
       if (updErr) throw updErr;
-      // eslint-disable-next-line no-console
-      console.log('upload complete');
+      devLog('upload complete');
 
       setStep('saved');
       setSavedMessage(
@@ -826,8 +814,7 @@ const ScanTimingScreen: React.FC<Props> = ({
 
       setTimeout(() => { reset(); }, 1600);
     } catch (err: any) {
-      // eslint-disable-next-line no-console
-      console.error('[ScanTimingScreen] Save failed:', err);
+      devError('[ScanTimingScreen] Save failed:', err);
       setError(err?.message || 'Could not save timing data to setup.');
       setErrorDetail(err?.message || null);
       setErrorStage('save-failed');
