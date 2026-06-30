@@ -10,6 +10,7 @@ import {
   type CheckoutPlan,
   DEFAULT_MEMBERSHIP,
 } from '@/lib/membership';
+import { hideExternalPayments, nativeUpgradeMessage } from '@/lib/paymentVisibility';
 
 interface PlanSelectionProps {
   onComplete: (state: MembershipState) => void;
@@ -42,6 +43,11 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack }) => 
 
     if (checkoutPlan === 'free') {
       handleContinue(tier);
+      return;
+    }
+
+    if (hideExternalPayments) {
+      navigate('/upgrade', { state: { plan: checkoutPlan } });
       return;
     }
 
@@ -157,7 +163,7 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack }) => 
       </div>
 
       <p className="text-center text-xs text-[#9CA3AF] mt-4">
-        New accounts default to Rookie if no plan is selected.
+        {hideExternalPayments ? nativeUpgradeMessage : 'New accounts default to Rookie if no plan is selected.'}
       </p>
     </section>
   );

@@ -18,6 +18,10 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+// Stripe remains authoritative for rows it owns. Future RevenueCat handling
+// should not downgrade active/trialing rows with subscription_source='stripe'.
+const SUBSCRIPTION_SOURCE_STRIPE = 'stripe';
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -138,6 +142,7 @@ async function handleCheckoutSessionCompleted(event: any, admin: any, stripeSecr
     user_id: finalUserId,
     plan,
     status: details.status || session.subscription_status || 'active',
+    subscription_source: SUBSCRIPTION_SOURCE_STRIPE,
     stripe_customer_id: typeof session.customer === 'string' ? session.customer : details.customerId,
     stripe_subscription_id: subscriptionId,
     stripe_price_id: details.priceId,
@@ -186,6 +191,7 @@ async function upsertSubscriptionFromStripeSubscription(subscription: any, admin
     user_id: userId,
     plan,
     status: statusOverride || subscription.status || null,
+    subscription_source: SUBSCRIPTION_SOURCE_STRIPE,
     stripe_customer_id: customerId,
     stripe_subscription_id: subscriptionId,
     stripe_price_id: priceId,

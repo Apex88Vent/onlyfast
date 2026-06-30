@@ -4,6 +4,7 @@ import type { User } from '@supabase/supabase-js';
 import { ArrowRight, Gauge, Sparkles } from 'lucide-react';
 import { shouldShowAds } from '@/lib/ads';
 import { setPendingPlan } from '@/lib/membership';
+import { hideExternalPayments, nativeUpgradeMessage } from '@/lib/paymentVisibility';
 
 export type RookieAdPlacement =
   | 'home_middle'
@@ -96,6 +97,11 @@ const RookieAdSlot: React.FC<RookieAdSlotProps> = ({
   const isInterstitial = placement === 'after_save_interstitial';
 
   const handleUpgrade = () => {
+    if (hideExternalPayments) {
+      navigate('/upgrade', { state: { plan: 'pro' } });
+      return;
+    }
+
     setPendingPlan('pro');
     navigate('/upgrade', { state: { plan: 'pro' } });
   };
@@ -153,6 +159,11 @@ const RookieAdSlot: React.FC<RookieAdSlotProps> = ({
             {copy.note && (
               <p className="mt-3 text-xs text-[#6B7280]">{copy.note}</p>
             )}
+            {hideExternalPayments && (
+              <p className="mt-3 rounded-lg border border-[#D7EEF8] bg-[#F3FBFE] px-3 py-2 text-xs font-semibold text-[#1A1B23]">
+                {nativeUpgradeMessage}
+              </p>
+            )}
           </div>
         </div>
 
@@ -162,7 +173,7 @@ const RookieAdSlot: React.FC<RookieAdSlotProps> = ({
             onClick={handleUpgrade}
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#00A8E8] px-5 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-[#0090c7] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
           >
-            Upgrade to Pro
+            {hideExternalPayments ? 'View Pro details' : 'Upgrade to Pro'}
             <ArrowRight size={17} aria-hidden="true" />
           </button>
           <button

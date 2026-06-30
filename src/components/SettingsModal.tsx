@@ -6,6 +6,7 @@ import {
   deriveAccountStatus,
   fetchUserSubscription,
 } from '@/lib/subscription';
+import { hideExternalPayments, nativeBillingMessage } from '@/lib/paymentVisibility';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -178,6 +179,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
   // Open the Stripe Billing Portal so the user can manage / cancel.
   const handleManageBilling = async () => {
     setSubError('');
+    if (hideExternalPayments) {
+      setSubError(nativeBillingMessage);
+      return;
+    }
+
     setPortalLoading(true);
     try {
       // Require a logged-in session and pass the access token explicitly.
@@ -383,6 +389,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
 
                   {/* Admin keeps full access and is never shown upgrade/cancel. */}
                   {account?.label !== 'Admin' && (
+                    hideExternalPayments ? (
+                      <div className="mt-4 rounded-lg border border-[#D7EEF8] bg-[#F3FBFE] px-3 py-2 text-xs font-semibold text-[#1A1B23]">
+                        {nativeBillingMessage}
+                      </div>
+                    ) : (
                     <>
                       {/* PRIMARY: Upgrade Subscription → Rookie / Pro / Team selection page. */}
                       <a
@@ -410,6 +421,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
                         </button>
                       )}
                     </>
+                    )
                   )}
                 </>
               )}

@@ -10,6 +10,8 @@ import {
   DEFAULT_MEMBERSHIP,
   type CheckoutPlan,
 } from '@/lib/membership';
+import { hideExternalPayments, nativeUpgradeMessage } from '@/lib/paymentVisibility';
+import { deriveAccountStatus, fetchUserSubscription, type AccountStatus } from '@/lib/subscription';
 import StripeBuyButton from '@/components/StripeBuyButton';
 import AuthModal from '@/components/AuthModal';
 
@@ -46,6 +48,13 @@ const FeatureList: React.FC<{ items: string[] }> = ({ items }) => (
   </ul>
 );
 
+const NativePaymentNotice: React.FC<{ planName: string }> = ({ planName }) => (
+  <div className="w-full rounded-xl border border-[#D7EEF8] bg-[#F3FBFE] px-4 py-3 text-center">
+    <p className="text-sm font-semibold text-[#1A1B23]">{planName} is available on the web.</p>
+    <p className="text-xs text-[#4B5563] mt-1">{nativeUpgradeMessage}</p>
+  </div>
+);
+
 const Upgrade: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -54,6 +63,7 @@ const Upgrade: React.FC = () => {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [pendingPlan, setPendingPlanState] = useState<CheckoutPlan | null>(null);
   const [choosingRookie, setChoosingRookie] = useState(false);
+  const [account, setAccount] = useState<AccountStatus | null>(null);
 
   // Resolve the requested plan from route state first, then localStorage.
   useEffect(() => {
@@ -77,6 +87,23 @@ const Upgrade: React.FC = () => {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!hideExternalPayments || !user) {
+      setAccount(null);
+      return;
+    }
+
+    let cancelled = false;
+    const meta = user.user_metadata || {};
+    fetchUserSubscription(user.id)
+      .then((row) => { if (!cancelled) setAccount(deriveAccountStatus(row, meta)); })
+      .catch(() => { if (!cancelled) setAccount(deriveAccountStatus(null, meta)); });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   // Rookie / Free: keep the user on the free tier and send them into the app.
   // This does NOT touch Stripe — it only sets the existing membership tier.
@@ -139,6 +166,16 @@ const Upgrade: React.FC = () => {
           <p className="text-[#6B7280] mt-2">
             Pro is the best fit for most individual racers, but Rookie stays free and Team is ready for multi-car programs.
           </p>
+          {hideExternalPayments && (
+            <div className="mx-auto mt-4 max-w-xl rounded-xl border border-[#D7EEF8] bg-white px-4 py-3 text-sm text-[#374151] shadow-sm">
+              <p className="font-semibold text-[#1A1B23]">{nativeUpgradeMessage}</p>
+              {account && (
+                <p className="mt-1 text-xs text-[#6B7280]">
+                  Current plan: {account.label === 'Teams' ? 'Team' : account.label}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="grid gap-6 grid-cols-1 md:grid-cols-3 items-start">
@@ -192,10 +229,16 @@ const Upgrade: React.FC = () => {
                 'Unlimited OnlyFast Setup Assists',
               ]}
             />
-            <StripeBuyButton plan="pro" clientReferenceId={user.id} />
-            <p className="text-xs text-[#9CA3AF] mt-3 text-center">
-              Have a promo code? Enter it on the Stripe checkout screen.
-            </p>
+            {hideExternalPayments ? (
+              <NativePaymentNotice planName="Pro" />
+            ) : (
+              <>
+                <StripeBuyButton plan="pro" clientReferenceId={user.id} />
+                <p className="text-xs text-[#9CA3AF] mt-3 text-center">
+                  Have a promo code? Enter it on the Stripe checkout screen.
+                </p>
+              </>
+            )}
           </div>
 
           {/* ── TEAM ────────────────────────────────────────────────────── */}
@@ -214,10 +257,16 @@ const Upgrade: React.FC = () => {
                 'Have a RC car? Sports car? Motorcycle? All types of racing vehicles supported by OnlyFast — and more coming constantly — are available to use!',
               ]}
             />
-            <StripeBuyButton plan="teams" clientReferenceId={user.id} />
-            <p className="text-xs text-[#9CA3AF] mt-3 text-center">
-              Have a promo code? Enter it on the Stripe checkout screen.
-            </p>
+            {hideExternalPayments ? (
+              <NativePaymentNotice planName="Team" />
+            ) : (
+              <>
+                <StripeBuyButton plan="teams" clientReferenceId={user.id} />
+                <p className="text-xs text-[#9CA3AF] mt-3 text-center">
+                  Have a promo code? Enter it on the Stripe checkout screen.
+                </p>
+              </>
+            )}
           </div>
         </div>
 
