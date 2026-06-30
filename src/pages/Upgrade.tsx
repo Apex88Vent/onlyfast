@@ -48,10 +48,9 @@ const FeatureList: React.FC<{ items: string[] }> = ({ items }) => (
   </ul>
 );
 
-const NativePaymentNotice: React.FC<{ planName: string }> = ({ planName }) => (
+const NativePaymentNotice: React.FC = () => (
   <div className="w-full rounded-xl border border-[#D7EEF8] bg-[#F3FBFE] px-4 py-3 text-center">
-    <p className="text-sm font-semibold text-[#1A1B23]">{planName} is available on the web.</p>
-    <p className="text-xs text-[#4B5563] mt-1">{nativeUpgradeMessage}</p>
+    <p className="text-sm font-semibold text-[#1A1B23]">{nativeUpgradeMessage}</p>
   </div>
 );
 
@@ -230,7 +229,7 @@ const Upgrade: React.FC = () => {
               ]}
             />
             {hideExternalPayments ? (
-              <NativePaymentNotice planName="Pro" />
+              <NativePaymentNotice />
             ) : (
               <>
                 <StripeBuyButton plan="pro" clientReferenceId={user.id} />
@@ -258,7 +257,7 @@ const Upgrade: React.FC = () => {
               ]}
             />
             {hideExternalPayments ? (
-              <NativePaymentNotice planName="Team" />
+              <NativePaymentNotice />
             ) : (
               <>
                 <StripeBuyButton plan="teams" clientReferenceId={user.id} />
