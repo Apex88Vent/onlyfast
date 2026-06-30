@@ -246,7 +246,9 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00A8E8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
-              <span className="text-sm font-semibold text-[#00A8E8]">Full Access - All Features Included</span>
+              <span className="text-sm font-semibold text-[#00A8E8] text-center leading-snug">
+                Start with Rookie, then upgrade anytime to Pro or Team.
+              </span>
             </div>
           )}
 
