@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { readMembership } from '@/lib/membership';
+import LegalModal from './LegalModal';
 
 
 interface AuthModalProps {
@@ -19,6 +20,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [waiverAccepted, setWaiverAccepted] = useState(false);
+  const [legalModal, setLegalModal] = useState<'privacy' | 'terms' | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   // Guard against duplicate signUp/login calls from double-clicks or rapid
@@ -197,19 +199,20 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
       : "Enter your email and we'll send you a reset link";
 
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      role="presentation"
-    >
+    <>
       <div
-        ref={modalRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="auth-modal-title"
-        aria-describedby={error ? errorId : undefined}
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden border border-[#E5E7EB] max-h-[90vh] overflow-y-auto"
+        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+        onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+        role="presentation"
       >
+        <div
+          ref={modalRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="auth-modal-title"
+          aria-describedby={error ? errorId : undefined}
+          className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden border border-[#E5E7EB] max-h-[90vh] overflow-y-auto"
+        >
         <div className="bg-[#F5F5F7] px-6 py-6 text-center border-b border-[#E5E7EB]">
           <img
             src="https://d64gsuwffb70l.cloudfront.net/688263e7085fd34dcdf7f46a_1775752881652_48fe46d9.png"
@@ -354,7 +357,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               : mode === 'login'
               ? 'Sign In'
               : mode === 'signup'
-              ? 'Create account and choose free or premium account'
+              ? 'Create account and choose Rookie, Pro, or Team'
               : 'Send reset link'}
           </button>
 
@@ -389,16 +392,39 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           </div>
         </form>
 
-        <div className="px-6 pb-4">
-          <button
-            onClick={onClose}
-            className="w-full text-[#6B7280] hover:text-[#4B5563] text-sm py-2 transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8] rounded-lg"
-          >
-            Cancel
-          </button>
+          <div className="px-6 pb-4 space-y-3">
+            <div className="flex items-center justify-center gap-3 text-xs">
+              <button
+                type="button"
+                onClick={() => setLegalModal('privacy')}
+                className="text-[#00A8E8] hover:underline focus:outline-none focus:ring-2 focus:ring-[#00A8E8] rounded px-1"
+              >
+                Privacy Policy
+              </button>
+              <span className="text-[#D1D5DB]" aria-hidden="true">|</span>
+              <button
+                type="button"
+                onClick={() => setLegalModal('terms')}
+                className="text-[#00A8E8] hover:underline focus:outline-none focus:ring-2 focus:ring-[#00A8E8] rounded px-1"
+              >
+                Terms of Service
+              </button>
+            </div>
+            <button
+              onClick={onClose}
+              className="w-full text-[#6B7280] hover:text-[#4B5563] text-sm py-2 transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8] rounded-lg"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+      <LegalModal
+        isOpen={legalModal !== null}
+        onClose={() => setLegalModal(null)}
+        type={legalModal || 'privacy'}
+      />
+    </>
   );
 };
 

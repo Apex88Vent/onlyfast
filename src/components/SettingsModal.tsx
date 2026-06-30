@@ -342,6 +342,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
               )}
             </div>
           </section>
+
+          <section>
+            <h3 className="text-sm font-bold text-[#1A1B23] mb-2">Support</h3>
+            <a
+              href="mailto:admin@onlyfast.app"
+              className="block rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-3 text-sm font-semibold text-[#00A8E8] hover:border-[#00A8E8]/40 hover:bg-[#00A8E8]/5 transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
+            >
+              Contact Support
+            </a>
+            <p className="text-xs text-[#9CA3AF] mt-2">
+              For account, billing, privacy, or data requests.
+            </p>
+          </section>
         </div>
       </div>
 
