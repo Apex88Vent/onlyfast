@@ -53,7 +53,7 @@ const FRONTEND_TIMEOUT_MS = 45_000;
 const MAX_IMAGE_WIDTH = 1200;
 const JPEG_QUALITY = 0.7;
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
-const IMAGE_ACCEPT = 'image/*,.png,.jpg,.jpeg,.webp,.heic,.heif';
+const IMAGE_ACCEPT = 'image/*';
 const SUPPORTED_IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.heic', '.heif'];
 const FILE_PICKER_ACTIVE_KEY = 'onlyfast_file_picker_active';
 const FILE_PICKER_STARTED_AT_KEY = 'onlyfast_file_picker_started_at';
@@ -193,6 +193,7 @@ const ScanTimingScreen: React.FC<Props> = ({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const isPickingFileRef = useRef(false);
   const pickerChangeReceivedRef = useRef(false);
+  const processingFileSignatureRef = useRef<string | null>(null);
   const prefix = useId();
   const isSavingStep = step === 'saving';
 
@@ -252,13 +253,19 @@ const ScanTimingScreen: React.FC<Props> = ({
       if (!isPickingFileRef.current) return;
       window.setTimeout(() => {
         if (!isPickingFileRef.current || pickerChangeReceivedRef.current) return;
+        const hasPendingFile = Boolean(
+          uploadInputRef.current?.files?.length ||
+          cameraInputRef.current?.files?.length
+        );
+        if (hasPendingFile) return;
         const message = 'No image was received from the picker.';
         setUploadStatus(message);
         setError(message);
         setErrorDetail(null);
         setErrorStage('no-file-selected');
         setSelectedFileInfo(null);
-      }, 1200);
+        setFilePickingActive(false);
+      }, 6000);
     };
 
     const handleVisibilityChange = () => {
@@ -526,6 +533,13 @@ const ScanTimingScreen: React.FC<Props> = ({
       setUploadStatus('Preparing screenshot');
       // eslint-disable-next-line no-console
       console.log('upload started');
+      const immediatePreview = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(reader.error || new Error('Could not read selected image'));
+        reader.readAsDataURL(file);
+      });
+      setPreviewUrl(immediatePreview);
       // Compress: max 1200px wide, JPEG q=0.7
       const compressed = await compressImage(file, MAX_IMAGE_WIDTH, JPEG_QUALITY);
       setPreviewUrl(compressed.dataUrl);
@@ -655,12 +669,12 @@ const ScanTimingScreen: React.FC<Props> = ({
     }
   };
 
-  const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileInputSelection = async (input: HTMLInputElement) => {
     // eslint-disable-next-line no-console
-    console.log('file input change fired');
+    console.log('file input selection fired');
     setUploadStatus('Returned from photo picker');
     pickerChangeReceivedRef.current = true;
-    const f = e.target.files?.[0];
+    const f = input.files?.[0];
     if (!f) {
       const message = 'No image was received from the picker.';
       setUploadStatus(message);
@@ -669,17 +683,29 @@ const ScanTimingScreen: React.FC<Props> = ({
       setErrorStage('no-file-selected');
       setSelectedFileInfo(null);
       setFilePickingActive(false);
-      e.target.value = '';
+      input.value = '';
       return;
     }
+    const signature = `${f.name || 'image'}|${f.size}|${f.lastModified}`;
+    if (processingFileSignatureRef.current === signature) return;
+    processingFileSignatureRef.current = signature;
     // eslint-disable-next-line no-console
     console.log('selected file received');
     try {
       await handleFile(f);
     } finally {
+      processingFileSignatureRef.current = null;
       setFilePickingActive(false);
-      e.target.value = '';
+      input.value = '';
     }
+  };
+
+  const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    await handleFileInputSelection(e.currentTarget);
+  };
+
+  const onFileInput = async (e: React.FormEvent<HTMLInputElement>) => {
+    await handleFileInputSelection(e.currentTarget);
   };
 
   const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -1027,6 +1053,23 @@ const ScanTimingScreen: React.FC<Props> = ({
   // Idle / scanning / saved states
   return (
     <section className="bg-white rounded-2xl border border-[#E5E7EB] p-6 shadow-sm" aria-labelledby="scan-heading">
+      <input
+        ref={uploadInputRef}
+        type="file"
+        accept={IMAGE_ACCEPT}
+        className="sr-only"
+        onInput={onFileInput}
+        onChange={onFileChange}
+      />
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept={IMAGE_ACCEPT}
+        capture="environment"
+        className="sr-only"
+        onInput={onFileInput}
+        onChange={onFileChange}
+      />
       <div className="flex items-start justify-between flex-wrap gap-2 mb-3">
         <div>
           <h3 id="scan-heading" className="text-base font-bold text-[#1A1B23] flex items-center gap-2">
@@ -1132,21 +1175,6 @@ const ScanTimingScreen: React.FC<Props> = ({
                 <p className="text-[10px] text-[#9CA3AF] break-all mt-1">{selectedFileInfo}</p>
               )}
             </div>
-            <input
-              ref={uploadInputRef}
-              type="file"
-              accept={IMAGE_ACCEPT}
-              className="sr-only"
-              onChange={onFileChange}
-            />
-            <input
-              ref={cameraInputRef}
-              type="file"
-              accept={IMAGE_ACCEPT}
-              capture="environment"
-              className="sr-only"
-              onChange={onFileChange}
-            />
             <p className="text-[11px] text-[#9CA3AF] mt-3">
               PNG / JPG / WEBP / HEIC. Auto-compressed to {MAX_IMAGE_WIDTH}px wide JPEG before upload when possible.
             </p>
