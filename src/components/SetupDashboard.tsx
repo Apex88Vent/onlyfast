@@ -376,6 +376,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   const [isAnimating, setIsAnimating] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const [touchStart, setTouchStart] = useState<number | null>(null);
+  const orderedSessionsRef = useRef<SetupType[]>(DEFAULT_SESSION_SLOTS);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastActivityRef = useRef(Date.now());
 
@@ -868,8 +869,9 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
   const switchTab = useCallback((newTab: SetupType) => {
     if (newTab === activeTab || isAnimating) return;
-    const currentIdx = TAB_ORDER.indexOf(activeTab);
-    const newIdx = TAB_ORDER.indexOf(newTab);
+    const navOrder = orderedSessionsRef.current.length ? orderedSessionsRef.current : ALL_SLOTS;
+    const currentIdx = navOrder.indexOf(activeTab);
+    const newIdx = navOrder.indexOf(newTab);
     const direction = newIdx > currentIdx ? 'left' : 'right';
 
     if (prefersReducedMotion) {
@@ -897,11 +899,12 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     const diff = touchStart - e.changedTouches[0].clientX;
     const threshold = 80;
     if (Math.abs(diff) > threshold) {
-      const currentIdx = TAB_ORDER.indexOf(activeTab);
-      if (diff > 0 && currentIdx < TAB_ORDER.length - 1) {
-        switchTab(TAB_ORDER[currentIdx + 1]);
+      const navOrder = orderedSessionsRef.current.length ? orderedSessionsRef.current : ALL_SLOTS;
+      const currentIdx = navOrder.indexOf(activeTab);
+      if (diff > 0 && currentIdx >= 0 && currentIdx < navOrder.length - 1) {
+        switchTab(navOrder[currentIdx + 1]);
       } else if (diff < 0 && currentIdx > 0) {
-        switchTab(TAB_ORDER[currentIdx - 1]);
+        switchTab(navOrder[currentIdx - 1]);
       }
     }
     setTouchStart(null);
@@ -918,7 +921,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       user_id: user!.id,
       setup_type: tabKey,
       setup_name: name || s.setup_name || null,
-      session_label: sessionLabels[tabKey] || null,
+      session_label: sessionLabels[tabKey] || TAB_LABELS[tabKey].short,
       session_order: sessionOrders[tabKey] ?? DEFAULT_ORDER[tabKey],
 
       track_name: s.trackName || '',
@@ -1040,13 +1043,20 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     });
   };
 
+  const sessionHasPayload = (t: SetupType) =>
+    Boolean(sessionHasSpecificData(setups[t]) || timingDataByTab[t]);
+
+  const isRealSession = (t: SetupType) => {
+    if (deletedSessionSlots[t]) return false;
+    if (!savedMeta.name && DEFAULT_SESSION_SLOTS.includes(t)) return true;
+    if (savedMeta.ids[t]) return true;
+    if (addedSessionSlots[t]) return true;
+    if (sessionHasPayload(t)) return true;
+    return false;
+  };
+
   const isIntentionalExtraSession = (t: SetupType) =>
-    !DEFAULT_SESSION_SLOTS.includes(t) && Boolean(
-      addedSessionSlots[t] ||
-      (sessionLabels[t] && sessionLabels[t] !== TAB_LABELS[t].short) ||
-      sessionHasSpecificData(setups[t]) ||
-      timingDataByTab[t]
-    );
+    !DEFAULT_SESSION_SLOTS.includes(t) && isRealSession(t);
 
 
   // Drain the offline queue — POSTs each pending save in order
@@ -1207,16 +1217,14 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
       const saveTabs = ALL_SLOTS.filter(tabKey => {
         if (deletedSessionSlots[tabKey]) return false;
-        if (DEFAULT_SESSION_SLOTS.includes(tabKey)) {
-          return tabHasData(setups[tabKey]) || !!savedMeta.ids[tabKey] || !!sessionLabels[tabKey];
-        }
-        return isIntentionalExtraSession(tabKey);
+        if (isRealSession(tabKey)) return true;
+        return !savedMeta.name && tabKey === activeTab && tabHasData(setups[tabKey]);
       });
 
       for (const tabKey of saveTabs) {
         const setup = setups[tabKey];
         const existingId = savedMeta.ids[tabKey];
-        if (!tabHasData(setup) && !existingId) continue;
+        if (!tabHasData(setup) && !existingId && !isRealSession(tabKey)) continue;
 
         const payload = buildPayload(setup, tabKey, name);
         try {
@@ -1457,7 +1465,19 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     const newTiming: Partial<Record<SetupType, TimingData | null>> = {};
     const newLabels: Partial<Record<SetupType, string>> = {};
     const newOrders: Partial<Record<SetupType, number>> = {};
+    const loadedSavedSessions: Partial<Record<SetupType, boolean>> = {};
 
+    const loadSiblingRow = (row: any) => {
+      const t = ALL_SLOTS.includes(row.setup_type as SetupType) ? (row.setup_type as SetupType) : 'base';
+      if (!ALL_SLOTS.includes(t)) return;
+      if (newIds[t]) return; // prefer clicked/first-loaded row per slot
+      newSetups[t] = loadSetupIntoState(row);
+      newIds[t] = row.id;
+      newTiming[t] = row.timing_data ?? null;
+      if (row.session_label) newLabels[t] = row.session_label;
+      if (row.session_order) newOrders[t] = Number(row.session_order);
+      loadedSavedSessions[t] = true;
+    };
 
     // Seed at least the clicked row
     const clickedType = ALL_SLOTS.includes(setup.setup_type as SetupType) ? (setup.setup_type as SetupType) : 'base';
@@ -1466,6 +1486,17 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     newTiming[clickedType] = setup.timing_data ?? null;
     if (setup.session_label) newLabels[clickedType] = setup.session_label;
     if (setup.session_order) newOrders[clickedType] = Number(setup.session_order);
+    loadedSavedSessions[clickedType] = true;
+
+    if (Array.isArray(setup.__groupSetups)) {
+      [...setup.__groupSetups]
+        .sort((a, b) => {
+          const aType = ALL_SLOTS.includes(a.setup_type as SetupType) ? (a.setup_type as SetupType) : 'base';
+          const bType = ALL_SLOTS.includes(b.setup_type as SetupType) ? (b.setup_type as SetupType) : 'base';
+          return Number(a.session_order ?? DEFAULT_ORDER[aType]) - Number(b.session_order ?? DEFAULT_ORDER[bType]);
+        })
+        .forEach(loadSiblingRow);
+    }
 
     // Try to fetch sibling rows (same user, same setup_name) for the other two tabs
     if (user && name) {
@@ -1478,14 +1509,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
           .order('created_at', { ascending: false });
         if (data) {
           for (const row of data) {
-            const t = ALL_SLOTS.includes(row.setup_type as SetupType) ? (row.setup_type as SetupType) : 'base';
-            if (!ALL_SLOTS.includes(t)) continue;
-            if (newIds[t]) continue; // prefer most recent per type
-            newSetups[t] = loadSetupIntoState(row);
-            newIds[t] = row.id;
-            newTiming[t] = row.timing_data ?? null;
-            if (row.session_label) newLabels[t] = row.session_label;
-            if (row.session_order) newOrders[t] = Number(row.session_order);
+            loadSiblingRow(row);
           }
         }
       } catch {}
@@ -1507,11 +1531,12 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     setSessionLabels(newLabels);
     setSessionOrders(newOrders);
     setDeletedSessionSlots({});
-    setAddedSessionSlots({});
+    setAddedSessionSlots(loadedSavedSessions);
     const displayable = ALL_SLOTS
       .filter(t =>
         !!newIds[t] && (
-          DEFAULT_SESSION_SLOTS.includes(t) ||
+          t === clickedType ||
+          loadedSavedSessions[t] ||
           (newLabels[t] && newLabels[t] !== TAB_LABELS[t].short) ||
           sessionHasSpecificData(newSetups[t]) ||
           newTiming[t]
@@ -1722,25 +1747,14 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   // Does a tab represent an existing session? Defaults are real; blank extra
   // slots are not, even if older state gave them the default Session 4/5/6 name.
   const sessionExists = (t: SetupType) => {
-    if (deletedSessionSlots[t]) return false;
-    if (DEFAULT_SESSION_SLOTS.includes(t)) {
-      return !!savedMeta.ids[t] || tabHasData(setups[t]) || !!sessionLabels[t] || !savedMeta.name;
-    }
-    return isIntentionalExtraSession(t);
+    return isRealSession(t);
   };
 
   // Display saved race-day sessions only when they are real sessions. This keeps
   // deleted default sessions from reappearing as gray/blank tabs, and hides old
   // polluted standby rows that have no user data and no intentional label.
   const isDisplayableSession = (t: SetupType) => {
-    if (!sessionExists(t)) return false;
-    if (
-      DEFAULT_SESSION_SLOTS.includes(t) &&
-      savedMeta.ids[t] &&
-      !tabHasData(setups[t]) &&
-      !sessionLabels[t]
-    ) return false;
-    return true;
+    return sessionExists(t);
   };
 
   // Open the pencil menu's Rename option.
@@ -1774,6 +1788,44 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   const openDeleteSession = () => {
     setSessionMenuOpen(false);
     setDeleteOpen(true);
+  };
+
+  const clearSessionSlot = (tab: SetupType, markDeleted = true) => {
+    setSetups(prev => ({
+      ...prev,
+      [tab]: { ...emptySetup(), raceClass: selectedCar },
+    }));
+    setSavedMeta(prev => {
+      const ids = { ...prev.ids };
+      delete ids[tab];
+      return { name: prev.name, ids };
+    });
+    setSessionLabels(prev => {
+      const next = { ...prev };
+      delete next[tab];
+      return next;
+    });
+    setAddedSessionSlots(prev => {
+      const next = { ...prev };
+      delete next[tab];
+      return next;
+    });
+    setSessionOrders(prev => {
+      const next = { ...prev };
+      delete next[tab];
+      return next;
+    });
+    setTimingDataByTab(prev => {
+      const next = { ...prev };
+      delete next[tab];
+      return next;
+    });
+    setDeletedSessionSlots(prev => {
+      const next = { ...prev };
+      if (markDeleted) next[tab] = true;
+      else delete next[tab];
+      return next;
+    });
   };
 
   const submitDeleteSession = async () => {
@@ -1822,17 +1874,18 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     setRefreshTrigger(prev => prev + 1);
 
     if (remaining.length === 0) {
-      // Last real session: clear session state but keep the race-day container open.
+      // Last real session: clear the saved race-day container completely.
       const cleared = emptyAllSetups();
       (Object.keys(cleared) as SetupType[]).forEach(t => {
         cleared[t] = { ...cleared[t], raceClass: selectedCar };
       });
       setSetups(cleared);
-      setSavedMeta(prev => ({ name: prev.name, ids: {} }));
+      setSavedMeta({ name: undefined, ids: {} });
       setTimingDataByTab({});
       setSessionLabels({});
       setSessionOrders({});
       setAddedSessionSlots({});
+      setDeletedSessionSlots({});
       setActiveTab('base');
       setActiveView('setup');
       setSaveMessage('Session deleted');
@@ -1841,36 +1894,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     }
 
     // Clear just this slot and move to another available real session.
-    setSetups(prev => ({
-      ...prev,
-      [deletedTab]: { ...emptySetup(), raceClass: selectedCar },
-    }));
-    setSavedMeta(prev => {
-      const ids = { ...prev.ids };
-      delete ids[deletedTab];
-      return { name: prev.name, ids };
-    });
-    setSessionLabels(prev => {
-      const next = { ...prev };
-      delete next[deletedTab];
-      return next;
-    });
-    setAddedSessionSlots(prev => {
-      const next = { ...prev };
-      delete next[deletedTab];
-      return next;
-    });
-    setSessionOrders(prev => {
-      const next = { ...prev };
-      delete next[deletedTab];
-      return next;
-    });
-
-    setTimingDataByTab(prev => {
-      const next = { ...prev };
-      delete next[deletedTab];
-      return next;
-    });
+    clearSessionSlot(deletedTab, true);
     if (replacement) setActiveTab(replacement);
   };
 
@@ -1909,8 +1933,8 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     // Find a free stable slot key so the new session joins the menu at the end.
     const extraSlots = ALL_SLOTS.filter(t => !DEFAULT_SESSION_SLOTS.includes(t));
     const freeType =
-      extraSlots.find(t => !isDisplayableSession(t) && !deletedSessionSlots[t]) ||
-      ALL_SLOTS.find(t => !isDisplayableSession(t) && !deletedSessionSlots[t]) ||
+      extraSlots.find(t => !isDisplayableSession(t)) ||
+      DEFAULT_SESSION_SLOTS.find(t => deletedSessionSlots[t] && !isDisplayableSession(t)) ||
       ALL_SLOTS.find(t => !isDisplayableSession(t));
     if (!freeType) {
       setAddSessionError('Maximum of 6 sessions reached for this race day.');
@@ -1970,6 +1994,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     )
     .sort((a, b) => orderOf(a) - orderOf(b));
   const orderedSessionKey = orderedSessions.join('|');
+  orderedSessionsRef.current = orderedSessions;
 
   useEffect(() => {
     if (!stateLoaded || resumeAttempted) return;

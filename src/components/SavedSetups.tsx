@@ -35,16 +35,21 @@ const isBaseSetupRow = (s: any) =>
   norm(s.setup_type) === 'base_template' || norm(s.setup_name).toUpperCase().startsWith('[BASE TEMPLATE]');
 const cleanBaseTitle = (name: string) => name.replace(/^\[BASE TEMPLATE\]\s*/i, '').trim();
 
-// A setup can be grouped cleanly only when it has BOTH a track name and a date.
-const canGroup = (s: any) => norm(s.track_name) !== '' && norm(s.race_date) !== '';
+// Prefer setup_name as the race-weekend identity. It is shared by every session
+// row saved from SetupDashboard, while track/date/class can be incomplete.
+const canGroup = (s: any) => norm(s.setup_name) !== '' || (norm(s.track_name) !== '' && norm(s.race_date) !== '');
 
-const buildGroupKey = (s: any) =>
-  [
+const buildGroupKey = (s: any) => {
+  const setupName = norm(s.setup_name).toLowerCase();
+  if (setupName) return `setup-name|${setupName}`;
+  return [
+    'race',
     norm(s.track_name).toLowerCase(),
     norm(s.race_date).toLowerCase(),
     norm(s.race_class).toLowerCase(),
     norm(s.organization || s.org || '').toLowerCase(),
   ].join('|');
+};
 
 const buildGroups = (setups: any[]): SetupGroup[] => {
   const map = new Map<string, SetupGroup>();
@@ -87,7 +92,7 @@ const buildGroups = (setups: any[]): SetupGroup[] => {
         key,
         isGroup: true,
         isBaseSetup: false,
-        title: `${norm(s.track_name)} ${norm(s.race_date)}`.trim(),
+        title: norm(s.setup_name) || `${norm(s.track_name)} ${norm(s.race_date)}`.trim(),
         trackName: norm(s.track_name),
         raceDate: norm(s.race_date),
         raceClass: norm(s.race_class),
@@ -115,6 +120,31 @@ const defaultLabelForType = (type: string) =>
 const sessionLabelOf = (s: any) =>
   isBaseSetupRow(s) ? 'Base Setup' :
   norm(s.session_label) || defaultLabelForType(s.setup_type);
+
+const hasMeaningfulSessionData = (s: any) => {
+  const sharedOrMetaFields = new Set([
+    'id', 'user_id', 'setup_type', 'setup_name', 'session_label', 'session_order',
+    'track_name', 'race_date', 'race_class', 'track_condition', 'track_shape',
+    'track_length', 'latitude', 'longitude', 'temperature', 'humidity',
+    'wind_speed', 'wind_direction', 'created_at', 'updated_at', 'organization',
+    'org',
+  ]);
+
+  return Object.entries(s || {}).some(([key, value]) => {
+    if (value === null || value === undefined || sharedOrMetaFields.has(key)) return false;
+    if (typeof value === 'object') {
+      return Array.isArray(value) ? value.length > 0 : Object.keys(value).length > 0;
+    }
+    return String(value).trim() !== '';
+  });
+};
+
+const isRealSavedSession = (s: any) => {
+  if (isBaseSetupRow(s)) return true;
+  const setupType = norm(s.setup_type);
+  const label = norm(s.session_label);
+  return hasMeaningfulSessionData(s) || (label !== '' && label !== defaultLabelForType(setupType));
+};
 
 const getSetupTypeBadge = (type: string) => {
   const colors: Record<string, string> = {
@@ -335,9 +365,13 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
                   const orderB = Number(b.session_order ?? sessionOrder[b.setup_type] ?? 99);
                   return orderA - orderB;
                 });
-                const firstSetup = orderedSetups[0];
+                const firstSetup = orderedSetups.find(isRealSavedSession) || orderedSetups[0];
+                const withGroupSetups = (setup: any) => ({
+                  ...setup,
+                  __groupSetups: orderedSetups,
+                });
                 const openFirstSetup = () => {
-                  if (firstSetup) onLoad(firstSetup);
+                  if (firstSetup) onLoad(withGroupSetups(firstSetup));
                 };
 
                 return (
@@ -396,7 +430,7 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
                           key={`chip-${s.id}`}
                           onClick={(e) => {
                             e.stopPropagation();
-                            onLoad(s);
+                            onLoad(withGroupSetups(s));
                           }}
                           className={`inline-flex items-center px-3.5 py-1.5 rounded-full border border-[#E5E7EB] text-xs font-semibold hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-[#00A8E8] ${getSetupTypeBadge(s.setup_type)}`}
                           aria-label={`Load ${sessionLabelOf(s)} for ${group.title}`}
