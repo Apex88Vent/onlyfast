@@ -7,6 +7,7 @@ import {
   sortScheduleEntriesByDate,
   type ScheduleRaceEntry,
 } from '@/lib/scheduleSelection';
+import RookieAdSlot from './RookieAdSlot';
 
 interface TodoItem {
   id: string;
@@ -372,6 +373,10 @@ const TodoList: React.FC<TodoListProps> = ({ user, onClose, variant = 'page' }) 
           </div>
         )}
       </section>
+
+      {variant === 'page' && (
+        <RookieAdSlot placement="todo_bottom" user={user} />
+      )}
 
       {variant === 'panel' && onClose && (
         <div className="flex justify-end">

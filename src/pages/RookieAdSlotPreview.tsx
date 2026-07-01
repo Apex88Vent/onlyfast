@@ -12,11 +12,15 @@ const previewUser = {
 } as unknown as User;
 
 const placements: RookieAdPlacement[] = [
+  'home_middle',
+  'home_bottom',
+  'setup_track_conditions',
   'setup_dashboard_bottom',
   'setup_session_bottom',
   'parts_reference_bottom',
   'schedule_bottom',
   'timing_scan_bottom',
+  'todo_bottom',
   'after_save_interstitial',
 ];
 

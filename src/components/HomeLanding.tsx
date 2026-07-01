@@ -246,6 +246,12 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
         </div>
       </section>
 
+      {middleSlot && (
+        <div className="mb-2 sm:mb-4">
+          {middleSlot}
+        </div>
+      )}
+
       {showTopInfoCard && (
         <section className="mb-2 sm:mb-6 bg-white rounded-2xl border border-[#E5E7EB] shadow-sm px-3 sm:px-4 py-2.5 sm:py-4">
           <div className={`grid ${topInfoCount > 1 ? 'grid-cols-2 divide-x divide-[#E5E7EB]' : 'grid-cols-1'}`}>
@@ -371,12 +377,6 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
             </div>
           </div>
         </section>
-      )}
-
-      {middleSlot && (
-        <div className="mb-2 sm:mb-4">
-          {middleSlot}
-        </div>
       )}
 
       {performanceStats.length > 0 && (

@@ -17,6 +17,7 @@ import DeleteAccount from "./pages/DeleteAccount";
 import SafeBackHandler from "./components/SafeBackHandler";
 
 const queryClient = new QueryClient();
+const showPreviewRoutes = import.meta.env.DEV || import.meta.env.VITE_ENABLE_PREVIEW_ROUTES === 'true';
 
 const App = () => (
   <ThemeProvider defaultTheme="light">
@@ -35,7 +36,7 @@ const App = () => (
             <Route path="/subscription/success" element={<SubscriptionSuccess />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/delete-account" element={<DeleteAccount />} />
-            {import.meta.env.DEV && (
+            {showPreviewRoutes && (
               <>
                 <Route path="/onboarding-preview" element={<OnboardingPreview />} />
                 <Route path="/rookie-ad-slot-preview" element={<RookieAdSlotPreview />} />

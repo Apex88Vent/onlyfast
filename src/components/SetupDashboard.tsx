@@ -2746,6 +2746,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
                 onChange={handleSharedChange}
               />
 
+              <RookieAdSlot placement="setup_track_conditions" user={user} />
 
               <DirtOvalTrack
                 entryHandling={currentSetup.entry_handling}
