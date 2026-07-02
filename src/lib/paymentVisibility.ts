@@ -3,6 +3,24 @@ const HIDE_EXTERNAL_PAYMENTS_STORAGE_KEY = 'onlyfast_hide_external_payments';
 const hideExternalPaymentsBuildFlag =
   import.meta.env.VITE_HIDE_EXTERNAL_PAYMENTS === 'true';
 
+const cleanNativeAppQueryParam = () => {
+  if (typeof window === 'undefined') return;
+
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has('nativeApp')) return;
+
+    url.searchParams.delete('nativeApp');
+    window.history.replaceState(
+      window.history.state,
+      '',
+      `${url.pathname}${url.search}${url.hash}`,
+    );
+  } catch {
+    // URL cleanup is best-effort and should never block payment visibility.
+  }
+};
+
 const readRuntimeHideExternalPayments = (): boolean => {
   if (typeof window === 'undefined') return false;
 
@@ -16,6 +34,7 @@ const readRuntimeHideExternalPayments = (): boolean => {
       } catch {
         // Some embedded browsers restrict storage; the URL flag still applies for this load.
       }
+      cleanNativeAppQueryParam();
       return true;
     }
 
@@ -25,6 +44,7 @@ const readRuntimeHideExternalPayments = (): boolean => {
       } catch {
         // Storage reset is best-effort for testing.
       }
+      cleanNativeAppQueryParam();
       return false;
     }
 
