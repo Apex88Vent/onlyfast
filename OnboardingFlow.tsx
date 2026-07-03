@@ -189,7 +189,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
         {/* Logo - 25% larger than previous h-24 (96px → 120px) */}
         <div className="text-center mb-10">
           <img
-            src="https://d64gsuwffb70l.cloudfront.net/688263e7085fd34dcdf7f46a_1775752881652_48fe46d9.png"
+            src="/onlyfast-logo.png"
             alt="OnlyFast Setup Assist"
             className="h-[120px] mx-auto mb-4"
           />

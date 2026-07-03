@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 
-const LOGO_URL = 'https://d64gsuwffb70l.cloudfront.net/688263e7085fd34dcdf7f46a_1775752881652_48fe46d9.png';
+const LOGO_URL = '/onlyfast-logo.png';
 
 const PrivacyPolicy: React.FC = () => {
   useEffect(() => {

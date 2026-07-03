@@ -189,7 +189,7 @@ th,td{border:1px solid #E5E7EB;padding:6px 10px;text-align:left}
 th{background:#F9FAFB;font-weight:600}
 @media print{body{padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style></head><body>
-<img src="https://d64gsuwffb70l.cloudfront.net/688263e7085fd34dcdf7f46a_1775752881652_48fe46d9.png" class="logo" alt="OnlyFast"/>
+<img src="/onlyfast-logo.png" class="logo" alt="OnlyFast"/>
 <h1>Setup Comparison</h1>
 <p class="subtitle">Generated ${new Date().toLocaleDateString()} \u2014 ${selectedSetups.length} setups compared</p>
 ${printContent.innerHTML}</body></html>`);

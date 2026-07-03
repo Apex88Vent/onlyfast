@@ -9,7 +9,7 @@
 // ════════════════════════════════════════════════════════════════════════════
 import { getClassConfig, FieldDef } from '@/lib/classConfigs';
 
-const ONLYFAST_LOGO = 'https://d64gsuwffb70l.cloudfront.net/688263e7085fd34dcdf7f46a_1775752881652_48fe46d9.png';
+const ONLYFAST_LOGO = '/onlyfast-logo.png';
 
 // "Car Style A" — the default dirt-track chassis diagram (nose pointing UP).
 export const CAR_STYLE_A = 'https://d64gsuwffb70l.cloudfront.net/69d2840337913981eed0ea87_1781129606987_8ea1dcb1.png';

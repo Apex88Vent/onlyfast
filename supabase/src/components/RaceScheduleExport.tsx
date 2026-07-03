@@ -7,7 +7,7 @@ interface RaceScheduleExportProps {
   onClose: () => void;
 }
 
-const LOGO_URL = 'https://d64gsuwffb70l.cloudfront.net/688263e7085fd34dcdf7f46a_1775752881652_48fe46d9.png';
+const LOGO_URL = '/onlyfast-logo.png';
 const BLUE = '#00A8E8';
 const DARK = '#1A1B23';
 const GRAY = '#6B7280';

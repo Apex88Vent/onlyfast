@@ -215,7 +215,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
         >
         <div className="bg-[#F5F5F7] px-6 py-6 text-center border-b border-[#E5E7EB]">
           <img
-            src="https://d64gsuwffb70l.cloudfront.net/688263e7085fd34dcdf7f46a_1775752881652_48fe46d9.png"
+            src="/onlyfast-logo.png"
             alt="OnlyFast Setup Assist"
             className="h-[50px] mx-auto mb-3"
           />

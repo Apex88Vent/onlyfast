@@ -129,7 +129,7 @@ const Upgrade: React.FC = () => {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#F5F5F7] px-4 text-center">
         <img
-          src="https://d64gsuwffb70l.cloudfront.net/688263e7085fd34dcdf7f46a_1775752881652_48fe46d9.png"
+          src="/onlyfast-logo.png"
           alt="OnlyFast"
           className="h-12 mb-5"
         />
@@ -157,7 +157,7 @@ const Upgrade: React.FC = () => {
       <div className="max-w-6xl mx-auto">
         <div className="text-center mb-8">
           <img
-            src="https://d64gsuwffb70l.cloudfront.net/688263e7085fd34dcdf7f46a_1775752881652_48fe46d9.png"
+            src="/onlyfast-logo.png"
             alt="OnlyFast"
             className="h-12 mx-auto mb-4"
           />

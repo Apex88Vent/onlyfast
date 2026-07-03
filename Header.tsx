@@ -74,7 +74,7 @@ const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBac
             {/* Logo */}
             <div className="flex items-center gap-3">
               <img
-                src="https://d64gsuwffb70l.cloudfront.net/688263e7085fd34dcdf7f46a_1775752881652_48fe46d9.png"
+                src="/onlyfast-logo.png"
                 alt="OnlyFast Setup Assist - Home"
                 className="h-[50px] w-auto"
               />

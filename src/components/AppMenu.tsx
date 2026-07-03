@@ -137,7 +137,7 @@ const AppMenu: React.FC<AppMenuProps> = ({ isOpen, onClose, onSelect, activeView
         <div className="flex items-center justify-between px-4 py-4 border-b border-[#E5E7EB]">
           <div className="flex items-center gap-2">
             <img
-              src="https://d64gsuwffb70l.cloudfront.net/688263e7085fd34dcdf7f46a_1775752881652_48fe46d9.png"
+              src="/onlyfast-logo.png"
               alt="OnlyFast"
               className="h-[28px] w-auto"
             />

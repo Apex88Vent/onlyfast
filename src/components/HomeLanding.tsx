@@ -233,11 +233,11 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
     <div className="max-w-5xl mx-auto">
       <section className="mt-6 sm:mt-8 pb-0 text-center">
         <div className="flex flex-col items-center">
-          <div className="w-[min(330px,78vw)] sm:w-[min(430px,70vw)] h-[76px] sm:h-[100px] overflow-hidden flex items-start justify-center">
+          <div className="w-[min(297px,70vw)] sm:w-[min(387px,63vw)] flex items-center justify-center">
             <img
-              src="https://d64gsuwffb70l.cloudfront.net/688263e7085fd34dcdf7f46a_1775752881652_48fe46d9.png"
+              src="/onlyfast-logo.png"
               alt="OnlyFast"
-              className="w-full h-auto -translate-y-[37%]"
+              className="w-full h-auto"
             />
           </div>
           <p className="text-[13px] sm:text-xl font-semibold tracking-[0.12em] sm:tracking-[0.18em] text-[#4B5563] uppercase mt-2">
