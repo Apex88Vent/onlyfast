@@ -112,7 +112,10 @@ const RaceScheduleExport: React.FC<RaceScheduleExportProps> = ({ isOpen, races, 
       ctx.fillText(truncate(ctx, r.track || 'Track', 560), 240, y + 50);
       ctx.fillStyle = GRAY;
       ctx.font = '26px Arial, sans-serif';
-      const sub = r.organization ? r.organization : '—';
+      const finalDate = r.race_end_date && r.race_end_date !== r.race_date
+        ? `Through ${formatDate(r.race_end_date)}`
+        : '';
+      const sub = [r.organization, finalDate].filter(Boolean).join(' · ') || '—';
       ctx.fillText(truncate(ctx, sub, 560), 240, y + 86);
 
       // Finishing position (right)

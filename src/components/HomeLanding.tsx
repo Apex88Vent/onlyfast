@@ -1,12 +1,13 @@
 import React from 'react';
 import { ArrowLeft, ArrowRight, BarChart3, CalendarDays, CheckCircle2, CircleDashed, Library, Plus, Save, Trophy, Wrench, type LucideIcon } from 'lucide-react';
 
-export type HomeAction = 'new-setup' | 'saved' | 'schedule' | 'todo' | 'parts' | 'library' | 'continue-weekend' | 'previous-weekend' | 'next-race-weekend';
+export type HomeAction = 'new-setup' | 'saved' | 'schedule' | 'todo' | 'parts' | 'library' | 'previous-race' | 'current-race' | 'next-race';
 
 interface CurrentWeekend {
   trackName?: string;
   date?: string;
   sessions?: {
+    id?: string;
     label: string;
     status: 'complete' | 'in-progress' | 'not-started';
   }[];
@@ -16,6 +17,8 @@ interface UpcomingEvent {
   id?: string;
   track: string;
   date: string;
+  endDate?: string;
+  organization?: string;
 }
 
 interface PerformanceStat {
@@ -29,6 +32,9 @@ interface HomeLandingProps {
   nextEvent?: UpcomingEvent | null;
   currentWeekend?: CurrentWeekend | null;
   currentWeekendTitle?: 'Current Race Weekend' | 'Next Race Weekend';
+  hasPreviousRace?: boolean;
+  hasNextRace?: boolean;
+  centerRaceLabel?: 'Current Race' | 'Upcoming Race';
   performanceStats?: PerformanceStat[];
   upcomingEvents?: UpcomingEvent[];
   middleSlot?: React.ReactNode;
@@ -81,9 +87,11 @@ const getEventCountdown = (date?: string) => {
   return '';
 };
 
-const getWeekendStorageKey = (weekend?: CurrentWeekend | null) => {
-  const keyParts = [weekend?.trackName, weekend?.date].filter(Boolean).join('|');
-  return keyParts ? `onlyfast_weekend_started_${keyParts}` : '';
+const formatEventDate = (event?: UpcomingEvent | null) => {
+  if (!event?.date) return '';
+  const start = formatDate(event.date);
+  if (!event.endDate || event.endDate === event.date) return start;
+  return `${start} – ${formatDate(event.endDate)}`;
 };
 
 const formatCarNumber = (carNumber?: string) => {
@@ -181,6 +189,9 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
   nextEvent,
   currentWeekend,
   currentWeekendTitle,
+  hasPreviousRace = false,
+  hasNextRace = false,
+  centerRaceLabel = 'Current Race',
   performanceStats = [],
   upcomingEvents = [],
   middleSlot,
@@ -189,45 +200,15 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
 }) => {
   const displayedWeekend = currentWeekend;
   const nextEventCountdown = getEventCountdown(nextEvent?.date);
-  const showNextEventCountdown = Boolean(nextEvent && nextEventCountdown && nextEvent.track);
-  const showTopInfoCard = Boolean(selectedCar || showNextEventCountdown);
+  const nextEventDate = formatEventDate(nextEvent);
+  const showNextEvent = Boolean(nextEvent && nextEvent.track.trim());
+  const showTopInfoCard = Boolean(selectedCar || showNextEvent);
   const showCurrentRaceWeekendCard = Boolean(
     displayedWeekend && (displayedWeekend.trackName || displayedWeekend.date || displayedWeekend.sessions?.length)
   );
   const displayedWeekendTitle = currentWeekendTitle || 'Current Race Weekend';
-  const showingFutureNextRace = displayedWeekendTitle === 'Next Race Weekend';
-  const topInfoCount = (selectedCar ? 1 : 0) + (showNextEventCountdown ? 1 : 0);
+  const topInfoCount = (selectedCar ? 1 : 0) + (showNextEvent ? 1 : 0);
   const formattedCarNumber = formatCarNumber(carNumber);
-  const weekendStorageKey = getWeekendStorageKey(currentWeekend);
-  const [weekendStarted, setWeekendStarted] = React.useState(false);
-
-  React.useEffect(() => {
-    if (!weekendStorageKey || typeof window === 'undefined') {
-      setWeekendStarted(false);
-      return;
-    }
-
-    try {
-      setWeekendStarted(window.localStorage.getItem(weekendStorageKey) === 'true');
-    } catch {
-      setWeekendStarted(false);
-    }
-  }, [weekendStorageKey]);
-
-  const handleWeekendAction = () => {
-    if (showingFutureNextRace) {
-      onAction('previous-weekend');
-      return;
-    }
-    if (weekendStorageKey && typeof window !== 'undefined') {
-      try { window.localStorage.setItem(weekendStorageKey, 'true'); } catch {}
-    }
-    setWeekendStarted(true);
-    onAction('continue-weekend');
-  };
-  const handleNextRaceAction = () => {
-    onAction('next-race-weekend');
-  };
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -274,13 +255,16 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
                 </div>
               </div>
             )}
-            {showNextEventCountdown && nextEvent && (
+            {showNextEvent && nextEvent && (
               <div className="flex items-center justify-center gap-2 sm:gap-3 px-1 sm:px-2">
                 <CalendarDays className="h-6 w-6 sm:h-8 sm:w-8 text-[#00A8E8] flex-shrink-0" aria-hidden="true" />
                 <div className="text-left min-w-0">
                   <div className="text-[#00A8E8] text-[12px] sm:text-sm font-semibold tracking-[0.08em] uppercase leading-tight">Next Event</div>
-                  <div className="text-[#1A1B23] text-sm sm:text-lg font-medium truncate">{nextEventCountdown}</div>
+                  <div className="text-[#1A1B23] text-sm sm:text-lg font-medium truncate">{nextEventCountdown || nextEventDate}</div>
                   <div className="text-[#4B5563] text-xs sm:text-sm font-medium truncate">{nextEvent.track}</div>
+                  {nextEventCountdown && nextEventDate && (
+                    <div className="text-[#6B7280] text-[10px] sm:text-xs font-medium truncate">{nextEventDate}</div>
+                  )}
                 </div>
               </div>
             )}
@@ -331,7 +315,7 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
               {displayedWeekend.sessions && displayedWeekend.sessions.length > 0 && (
                 <div className="grid grid-cols-3 divide-x divide-[#E5E7EB] border-t border-[#E5E7EB] mt-1.5 sm:mt-4 pt-1.5 sm:pt-4">
                   {displayedWeekend.sessions.map(session => (
-                    <div key={session.label} className="px-1 sm:px-2 first:pl-0 last:pr-0 flex items-start gap-1 sm:gap-2">
+                    <div key={session.id || session.label} className="px-1 sm:px-2 first:pl-0 last:pr-0 flex items-start gap-1 sm:gap-2">
                       {session.status === 'complete' ? (
                         <span className="mt-0.5 h-4 w-4 sm:h-6 sm:w-6 rounded-full bg-[#00A8E8] text-white inline-flex items-center justify-center flex-shrink-0">
                           <CheckCircle2 className="h-3 w-3 sm:h-4 sm:w-4" aria-hidden="true" />
@@ -349,29 +333,31 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
                   ))}
                 </div>
               )}
-              <div className="mt-1.5 sm:mt-5 grid grid-cols-2 gap-2">
+              <div className="mt-1.5 sm:mt-5 grid grid-cols-3 gap-1.5 sm:gap-2">
                 <button
-                  onClick={handleWeekendAction}
-                  className="bg-[#00A8E8] hover:bg-[#0090c7] text-white px-3 py-1.5 sm:py-3 rounded-xl text-xs sm:text-lg font-bold transition-colors flex items-center justify-center gap-1.5 sm:gap-3 focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
+                  type="button"
+                  onClick={() => onAction('previous-race')}
+                  disabled={!hasPreviousRace}
+                  className="border border-[#00A8E8] text-[#00A8E8] hover:bg-[#00A8E8]/10 px-1.5 sm:px-3 py-1.5 sm:py-3 rounded-xl text-[10px] sm:text-base font-bold transition-colors flex items-center justify-center gap-1 sm:gap-2 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
                 >
-                  {showingFutureNextRace ? (
-                    <>
-                      <ArrowLeft className="h-4 w-4 sm:h-6 sm:w-6" aria-hidden="true" />
-                      Previous Weekend
-                    </>
-                  ) : (
-                    <>
-                      Continue Weekend
-                      <ArrowRight className="h-4 w-4 sm:h-6 sm:w-6" aria-hidden="true" />
-                    </>
-                  )}
+                  <ArrowLeft className="h-3.5 w-3.5 sm:h-5 sm:w-5 flex-shrink-0" aria-hidden="true" />
+                  Previous Race
                 </button>
                 <button
-                  onClick={handleNextRaceAction}
-                  className="border border-[#00A8E8] text-[#00A8E8] hover:bg-[#00A8E8]/10 px-3 py-1.5 sm:py-3 rounded-xl text-xs sm:text-lg font-bold transition-colors flex items-center justify-center gap-1.5 sm:gap-3 focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
+                  type="button"
+                  onClick={() => onAction('current-race')}
+                  className="bg-[#00A8E8] hover:bg-[#0090c7] text-white px-1.5 sm:px-3 py-1.5 sm:py-3 rounded-xl text-[10px] sm:text-base font-bold transition-colors flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
                 >
-                  {showingFutureNextRace ? 'Next Race' : 'Current Weekend'}
-                  <ArrowRight className="h-4 w-4 sm:h-6 sm:w-6" aria-hidden="true" />
+                  {centerRaceLabel}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onAction('next-race')}
+                  disabled={!hasNextRace}
+                  className="border border-[#00A8E8] text-[#00A8E8] hover:bg-[#00A8E8]/10 px-1.5 sm:px-3 py-1.5 sm:py-3 rounded-xl text-[10px] sm:text-base font-bold transition-colors flex items-center justify-center gap-1 sm:gap-2 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
+                >
+                  Next Race
+                  <ArrowRight className="h-3.5 w-3.5 sm:h-5 sm:w-5 flex-shrink-0" aria-hidden="true" />
                 </button>
               </div>
             </div>

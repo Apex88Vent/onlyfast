@@ -1,6 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
+import {
+  DEFAULT_RACE_SESSION_ORDER,
+  isValidSavedRaceSession,
+  RACE_SESSION_TYPES,
+  resolveSavedRaceWeekendSessions,
+  savedSessionLabel,
+  type RaceWeekendSessionRow,
+} from '@/lib/raceWeekendSessions';
 
 interface SavedSetupsProps {
   user: User | null;
@@ -35,11 +43,14 @@ const isBaseSetupRow = (s: any) =>
   norm(s.setup_type) === 'base_template' || norm(s.setup_name).toUpperCase().startsWith('[BASE TEMPLATE]');
 const cleanBaseTitle = (name: string) => name.replace(/^\[BASE TEMPLATE\]\s*/i, '').trim();
 
-// Prefer setup_name as the race-weekend identity. It is shared by every session
-// row saved from SetupDashboard, while track/date/class can be incomplete.
+// Track + local race date are the race-weekend identity used by the landing
+// card query. setup_name is only a fallback for legacy incomplete rows.
 const canGroup = (s: any) => norm(s.setup_name) !== '' || (norm(s.track_name) !== '' && norm(s.race_date) !== '');
 
 const buildGroupKey = (s: any) => {
+  const trackName = norm(s.track_name).toLowerCase();
+  const raceDate = norm(s.race_date).toLowerCase();
+  if (trackName && raceDate) return `race|${trackName}|${raceDate}`;
   const setupName = norm(s.setup_name).toLowerCase();
   if (setupName) return `setup-name|${setupName}`;
   return [
@@ -107,44 +118,12 @@ const buildGroups = (setups: any[]): SetupGroup[] => {
   return [...baseSetups, ...groups, ...standalone];
 };
 
-const sessionOrder: Record<string, number> = { base: 1, heat: 2, main: 3, extra1: 4, extra2: 5, extra3: 6 };
+const sessionOrder: Record<string, number> = { ...DEFAULT_RACE_SESSION_ORDER };
 
-const CANONICAL_TYPES = ['base', 'heat', 'main', 'extra1', 'extra2', 'extra3'] as const;
-const defaultLabelForType = (type: string) =>
-  type === 'main' ? 'Main Event' :
-  type === 'heat' ? 'Heat Race' :
-  type === 'extra1' ? 'Session 4' :
-  type === 'extra2' ? 'Session 5' :
-  type === 'extra3' ? 'Session 6' :
-  'Hot Laps';
+const CANONICAL_TYPES = RACE_SESSION_TYPES;
 const sessionLabelOf = (s: any) =>
   isBaseSetupRow(s) ? 'Base Setup' :
-  norm(s.session_label) || defaultLabelForType(s.setup_type);
-
-const hasMeaningfulSessionData = (s: any) => {
-  const sharedOrMetaFields = new Set([
-    'id', 'user_id', 'setup_type', 'setup_name', 'session_label', 'session_order',
-    'track_name', 'race_date', 'race_class', 'track_condition', 'track_shape',
-    'track_length', 'latitude', 'longitude', 'temperature', 'humidity',
-    'wind_speed', 'wind_direction', 'created_at', 'updated_at', 'organization',
-    'org',
-  ]);
-
-  return Object.entries(s || {}).some(([key, value]) => {
-    if (value === null || value === undefined || sharedOrMetaFields.has(key)) return false;
-    if (typeof value === 'object') {
-      return Array.isArray(value) ? value.length > 0 : Object.keys(value).length > 0;
-    }
-    return String(value).trim() !== '';
-  });
-};
-
-const isRealSavedSession = (s: any) => {
-  if (isBaseSetupRow(s)) return true;
-  const setupType = norm(s.setup_type);
-  const label = norm(s.session_label);
-  return hasMeaningfulSessionData(s) || (label !== '' && label !== defaultLabelForType(setupType));
-};
+  savedSessionLabel(s as RaceWeekendSessionRow) || '';
 
 const getSetupTypeBadge = (type: string) => {
   const colors: Record<string, string> = {
@@ -199,7 +178,9 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
     setLoading(false);
   };
 
-  const groups = useMemo(() => buildGroups(setups), [setups]);
+  const groups = useMemo(() => buildGroups(setups.filter(setup =>
+    isBaseSetupRow(setup) || isValidSavedRaceSession(setup as RaceWeekendSessionRow)
+  )), [setups]);
 
   // ---- ADD SESSION ---------------------------------------------------------
   const openAdd = (group: SetupGroup) => {
@@ -352,7 +333,7 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
                 Retry
               </button>
             </div>
-          ) : setups.length === 0 ? (
+          ) : groups.length === 0 ? (
             <div className="text-center py-8 text-[#9CA3AF]">
               <p className="text-sm">No saved setups yet</p>
             </div>
@@ -360,12 +341,12 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
             <ul className="space-y-3 max-h-[560px] overflow-y-auto" aria-label="Saved setups list">
               {groups.map(group => {
                 const subtitleParts = [group.raceClass, group.trackName, group.org].filter(p => p && p.trim() !== '');
-                const orderedSetups = [...group.setups].sort((a, b) => {
-                  const orderA = Number(a.session_order ?? sessionOrder[a.setup_type] ?? 99);
-                  const orderB = Number(b.session_order ?? sessionOrder[b.setup_type] ?? 99);
-                  return orderA - orderB;
-                });
-                const firstSetup = orderedSetups.find(isRealSavedSession) || orderedSetups[0];
+                const orderedSetups = group.isBaseSetup
+                  ? [...group.setups]
+                  : resolveSavedRaceWeekendSessions(group.setups as RaceWeekendSessionRow[])
+                      .map(session => session.row)
+                      .filter((row): row is RaceWeekendSessionRow => Boolean(row));
+                const firstSetup = orderedSetups[0];
                 const withGroupSetups = (setup: any) => ({
                   ...setup,
                   __groupSetups: orderedSetups,

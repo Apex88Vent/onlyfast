@@ -1,14 +1,20 @@
 import React, { useState, useRef, useCallback, useEffect, useId } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
+import { mergeTimingScanResults } from '@/lib/timingData';
 
 interface LapRow {
   lap: number;
   time: string;
   seconds?: number | null;
+  session_id?: string | null;
+  position?: number | string | null;
+  driver_name?: string | null;
+  car_number?: string | null;
 }
 
 export interface ScanResult {
+  session_id: string | null;
   track_name: string | null;
   event_name: string | null;
   race_date: string | null;
@@ -85,6 +91,7 @@ interface Props {
   currentSetupId?: string;
   currentSetupType?: 'base' | 'heat' | 'main' | 'extra1' | 'extra2' | 'extra3';
   onSignInClick: () => void;
+  onPickerOpening?: () => void;
   onSaved?: (setupId: string, timingData: any) => void;
 }
 
@@ -96,6 +103,22 @@ const SHOW_TEST_MODE_BUTTON = false;
 
 
 type Step = 'idle' | 'scanning' | 'review' | 'saving' | 'saved';
+
+type BatchImageStatus = 'selected' | 'uploading' | 'processing' | 'success' | 'failed';
+
+interface BatchImageItem {
+  id: string;
+  signature: string;
+  sessionId: string;
+  file: File;
+  previewUrl: string;
+  status: BatchImageStatus;
+  error?: string;
+  result?: ScanResult;
+}
+
+const fileSignature = (file: File): string =>
+  `${file.name || 'image'}|${file.size}|${file.lastModified}`;
 
 const getImageExtension = (file: File): string => {
   const name = file.name.toLowerCase();
@@ -184,6 +207,7 @@ const ScanTimingScreen: React.FC<Props> = ({
   currentSetupId,
   currentSetupType,
   onSignInClick,
+  onPickerOpening,
   onSaved,
 }) => {
 
@@ -199,12 +223,14 @@ const ScanTimingScreen: React.FC<Props> = ({
   const [savedMessage, setSavedMessage] = useState<string>('');
   const [uploadStatus, setUploadStatus] = useState<string>('Ready to upload screenshot');
   const [selectedFileInfo, setSelectedFileInfo] = useState<string | null>(null);
+  const [batchImages, setBatchImages] = useState<BatchImageItem[]>([]);
 
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const isPickingFileRef = useRef(false);
   const pickerChangeReceivedRef = useRef(false);
   const processingFileSignatureRef = useRef<string | null>(null);
+  const batchImagesRef = useRef<BatchImageItem[]>([]);
   const prefix = useId();
   const isSavingStep = step === 'saving';
 
@@ -230,6 +256,15 @@ const ScanTimingScreen: React.FC<Props> = ({
     }
   }, []);
 
+  const replaceBatchImages = useCallback((next: BatchImageItem[]) => {
+    batchImagesRef.current = next;
+    setBatchImages(next);
+  }, []);
+
+  const updateBatchImage = useCallback((id: string, patch: Partial<BatchImageItem>) => {
+    replaceBatchImages(batchImagesRef.current.map(item => item.id === id ? { ...item, ...patch } : item));
+  }, [replaceBatchImages]);
+
   const reset = useCallback(() => {
     setStep('idle');
     setPreviewUrl(null);
@@ -242,11 +277,21 @@ const ScanTimingScreen: React.FC<Props> = ({
     setSavedMessage('');
     setUploadStatus('Ready to upload screenshot');
     setSelectedFileInfo(null);
+    batchImagesRef.current.forEach(item => {
+      try { URL.revokeObjectURL(item.previewUrl); } catch {/* ignore */}
+    });
+    replaceBatchImages([]);
     pickerChangeReceivedRef.current = false;
     setFilePickingActive(false);
     if (uploadInputRef.current) uploadInputRef.current.value = '';
     if (cameraInputRef.current) cameraInputRef.current.value = '';
-  }, [setFilePickingActive]);
+  }, [replaceBatchImages, setFilePickingActive]);
+
+  useEffect(() => () => {
+    batchImagesRef.current.forEach(item => {
+      try { URL.revokeObjectURL(item.previewUrl); } catch {/* ignore */}
+    });
+  }, []);
 
   useEffect(() => {
     if (readStoredFilePickerActive()) {
@@ -268,11 +313,10 @@ const ScanTimingScreen: React.FC<Props> = ({
           cameraInputRef.current?.files?.length
         );
         if (hasPendingFile) return;
-        const message = 'No image was received from the picker.';
-        setUploadStatus(message);
-        setError(message);
+        setUploadStatus('No image selected');
+        setError(null);
         setErrorDetail(null);
-        setErrorStage('no-file-selected');
+        setErrorStage(null);
         setSelectedFileInfo(null);
         setFilePickingActive(false);
       }, 6000);
@@ -337,7 +381,10 @@ const ScanTimingScreen: React.FC<Props> = ({
     return { detail, stage, status };
   };
 
-  const handleInvokeResult = async (result: any, opts: { testMode?: boolean } = {}) => {
+  const handleInvokeResult = async (
+    result: any,
+    opts: { testMode?: boolean; applyToReview?: boolean } = {},
+  ): Promise<ScanResult> => {
     const { data, error: fnErr } = result || {};
     devLog('[ScanTimingScreen] invoke returned', { fnErr, data, sentTestMode: !!opts.testMode });
     setRawResponse(data ?? { _transport_error: fnErr?.message || null });
@@ -416,7 +463,13 @@ const ScanTimingScreen: React.FC<Props> = ({
         typeof lt?.seconds === 'number' ? lt.seconds :
         typeof lt?.lap_time === 'number' ? lt.lap_time :
         null;
-      return { lap: lapNum, time: timeStr, seconds };
+      return {
+        ...lt,
+        lap: lapNum,
+        time: timeStr,
+        seconds,
+        session_id: currentSetupId || null,
+      };
     });
 
     const num = (v: any): number | null =>
@@ -430,6 +483,7 @@ const ScanTimingScreen: React.FC<Props> = ({
       String(v);
 
     const mapped: ScanResult = {
+      session_id: currentSetupId || null,
       track_name: str(src.track_name),
       event_name: str(src.event_name),
       race_date: str(src.race_date ?? src.date),
@@ -486,73 +540,44 @@ const ScanTimingScreen: React.FC<Props> = ({
       fields_missing: mapped.fields_missing,
     });
 
-    setScan(mapped);
-    setStep('review');
-
     // NEVER show no-data-extracted for test mode (it's canned, by definition has data)
     if (!isTestMode && populated === 0 && mapped.lap_times.length === 0) {
       setErrorStage('no-data-extracted');
+      if (opts.applyToReview === false) {
+        throw new Error('No timing data could be read from this screenshot.');
+      }
       setError('The AI ran successfully but could not read any fields from this screenshot.');
       setErrorDetail(
         (mapped.raw_text ? `Raw text read: "${mapped.raw_text.slice(0, 200)}"` : 'No raw text returned.') +
         ' Try a clearer or higher-resolution screenshot.'
       );
     }
+
+    if (opts.applyToReview !== false) {
+      setScan(mapped);
+      setStep('review');
+    }
+    return mapped;
   };
 
 
 
-  const handleFile = async (file: File) => {
-    setError(null);
-    setErrorDetail(null);
-    setErrorStage(null);
-    setRawResponse(null);
-    setSavedMessage('');
-    const fileName = file.name || 'selected image';
-    const fileType = file.type || '(missing type)';
-    const fileSizeMb = (file.size / (1024 * 1024)).toFixed(2);
-    setUploadStatus(`File selected: ${fileName}`);
-    setSelectedFileInfo(`${fileName} - ${fileType} - ${fileSizeMb} MB`);
-
-    devLog('file selected');
-    devLog('selected file name/type/size', {
-      name: file.name || '(unnamed)',
-      type: file.type || '(missing type)',
-      size: file.size,
-    });
-
-    if (!fileHasSupportedImageType(file)) {
-      setUploadStatus('Upload failed: Unsupported file type');
-      setError('Unsupported file type. Please choose a PNG, JPG, JPEG, WEBP, HEIC, HEIF, or phone screenshot image.');
-      setErrorDetail(`Selected file: ${file.name || '(unnamed)'} - ${file.type || 'unknown type'}`);
-      setErrorStage('client-validation');
-      return;
-    }
-    if (file.size > MAX_UPLOAD_BYTES) {
-      setUploadStatus('Upload failed: Image is too large');
-      setError('Image is too large. Please keep it under 25 MB.');
-      setErrorDetail(`Selected file size: ${(file.size / (1024 * 1024)).toFixed(1)} MB`);
-      setErrorStage('client-validation');
-      return;
-    }
+  const processBatchImage = async (item: BatchImageItem): Promise<ScanResult | null> => {
+    const { file } = item;
     try {
-      setUploadStatus('Preparing screenshot');
-      devLog('upload started');
-      const immediatePreview = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(reader.error || new Error('Could not read selected image'));
-        reader.readAsDataURL(file);
-      });
-      setPreviewUrl(immediatePreview);
-      // Compress: max 1200px wide, JPEG q=0.7
+      if (!fileHasSupportedImageType(file)) {
+        throw new Error('Unsupported file type. Choose a PNG, JPG, WEBP, HEIC, or HEIF image.');
+      }
+      if (file.size > MAX_UPLOAD_BYTES) {
+        throw new Error('Image is too large. Keep each screenshot under 25 MB.');
+      }
+
+      updateBatchImage(item.id, { status: 'uploading', error: undefined });
+      setUploadStatus(`Uploading ${file.name || 'screenshot'}`);
       const compressed = await compressImage(file, MAX_IMAGE_WIDTH, JPEG_QUALITY);
       setPreviewUrl(compressed.dataUrl);
-      devLog('image preview loaded');
-      setUploadStatus('Uploading screenshot');
-      setStep('scanning');
-
       devLog('[ScanTimingScreen] Compressed & invoking scan-timing-screen', {
+        sessionId: item.sessionId,
         mimeType: compressed.mimeType,
         base64_length: compressed.base64.length,
         compressed_bytes: compressed.bytes,
@@ -561,34 +586,101 @@ const ScanTimingScreen: React.FC<Props> = ({
         original_file_size: file.size,
         file_name: file.name,
       });
-      devLog('upload complete');
 
-      setUploadStatus('Scanning screenshot');
-      devLog('scan started');
+      updateBatchImage(item.id, { status: 'processing' });
+      setUploadStatus(`Processing timing data from ${file.name || 'screenshot'}`);
       const result = await invokeWithTimeout({
         imageBase64: compressed.base64,
         mimeType: compressed.mimeType,
+        sessionId: item.sessionId,
       });
-      await handleInvokeResult(result);
-      setUploadStatus('Scan complete');
-      devLog('scan complete');
+      const mapped = await handleInvokeResult(result, { applyToReview: false });
+      const sessionResult: ScanResult = {
+        ...mapped,
+        session_id: item.sessionId,
+        lap_times: mapped.lap_times.map(lap => ({ ...lap, session_id: item.sessionId })),
+      };
+      updateBatchImage(item.id, { status: 'success', result: sessionResult, error: undefined });
+      return sessionResult;
     } catch (err: any) {
-      devError('[ScanTimingScreen] Scan failed:', err);
-      if (err?.message === 'FRONTEND_TIMEOUT') {
-        setErrorStage('frontend-timeout');
-        setError('Scan timed out. Try a smaller or clearer screenshot.');
-        setErrorDetail(`The Edge Function did not respond within ${FRONTEND_TIMEOUT_MS / 1000} seconds.`);
-        setUploadStatus('Upload failed: Scan timed out');
-      } else if (/read|decode|canvas|data url|load/i.test(err?.message || '')) {
-        setErrorStage('image-read');
-        setError('Could not load that image. Please try a PNG, JPG, WEBP, HEIC, HEIF, or a clearer screenshot from your photo library.');
-        setErrorDetail(err?.message || null);
-        setUploadStatus('Upload failed: Image read failure');
-      } else {
-        setErrorStage(prev => prev || 'scan-failed');
-        setError(err?.message || 'Scan failed. Please try again.');
-        setUploadStatus(`Upload failed: ${err?.message || 'Scan failed'}`);
-      }
+      devError('[ScanTimingScreen] Screenshot processing failed:', err);
+      const message = err?.message === 'FRONTEND_TIMEOUT'
+        ? 'Scan timed out. Try a smaller or clearer screenshot.'
+        : (err?.message || 'Upload or processing failed.');
+      updateBatchImage(item.id, { status: 'failed', error: message, result: undefined });
+      return null;
+    }
+  };
+
+  const showCombinedBatchResult = () => {
+    if (!currentSetupId) return false;
+    const successful = batchImagesRef.current
+      .filter(item => item.status === 'success' && item.result)
+      .map(item => item.result as ScanResult);
+    const combined = mergeTimingScanResults(
+      successful as unknown as Record<string, unknown>[],
+      currentSetupId,
+    ) as unknown as ScanResult | null;
+    if (!combined) return false;
+
+    const failedCount = batchImagesRef.current.filter(item => item.status === 'failed').length;
+    setScan(combined);
+    setError(null);
+    setErrorDetail(null);
+    setErrorStage(null);
+    setUploadStatus(
+      failedCount > 0
+        ? `${successful.length} screenshot${successful.length === 1 ? '' : 's'} processed; ${failedCount} failed`
+        : `Upload successful: ${successful.length} screenshot${successful.length === 1 ? '' : 's'} combined`,
+    );
+    setSelectedFileInfo(`${combined.lap_times.length} unique lap${combined.lap_times.length === 1 ? '' : 's'} ready to review`);
+    setStep('review');
+    return true;
+  };
+
+  const handleFiles = async (files: File[]) => {
+    if (!currentSetupId) {
+      setError('Save this session before uploading timing screenshots.');
+      setErrorStage('no-setup-row');
+      setUploadStatus('Upload failed: Save the session first');
+      return;
+    }
+
+    const existingSignatures = new Set(batchImagesRef.current.map(item => item.signature));
+    const newItems = files
+      .filter(file => !existingSignatures.has(fileSignature(file)))
+      .map((file, index): BatchImageItem => ({
+        id: `${Date.now()}-${index}-${Math.random().toString(36).slice(2)}`,
+        signature: fileSignature(file),
+        sessionId: currentSetupId,
+        file,
+        previewUrl: URL.createObjectURL(file),
+        status: 'selected',
+      }));
+    if (newItems.length === 0) {
+      setUploadStatus('Those screenshots are already in this batch');
+      return;
+    }
+
+    replaceBatchImages([...batchImagesRef.current, ...newItems]);
+    setError(null);
+    setErrorDetail(null);
+    setErrorStage(null);
+    setRawResponse(null);
+    setSavedMessage('');
+    setStep('scanning');
+    setUploadStatus(`${newItems.length} image${newItems.length === 1 ? '' : 's'} selected`);
+    setSelectedFileInfo(newItems.map(item => item.file.name || 'screenshot').join(', '));
+
+    for (const item of newItems) {
+      await processBatchImage(item);
+    }
+
+    if (!showCombinedBatchResult()) {
+      const message = 'Upload or processing failed for every screenshot. Retry a failed image or choose another screenshot.';
+      setError(message);
+      setErrorStage('batch-failed');
+      setUploadStatus(message);
       setStep('idle');
     }
   };
@@ -622,12 +714,19 @@ const ScanTimingScreen: React.FC<Props> = ({
 
   const openUploadPicker = () => {
     devLog('upload button clicked');
+    if (!currentSetupId) {
+      setError('Save this session before uploading timing screenshots.');
+      setErrorStage('no-setup-row');
+      setUploadStatus('Upload failed: Save the session first');
+      return;
+    }
     setError(null);
     setErrorDetail(null);
     setErrorStage(null);
     setSelectedFileInfo(null);
     setUploadStatus('Opening photo picker');
     pickerChangeReceivedRef.current = false;
+    onPickerOpening?.();
     setFilePickingActive(true);
     if (uploadInputRef.current) {
       uploadInputRef.current.value = '';
@@ -643,12 +742,19 @@ const ScanTimingScreen: React.FC<Props> = ({
 
   const openCameraPicker = () => {
     devLog('upload button clicked');
+    if (!currentSetupId) {
+      setError('Save this session before taking a timing photo.');
+      setErrorStage('no-setup-row');
+      setUploadStatus('Upload failed: Save the session first');
+      return;
+    }
     setError(null);
     setErrorDetail(null);
     setErrorStage(null);
     setSelectedFileInfo(null);
     setUploadStatus('Opening photo picker');
     pickerChangeReceivedRef.current = false;
+    onPickerOpening?.();
     setFilePickingActive(true);
     if (cameraInputRef.current) {
       cameraInputRef.current.value = '';
@@ -666,24 +772,23 @@ const ScanTimingScreen: React.FC<Props> = ({
     devLog('file input selection fired');
     setUploadStatus('Returned from photo picker');
     pickerChangeReceivedRef.current = true;
-    const f = input.files?.[0];
-    if (!f) {
-      const message = 'No image was received from the picker.';
-      setUploadStatus(message);
-      setError(message);
+    const files = Array.from(input.files || []);
+    if (files.length === 0) {
+      setUploadStatus('No image selected');
+      setError(null);
       setErrorDetail(null);
-      setErrorStage('no-file-selected');
+      setErrorStage(null);
       setSelectedFileInfo(null);
       setFilePickingActive(false);
       input.value = '';
       return;
     }
-    const signature = `${f.name || 'image'}|${f.size}|${f.lastModified}`;
+    const signature = files.map(fileSignature).join('||');
     if (processingFileSignatureRef.current === signature) return;
     processingFileSignatureRef.current = signature;
     devLog('selected file received');
     try {
-      await handleFile(f);
+      await handleFiles(files);
     } finally {
       processingFileSignatureRef.current = null;
       setFilePickingActive(false);
@@ -702,9 +807,9 @@ const ScanTimingScreen: React.FC<Props> = ({
   const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    const f = e.dataTransfer.files?.[0];
-    if (f) {
-      handleFile(f);
+    const files = Array.from(e.dataTransfer.files || []);
+    if (files.length > 0) {
+      void handleFiles(files);
       return;
     }
     const message = 'No image was received from the picker.';
@@ -712,6 +817,27 @@ const ScanTimingScreen: React.FC<Props> = ({
     setError(message);
     setErrorStage('no-file-selected');
     setSelectedFileInfo(null);
+  };
+
+  const retryBatchImage = async (id: string) => {
+    const item = batchImagesRef.current.find(candidate => candidate.id === id);
+    if (!item || !currentSetupId) return;
+    setStep('scanning');
+    await processBatchImage({ ...item, sessionId: currentSetupId });
+    if (!showCombinedBatchResult()) setStep('idle');
+  };
+
+  const removeBatchImage = (id: string) => {
+    const item = batchImagesRef.current.find(candidate => candidate.id === id);
+    if (!item || item.status === 'uploading' || item.status === 'processing') return;
+    try { URL.revokeObjectURL(item.previewUrl); } catch {/* ignore */}
+    replaceBatchImages(batchImagesRef.current.filter(candidate => candidate.id !== id));
+    if (!showCombinedBatchResult()) {
+      setScan(null);
+      setStep('idle');
+      setUploadStatus('Ready to upload screenshot');
+      setSelectedFileInfo(null);
+    }
   };
 
   const updateScan = (patch: Partial<ScanResult>) => {
@@ -761,8 +887,18 @@ const ScanTimingScreen: React.FC<Props> = ({
       // Build the canonical timing_data jsonb payload.
       // This is the single source of truth for the saved scan.
       const timingData: any = {
-        source: 'screenshot_scan',
+        session_id: currentSetupId,
+        source: batchImagesRef.current.filter(item => item.status === 'success').length > 1
+          ? 'screenshot_scan_batch'
+          : 'screenshot_scan',
         scanned_at: new Date().toISOString(),
+        screenshots: batchImagesRef.current.map(item => ({
+          id: item.id,
+          session_id: currentSetupId,
+          file_name: item.file.name || 'screenshot',
+          status: item.status,
+          error: item.error || null,
+        })),
         // The five "kept" fields the user asked for:
         fastest_lap_time: scan.best_lap_time || null,
         fastest_lap_on_lap: scan.fastest_lap_on_lap ?? null,
@@ -773,7 +909,10 @@ const ScanTimingScreen: React.FC<Props> = ({
         positions_gained_lost: scan.positions_gained_lost ?? null,
         // Lap-by-lap array is still preserved on the record (per the spec),
         // even though we no longer render an editor for it.
-        lap_times: scan.lap_times || [],
+        lap_times: (scan.lap_times || []).map(lap => ({
+          ...lap,
+          session_id: currentSetupId,
+        })),
         // Raw OCR text if the edge function returned any — useful for debugging.
         raw_text: scan.raw_text || null,
         // Provenance / scanner metadata
@@ -822,11 +961,88 @@ const ScanTimingScreen: React.FC<Props> = ({
     }
   };
 
+  const renderBatchImages = () => {
+    if (batchImages.length === 0) return null;
+    const statusLabel: Record<BatchImageStatus, string> = {
+      selected: 'Image selected',
+      uploading: 'Uploading',
+      processing: 'Processing timing data',
+      success: 'Upload successful',
+      failed: 'Upload or processing failed',
+    };
+    return (
+      <div className="mb-4 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <p className="text-xs font-bold text-[#1A1B23]">Screenshots in this session batch</p>
+          <span className="text-[10px] font-semibold text-[#00A8E8]">{batchImages.length} selected</span>
+        </div>
+        <div className="space-y-2">
+          {batchImages.map(item => {
+            const busy = item.status === 'uploading' || item.status === 'processing';
+            return (
+              <div key={item.id} className="flex items-center gap-3 rounded-lg border border-[#E5E7EB] bg-white p-2">
+                <img
+                  src={item.previewUrl}
+                  alt={`Selected timing screenshot ${item.file.name || ''}`.trim()}
+                  className="h-12 w-12 rounded object-cover border border-[#E5E7EB] flex-shrink-0"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-semibold text-[#1A1B23]">{item.file.name || 'screenshot'}</p>
+                  <p className={`text-[10px] font-medium ${item.status === 'failed' ? 'text-red-600' : item.status === 'success' ? 'text-green-700' : 'text-[#6B7280]'}`}>
+                    {statusLabel[item.status]}
+                  </p>
+                  {item.error && <p className="text-[10px] text-red-600 break-words">{item.error}</p>}
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  {item.status === 'failed' && (
+                    <button
+                      type="button"
+                      onClick={() => void retryBatchImage(item.id)}
+                      className="rounded-md border border-[#00A8E8] px-2 py-1 text-[10px] font-semibold text-[#00A8E8] hover:bg-[#00A8E8]/10 focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
+                    >
+                      Retry
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => removeBatchImage(item.id)}
+                    disabled={busy}
+                    className="rounded-md px-2 py-1 text-[10px] font-semibold text-[#6B7280] hover:bg-red-50 hover:text-red-600 disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
 
   // ---------- RENDER ----------
   if (step === 'review' && scan) {
     return (
       <section className="bg-white rounded-2xl border border-[#E5E7EB] p-6 shadow-sm" aria-labelledby="scan-review-heading">
+        <input
+          ref={uploadInputRef}
+          type="file"
+          accept={IMAGE_ACCEPT}
+          multiple
+          className="sr-only"
+          onInput={onFileInput}
+          onChange={onFileChange}
+        />
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept={IMAGE_ACCEPT}
+          capture="environment"
+          className="sr-only"
+          onInput={onFileInput}
+          onChange={onFileChange}
+        />
         <div className="flex items-start justify-between flex-wrap gap-3 mb-4">
           <div>
             <h3 id="scan-review-heading" className="text-base font-bold text-[#1A1B23] flex items-center gap-2">
@@ -850,12 +1066,27 @@ const ScanTimingScreen: React.FC<Props> = ({
               </span>
             )}
             <button
+              type="button"
               onClick={reset}
               className="text-xs text-[#6B7280] hover:text-red-600 px-2 py-1 rounded focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
             >
               Discard
             </button>
           </div>
+        </div>
+        <div className="mb-4 flex justify-end">
+          <button
+            type="button"
+            onClick={openUploadPicker}
+            className="rounded-lg border border-[#00A8E8] px-3 py-2 text-xs font-semibold text-[#00A8E8] hover:bg-[#00A8E8]/10 focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
+          >
+            Add Another Screenshot
+          </button>
+        </div>
+        {renderBatchImages()}
+        <div className="mb-4 bg-green-50 border border-green-200 text-green-800 rounded-lg px-3 py-2 text-xs" role="status" aria-live="polite">
+          <p className="font-semibold">{uploadStatus}</p>
+          {selectedFileInfo && <p className="mt-1 break-all text-green-700">{selectedFileInfo}</p>}
         </div>
         {error && (
           <DiagnosticBanner
@@ -984,12 +1215,14 @@ const ScanTimingScreen: React.FC<Props> = ({
 
             <div className="flex items-center justify-end gap-2 flex-wrap pt-2">
               <button
+                type="button"
                 onClick={reset}
                 className="px-4 py-2 rounded-lg text-sm font-medium text-[#6B7280] hover:bg-[#F5F5F7] transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={saveSession}
                 disabled={isSavingStep}
                 className="bg-[#00A8E8] hover:bg-[#0090c7] text-white px-5 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 inline-flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
@@ -1044,6 +1277,7 @@ const ScanTimingScreen: React.FC<Props> = ({
         ref={uploadInputRef}
         type="file"
         accept={IMAGE_ACCEPT}
+        multiple
         className="sr-only"
         onInput={onFileInput}
         onChange={onFileChange}
@@ -1095,6 +1329,8 @@ const ScanTimingScreen: React.FC<Props> = ({
         />
       )}
 
+      {renderBatchImages()}
+
       <div
         onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
         onDrop={onDrop}
@@ -1134,12 +1370,14 @@ const ScanTimingScreen: React.FC<Props> = ({
             <p className="text-sm font-semibold text-[#1A1B23] mb-1">Drop a screenshot here, or</p>
             <div className="flex items-center justify-center gap-2 flex-wrap">
               <button
+                type="button"
                 onClick={openUploadPicker}
                 className="bg-[#00A8E8] hover:bg-[#0090c7] text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
               >
-                Upload Screenshot
+                Upload Screenshot{batchImages.length > 0 ? 's' : ''}
               </button>
               <button
+                type="button"
                 onClick={openCameraPicker}
                 className="bg-white hover:bg-[#F5F5F7] text-[#6B7280] border border-[#E5E7EB] px-4 py-2 rounded-lg text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
               >
@@ -1147,6 +1385,7 @@ const ScanTimingScreen: React.FC<Props> = ({
               </button>
               {SHOW_TEST_MODE_BUTTON && (
                 <button
+                  type="button"
                   onClick={runTestMode}
                   className="bg-white hover:bg-[#F5F5F7] text-[#6B7280] border border-[#E5E7EB] px-4 py-2 rounded-lg text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
                   title="Bypass OpenAI and load canned test data — useful for debugging the review screen"

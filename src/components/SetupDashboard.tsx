@@ -15,13 +15,17 @@ import CreateBaseSetupView from './CreateBaseSetupView';
 import BaseTemplatePicker from './BaseTemplatePicker';
 import TodoList from './TodoList';
 import ScanTimingScreen from './ScanTimingScreen';
-import TimingDataDisplay, { TimingData } from './TimingDataDisplay';
+import TimingDataDisplay from './TimingDataDisplay';
+import { attachTimingDataToSession, type TimingData } from '@/lib/timingData';
+import { buildPerformanceSummary, parsePerformancePosition } from '@/lib/performanceSummary';
 import PartsReference from './PartsReference';
 import RaceSchedule from './RaceSchedule';
 import HomeLanding, { HomeAction } from './HomeLanding';
 import {
-  daysFromToday,
-  getRaceWeekendScheduleSelection,
+  getRaceCenterLabel,
+  getRaceRolloverSelection,
+  getScheduleRaceKey,
+  getUpcomingScheduleEntries,
   sortScheduleEntriesByDate,
   type ScheduleRaceEntry,
 } from '@/lib/scheduleSelection';
@@ -43,6 +47,18 @@ import {
 } from '@/lib/membership';
 import RookieAdSlot from './RookieAdSlot';
 import { shouldShowAds } from '@/lib/ads';
+import {
+  createNewRaceWeekendSessions,
+  DEFAULT_RACE_SESSION_ORDER,
+  DEFAULT_RACE_SESSION_TYPES,
+  isDefaultRaceSessionType,
+  isGeneratedSessionPlaceholder,
+  isValidSavedRaceSession,
+  RACE_SESSION_TYPES,
+  resolveSavedRaceWeekendSessions,
+  type RaceSessionType,
+  type RaceWeekendSessionRow,
+} from '@/lib/raceWeekendSessions';
 
 
 
@@ -67,22 +83,22 @@ const readCarNumber = (user: User | null | undefined, override?: string): string
 // (Hot Laps / Heat / Main); the remaining 3 are optional user-added "extra"
 // slots. setup_type stores this stable slot key (NOT the display label) so
 // save/load/update/swipe never depend on the editable session name.
-type SetupType = 'base' | 'heat' | 'main' | 'extra1' | 'extra2' | 'extra3';
+type SetupType = RaceSessionType;
 
 // Default display names + canonical session_order for the built-in slots.
 const TAB_LABELS: Record<SetupType, { full: string; short: string }> = {
   base: { full: 'Hot Laps Setup', short: 'Hot Laps' },
   heat: { full: 'Heat Setup', short: 'Heat' },
-  main: { full: 'Main Event Setup', short: 'Main' },
-  extra1: { full: 'Extra Session', short: 'Session 4' },
-  extra2: { full: 'Extra Session', short: 'Session 5' },
-  extra3: { full: 'Extra Session', short: 'Session 6' },
+  main: { full: 'Main Event Setup', short: 'Main Event' },
+  extra1: { full: '', short: '' },
+  extra2: { full: '', short: '' },
+  extra3: { full: '', short: '' },
 };
 
 // Every slot key, in canonical fallback order. session_order (when present)
 // drives the real ordering; this is only the tie-break / default order.
-const ALL_SLOTS: SetupType[] = ['base', 'heat', 'main', 'extra1', 'extra2', 'extra3'];
-const DEFAULT_SESSION_SLOTS: SetupType[] = ['base', 'heat', 'main'];
+const ALL_SLOTS: SetupType[] = [...RACE_SESSION_TYPES];
+const DEFAULT_SESSION_SLOTS: SetupType[] = [...DEFAULT_RACE_SESSION_TYPES];
 const MAX_SESSIONS = 6;
 const FILE_PICKER_ACTIVE_KEY = 'onlyfast_file_picker_active';
 const FILE_PICKER_STARTED_AT_KEY = 'onlyfast_file_picker_started_at';
@@ -120,7 +136,7 @@ const isOnlyFastFilePickerOpen = (): boolean => {
 
 // Default session_order for the built-in slots (Hot Laps=1, Heat=2, Main=3).
 const DEFAULT_ORDER: Record<SetupType, number> = {
-  base: 1, heat: 2, main: 3, extra1: 4, extra2: 5, extra3: 6,
+  ...DEFAULT_RACE_SESSION_ORDER,
 };
 
 interface SetupState {
@@ -188,6 +204,7 @@ const IDLE_HOME_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 const STATE_STORAGE_KEY = 'onlyfast_setup_state_v2';
 const LAST_ROUTE_STORAGE_KEY = 'onlyfast_last_route_v1';
 const LAST_OPENED_SETUP_PREFIX = 'onlyfast_last_opened_setup_';
+const ACTIVE_RACE_SELECTION_PREFIX = 'onlyfast_active_race_';
 
 type DashboardView = 'home' | 'setup' | 'saved' | 'compare' | 'create-base' | 'todo' | 'parts' | 'schedule';
 
@@ -238,9 +255,16 @@ interface WeekendPreview {
   trackName?: string;
   date?: string;
   sessions?: {
+    id?: string;
     label: string;
     status: WeekendSessionStatus;
   }[];
+}
+
+interface QueriedWeekendSessions {
+  raceKey: string;
+  rows: RaceWeekendSessionRow[];
+  queryFailed?: boolean;
 }
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
@@ -270,36 +294,6 @@ const cleanPayload = (payload: Record<string, unknown>) =>
     return acc;
   }, {});
 
-const parseResultPosition = (value: unknown): number | null => {
-  if (value === null || value === undefined) return null;
-  if (typeof value === 'number') return Number.isFinite(value) && value >= 0 ? value : null;
-  const text = String(value).trim();
-  if (!text || /^tbd$/i.test(text)) return null;
-  const parsed = Number.parseInt(text, 10);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
-};
-
-const parseTimingNumber = (value: unknown): number | null => {
-  if (value === null || value === undefined) return null;
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-  const text = String(value).trim();
-  if (!text) return null;
-  const parsed = Number.parseFloat(text);
-  return Number.isFinite(parsed) ? parsed : null;
-};
-
-const positionDeltaFromTiming = (timingData: unknown): number | null => {
-  if (!timingData || typeof timingData !== 'object') return null;
-  const timing = timingData as Record<string, unknown>;
-  const savedDelta = parseTimingNumber(timing.positions_gained_lost);
-  if (savedDelta !== null) return savedDelta;
-
-  const start = parseTimingNumber(timing.starting_position);
-  const finish = parseTimingNumber(timing.finish_position ?? timing.finishing_position);
-  if (start === null || finish === null) return null;
-  return start - finish;
-};
-
 const lastOpenedSetupKey = (userId: string) => `${LAST_OPENED_SETUP_PREFIX}${userId}`;
 
 const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSignInClick }) => {
@@ -310,9 +304,9 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
   // Unified: one file name covers all three tabs, with DB ids stored per tab
   const [savedMeta, setSavedMeta] = useState<UnifiedSavedMeta>({ name: undefined, ids: {} });
-  // Timing data (jsonb on race_setups) keyed by tab. Populated when a setup is
-  // loaded, and refreshed when ScanTimingScreen finishes saving via onSaved.
-  const [timingDataByTab, setTimingDataByTab] = useState<Partial<Record<SetupType, TimingData | null>>>({});
+  // Timing data is keyed by the durable race_setups row id, never by a display
+  // tab or label. The selected session is fetched separately by that id.
+  const [timingDataBySessionId, setTimingDataBySessionId] = useState<Record<string, TimingData | null>>({});
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
 
   const [customFieldsOpen, setCustomFieldsOpen] = useState(false);
@@ -326,7 +320,9 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
   const [savedSetupsList, setSavedSetupsList] = useState<any[]>([]);
   const [scheduleRows, setScheduleRows] = useState<any[]>([]);
-  const [lastOpenedWeekend, setLastOpenedWeekend] = useState<WeekendPreview | null>(null);
+  const [activatedRaceKey, setActivatedRaceKey] = useState('');
+  const [scheduleToday, setScheduleToday] = useState(() => new Date());
+  const [queriedWeekendSessions, setQueriedWeekendSessions] = useState<QueriedWeekendSessions | null>(null);
   const [showCopyFromPast, setShowCopyFromPast] = useState(false);
   const [shareModalSetup, setShareModalSetup] = useState<any>(null);
   // "View Shared Setup" modal (enter a share code to view a read-only setup).
@@ -511,30 +507,115 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     return () => window.removeEventListener('car-number-updated', handler);
   }, [user]);
 
-  useEffect(() => {
+  const loadScheduleRows = useCallback(async () => {
     if (!user) {
       setScheduleRows([]);
       return;
     }
 
+    try {
+      const currentSchema = await supabase
+        .from('race_schedule')
+        .select('id,race_date,race_end_date,track,organization,finishing_position')
+        .eq('user_id', user.id)
+        .order('race_date', { ascending: true });
+
+      if (!currentSchema.error) {
+        setScheduleRows(currentSchema.data || []);
+        return;
+      }
+
+      // Keep existing accounts usable while the optional multi-day column is
+      // rolling out. PostgREST returns schema errors instead of throwing them.
+      const errorText = `${currentSchema.error.code || ''} ${currentSchema.error.message || ''}`;
+      if (!/race_end_date|42703|pgrst204/i.test(errorText)) throw currentSchema.error;
+
+      const legacySchema = await supabase
+        .from('race_schedule')
+        .select('id,race_date,track,organization,finishing_position')
+        .eq('user_id', user.id)
+        .order('race_date', { ascending: true });
+      if (legacySchema.error) throw legacySchema.error;
+      setScheduleRows((legacySchema.data || []).map(row => ({ ...row, race_end_date: null })));
+    } catch {
+      setScheduleRows([]);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    void loadScheduleRows();
+  }, [loadScheduleRows]);
+
+  useEffect(() => {
+    let midnightTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleMidnightRefresh = () => {
+      if (midnightTimer) clearTimeout(midnightTimer);
+      const now = new Date();
+      const nextMidnight = new Date(now);
+      nextMidnight.setHours(24, 0, 1, 0);
+      midnightTimer = setTimeout(() => {
+        setScheduleToday(new Date());
+        scheduleMidnightRefresh();
+      }, Math.max(1000, nextMidnight.getTime() - now.getTime()));
+    };
+    const refreshLocalDate = () => setScheduleToday(new Date());
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') refreshLocalDate();
+    };
+
+    scheduleMidnightRefresh();
+    window.addEventListener('focus', refreshLocalDate);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      if (midnightTimer) clearTimeout(midnightTimer);
+      window.removeEventListener('focus', refreshLocalDate);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setActivatedRaceKey('');
+      return;
+    }
+    try {
+      setActivatedRaceKey(localStorage.getItem(`${ACTIVE_RACE_SELECTION_PREFIX}${user.id}`) || '');
+    } catch {
+      setActivatedRaceKey('');
+    }
+  }, [user]);
+
+  const selectedSessionId = savedMeta.ids[activeTab];
+
+  useEffect(() => {
+    if (!user || !selectedSessionId) return;
     let cancelled = false;
+
+    setTimingDataBySessionId(prev => ({ ...prev, [selectedSessionId]: null }));
     (async () => {
       try {
-        const { data } = await supabase
-          .from('race_schedule')
-          .select('id,race_date,track,organization,finishing_position')
+        const { data, error } = await supabase
+          .from('race_setups')
+          .select('id,timing_data')
           .eq('user_id', user.id)
-          .order('race_date', { ascending: true })
-          .limit(20);
-
-        if (!cancelled) setScheduleRows(data || []);
+          .eq('id', selectedSessionId)
+          .maybeSingle();
+        if (error) throw error;
+        if (!cancelled) {
+          setTimingDataBySessionId(prev => ({
+            ...prev,
+            [selectedSessionId]: attachTimingDataToSession(data?.timing_data, selectedSessionId),
+          }));
+        }
       } catch {
-        if (!cancelled) setScheduleRows([]);
+        if (!cancelled) {
+          setTimingDataBySessionId(prev => ({ ...prev, [selectedSessionId]: null }));
+        }
       }
     })();
 
     return () => { cancelled = true; };
-  }, [user]);
+  }, [user, selectedSessionId]);
 
   const fetchSavedForCopy = async () => {
     if (!user) return;
@@ -548,107 +629,6 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       if (data) setSavedSetupsList(data);
     } catch {}
   };
-
-  useEffect(() => {
-    if (!user) {
-      setLastOpenedWeekend(null);
-      return;
-    }
-
-    let cancelled = false;
-    const key = lastOpenedSetupKey(user.id);
-    const lastId = (() => {
-      try { return localStorage.getItem(key); } catch { return null; }
-    })();
-    if (!lastId) {
-      setLastOpenedWeekend(null);
-      return;
-    }
-
-    const buildPreview = (rows: any[]): WeekendPreview | null => {
-      const raceRows = rows.filter(row =>
-        row?.setup_type !== 'base_template' &&
-        !String(row?.setup_name || '').trim().toUpperCase().startsWith('[BASE TEMPLATE]')
-      );
-      if (raceRows.length === 0) return null;
-
-      const source = raceRows[0];
-      const orderedRows = [...raceRows].sort((a, b) => {
-        const aType = ALL_SLOTS.includes(a.setup_type as SetupType) ? (a.setup_type as SetupType) : 'base';
-        const bType = ALL_SLOTS.includes(b.setup_type as SetupType) ? (b.setup_type as SetupType) : 'base';
-        const orderA = Number(a.session_order ?? DEFAULT_ORDER[aType] ?? 99);
-        const orderB = Number(b.session_order ?? DEFAULT_ORDER[bType] ?? 99);
-        return orderA - orderB;
-      });
-      const rowHasWeekendCardData = (row: any) => {
-        const sharedRaceFields = new Set([
-          'id', 'user_id', 'setup_type', 'setup_name', 'session_label', 'session_order',
-          'track_name', 'race_date', 'race_class', 'track_condition', 'track_shape',
-          'track_length', 'latitude', 'longitude', 'temperature', 'humidity',
-          'wind_speed', 'wind_direction', 'created_at', 'updated_at',
-        ]);
-
-        return Object.entries(row || {}).some(([key, value]) => {
-          if (value === null || value === undefined || sharedRaceFields.has(key)) return false;
-          if (typeof value === 'object') {
-            return Array.isArray(value) ? value.length > 0 : Object.keys(value).length > 0;
-          }
-          return String(value).trim() !== '';
-        });
-      };
-      const summaryRows = orderedRows.filter(row => {
-        const type = ALL_SLOTS.includes(row.setup_type as SetupType) ? (row.setup_type as SetupType) : 'base';
-        if (DEFAULT_SESSION_SLOTS.includes(type)) return true;
-        if (row.session_label && row.session_label !== TAB_LABELS[type].short) return true;
-        return rowHasWeekendCardData(row);
-      });
-      const rowLabel = (row: any) => {
-        const type = ALL_SLOTS.includes(row.setup_type as SetupType) ? (row.setup_type as SetupType) : 'base';
-        return row.session_label || TAB_LABELS[type].short;
-      };
-      const rowStatus = (row: any): WeekendSessionStatus =>
-        row.session_finished ? 'complete' : 'in-progress';
-
-      return {
-        trackName: source.track_name || source.setup_name || '',
-        date: source.race_date || '',
-        sessions: summaryRows.map(row => ({ label: rowLabel(row), status: rowStatus(row) })),
-      };
-    };
-
-    (async () => {
-      try {
-        const { data: row } = await supabase
-          .from('race_setups')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('id', lastId)
-          .maybeSingle();
-
-        if (!row) {
-          if (!cancelled) setLastOpenedWeekend(null);
-          return;
-        }
-
-        let rows = [row];
-        if (row.setup_name) {
-          const { data: siblings } = await supabase
-            .from('race_setups')
-            .select('*')
-            .eq('user_id', user.id)
-            .eq('setup_name', row.setup_name)
-            .order('created_at', { ascending: false });
-          if (siblings) rows = siblings;
-        }
-
-        if (!cancelled) setLastOpenedWeekend(buildPreview(rows));
-      } catch {
-        if (!cancelled) setLastOpenedWeekend(null);
-      }
-    })();
-
-    return () => { cancelled = true; };
-  }, [user, refreshTrigger, savedMeta.name]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -921,7 +901,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       user_id: user!.id,
       setup_type: tabKey,
       setup_name: name || s.setup_name || null,
-      session_label: sessionLabels[tabKey] || TAB_LABELS[tabKey].short,
+      session_label: sessionLabels[tabKey] || (isDefaultRaceSessionType(tabKey) ? TAB_LABELS[tabKey].short : null),
       session_order: sessionOrders[tabKey] ?? DEFAULT_ORDER[tabKey],
 
       track_name: s.trackName || '',
@@ -1044,19 +1024,19 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   };
 
   const sessionHasPayload = (t: SetupType) =>
-    Boolean(sessionHasSpecificData(setups[t]) || timingDataByTab[t]);
+    Boolean(
+      sessionHasSpecificData(setups[t]) ||
+      (savedMeta.ids[t] && timingDataBySessionId[savedMeta.ids[t]!])
+    );
 
   const isRealSession = (t: SetupType) => {
     if (deletedSessionSlots[t]) return false;
     if (!savedMeta.name && DEFAULT_SESSION_SLOTS.includes(t)) return true;
-    if (savedMeta.ids[t]) return true;
-    if (addedSessionSlots[t]) return true;
-    if (sessionHasPayload(t)) return true;
-    return false;
+    if (isDefaultRaceSessionType(t) && savedMeta.ids[t]) return true;
+    const intentionalLabel = sessionLabels[t]?.trim();
+    if (!intentionalLabel || isGeneratedSessionPlaceholder(intentionalLabel)) return false;
+    return Boolean(savedMeta.ids[t] || addedSessionSlots[t] || sessionHasPayload(t));
   };
-
-  const isIntentionalExtraSession = (t: SetupType) =>
-    !DEFAULT_SESSION_SLOTS.includes(t) && isRealSession(t);
 
 
   // Drain the offline queue — POSTs each pending save in order
@@ -1229,7 +1209,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
         const payload = buildPayload(setup, tabKey, name);
         try {
           let result: any;
-          if (existingId && !isRename) {
+          if (existingId) {
             result = await dbUpdate(existingId, payload);
           } else {
             result = await dbInsert(payload);
@@ -1239,8 +1219,8 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
           if (isNetworkError(err)) {
             // Queue it for later
             enqueuePending({
-              op: existingId && !isRename ? 'update' : 'insert',
-              rowId: existingId && !isRename ? existingId : undefined,
+              op: existingId ? 'update' : 'insert',
+              rowId: existingId || undefined,
               setupType: tabKey,
               setupName: name,
               payload,
@@ -1266,7 +1246,8 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       });
 
       setRefreshTrigger(prev => prev + 1);
-      await syncMainEventResultToSchedule(timingDataByTab.main);
+      const mainSessionId = newIds.main || savedMeta.ids.main;
+      await syncMainEventResultToSchedule(mainSessionId ? timingDataBySessionId[mainSessionId] : null);
       setPendingCount(readPendingQueue().length);
       if (!silent) {
         if (queuedAny) {
@@ -1462,18 +1443,17 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     // Fully-keyed (6-slot) so extra slots are present but blank.
     const newSetups: Record<SetupType, SetupState> = emptyAllSetups();
     const newIds: Partial<Record<SetupType, string>> = {};
-    const newTiming: Partial<Record<SetupType, TimingData | null>> = {};
     const newLabels: Partial<Record<SetupType, string>> = {};
     const newOrders: Partial<Record<SetupType, number>> = {};
     const loadedSavedSessions: Partial<Record<SetupType, boolean>> = {};
 
     const loadSiblingRow = (row: any) => {
+      if (!isValidSavedRaceSession(row as RaceWeekendSessionRow)) return;
       const t = ALL_SLOTS.includes(row.setup_type as SetupType) ? (row.setup_type as SetupType) : 'base';
       if (!ALL_SLOTS.includes(t)) return;
       if (newIds[t]) return; // prefer clicked/first-loaded row per slot
       newSetups[t] = loadSetupIntoState(row);
       newIds[t] = row.id;
-      newTiming[t] = row.timing_data ?? null;
       if (row.session_label) newLabels[t] = row.session_label;
       if (row.session_order) newOrders[t] = Number(row.session_order);
       loadedSavedSessions[t] = true;
@@ -1481,12 +1461,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
     // Seed at least the clicked row
     const clickedType = ALL_SLOTS.includes(setup.setup_type as SetupType) ? (setup.setup_type as SetupType) : 'base';
-    newSetups[clickedType] = loadSetupIntoState(setup);
-    newIds[clickedType] = setup.id;
-    newTiming[clickedType] = setup.timing_data ?? null;
-    if (setup.session_label) newLabels[clickedType] = setup.session_label;
-    if (setup.session_order) newOrders[clickedType] = Number(setup.session_order);
-    loadedSavedSessions[clickedType] = true;
+    loadSiblingRow(setup);
 
     if (Array.isArray(setup.__groupSetups)) {
       [...setup.__groupSetups]
@@ -1498,15 +1473,21 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
         .forEach(loadSiblingRow);
     }
 
-    // Try to fetch sibling rows (same user, same setup_name) for the other two tabs
+    // Fetch the exact race weekend so the page and landing card resolve the same rows.
     if (user && name) {
       try {
-        const { data } = await supabase
+        let siblingQuery = supabase
           .from('race_setups')
           .select('*')
-          .eq('user_id', user.id)
-          .eq('setup_name', name)
-          .order('created_at', { ascending: false });
+          .eq('user_id', user.id);
+        if (setup.race_date && setup.track_name) {
+          siblingQuery = siblingQuery
+            .eq('race_date', setup.race_date)
+            .eq('track_name', setup.track_name);
+        } else {
+          siblingQuery = siblingQuery.eq('setup_name', name);
+        }
+        const { data } = await siblingQuery.order('created_at', { ascending: false });
         if (data) {
           for (const row of data) {
             loadSiblingRow(row);
@@ -1527,7 +1508,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
     setSetups(newSetups);
     setSavedMeta({ name, ids: newIds });
-    setTimingDataByTab(newTiming);
+    setTimingDataBySessionId({});
     setSessionLabels(newLabels);
     setSessionOrders(newOrders);
     setDeletedSessionSlots({});
@@ -1538,8 +1519,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
           t === clickedType ||
           loadedSavedSessions[t] ||
           (newLabels[t] && newLabels[t] !== TAB_LABELS[t].short) ||
-          sessionHasSpecificData(newSetups[t]) ||
-          newTiming[t]
+          sessionHasSpecificData(newSetups[t])
         )
       )
       .sort((a, b) => (newOrders[a] ?? DEFAULT_ORDER[a]) - (newOrders[b] ?? DEFAULT_ORDER[b]));
@@ -1554,7 +1534,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   // tab whose setup row was just updated.
   const syncMainEventResultToSchedule = useCallback(async (timingData?: TimingData | null) => {
     if (!user || !timingData) return;
-    const finish = parseResultPosition(timingData.finishing_position);
+    const finish = parsePerformancePosition(timingData.finishing_position);
     if (finish === null) return;
 
     const raceDate = setups.main?.raceDate;
@@ -1581,13 +1561,13 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   }, [user, setups.main?.raceDate, setups.main?.trackName]);
 
   const handleTimingDataSaved = useCallback((setupId: string, timingData: any) => {
-    // Find which tab corresponds to this setup id
+    const sessionTiming = attachTimingDataToSession(timingData, setupId);
+    setTimingDataBySessionId(prev => ({ ...prev, [setupId]: sessionTiming }));
     const tab = (Object.keys(savedMeta.ids) as SetupType[])
       .find(t => savedMeta.ids[t] === setupId);
     if (!tab) return;
-    setTimingDataByTab(prev => ({ ...prev, [tab]: timingData ?? null }));
     if (tab === 'main') {
-      void syncMainEventResultToSchedule(timingData ?? null);
+      void syncMainEventResultToSchedule(sessionTiming);
     }
   }, [savedMeta.ids, syncMainEventResultToSchedule]);
 
@@ -1687,7 +1667,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     });
     setSetups(cleared);
     setSavedMeta({ name: undefined, ids: {} });
-    setTimingDataByTab({});
+    setTimingDataBySessionId({});
     setSessionLabels({});
     setSessionOrders({});
     setDeletedSessionSlots({});
@@ -1731,7 +1711,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   };
 
   const handleClearSetup = () => {
-    const label = TAB_LABELS[activeTab].short;
+    const label = labelForTab(activeTab);
     if (!confirm(`Clear the ${label} tab?`)) return;
     setSetups(prev => ({
       ...prev,
@@ -1741,11 +1721,13 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
   // ---- Per-session label + management (active session page) ----------------
   // Display label for a tab: custom label wins, else the canonical short name.
-  const labelForTab = (t: SetupType) => sessionLabels[t] || TAB_LABELS[t].short;
-  const fullLabelForTab = (t: SetupType) => sessionLabels[t] || TAB_LABELS[t].full;
+  const labelForTab = (t: SetupType) =>
+    sessionLabels[t]?.trim() || (isDefaultRaceSessionType(t) ? TAB_LABELS[t].short : '');
+  const fullLabelForTab = (t: SetupType) =>
+    sessionLabels[t]?.trim() || (isDefaultRaceSessionType(t) ? TAB_LABELS[t].full : '');
 
   // Does a tab represent an existing session? Defaults are real; blank extra
-  // slots are not, even if older state gave them the default Session 4/5/6 name.
+  // slots are not, even if older state gave them a generated placeholder name.
   const sessionExists = (t: SetupType) => {
     return isRealSession(t);
   };
@@ -1779,7 +1761,10 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     // Persist immediately if this session already has a saved DB row.
     const id = savedMeta.ids[activeTab];
     if (id) {
-      try { await dbUpdate(id, { session_label: name }); } catch {}
+      try {
+        await dbUpdate(id, { session_label: name });
+        setRefreshTrigger(prev => prev + 1);
+      } catch {}
     }
     setRenameOpen(false);
   };
@@ -1791,6 +1776,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   };
 
   const clearSessionSlot = (tab: SetupType, markDeleted = true) => {
+    const sessionId = savedMeta.ids[tab];
     setSetups(prev => ({
       ...prev,
       [tab]: { ...emptySetup(), raceClass: selectedCar },
@@ -1815,9 +1801,9 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       delete next[tab];
       return next;
     });
-    setTimingDataByTab(prev => {
+    setTimingDataBySessionId(prev => {
       const next = { ...prev };
-      delete next[tab];
+      if (sessionId) delete next[sessionId];
       return next;
     });
     setDeletedSessionSlots(prev => {
@@ -1881,7 +1867,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       });
       setSetups(cleared);
       setSavedMeta({ name: undefined, ids: {} });
-      setTimingDataByTab({});
+      setTimingDataBySessionId({});
       setSessionLabels({});
       setSessionOrders({});
       setAddedSessionSlots({});
@@ -1898,20 +1884,10 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     if (replacement) setActiveTab(replacement);
   };
 
-  const nextAddSessionLabel = () => {
-    let nextNumber = Math.max(orderedSessions.length + 1, 4);
-    let label = `Session ${nextNumber}`;
-    while (ALL_SLOTS.some(t => isDisplayableSession(t) && labelForTab(t).toLowerCase() === label.toLowerCase())) {
-      nextNumber += 1;
-      label = `Session ${nextNumber}`;
-    }
-    return label;
-  };
-
   // Add a new session (plus button in the horizontal selector).
   const openAddSession = () => {
     setSessionMenuOpen(false);
-    setAddSessionValue(nextAddSessionLabel());
+    setAddSessionValue('');
     setAddSessionError(null);
     setAddSessionOpen(true);
   };
@@ -2002,23 +1978,12 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
     const finish = (view: DashboardView, tab?: SetupType) => {
       if (cancelled) return;
-      if (isOnlyFastFilePickerOpen()) {
-        devLog('route reset blocked', { source: 'restoreSavedRoute.finish', view, tab });
-        setResumeAttempted(true);
-        return;
-      }
       if (tab) setActiveTab(tab);
       setActiveView(view);
       setResumeAttempted(true);
     };
 
     const restoreSavedRoute = async () => {
-      if (isOnlyFastFilePickerOpen()) {
-        devLog('route reset blocked', { source: 'restoreSavedRoute' });
-        setResumeAttempted(true);
-        return;
-      }
-
       const savedRoute = readSavedDashboardRoute();
       if (!savedRoute || Date.now() - savedRoute.timestamp >= IDLE_HOME_TIMEOUT_MS) {
         finish('home');
@@ -2129,13 +2094,11 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   const existingSessionCount = orderedSessions.filter(t => tabHasData(setups[t]) || !!savedMeta.ids[t]).length;
   const sessionStatus = (t: SetupType) => {
     if (setups[t]?.session_finished) return 'complete' as const;
-    if (setups[t]?.session_started || tabHasData(setups[t]) || savedMeta.ids[t] || timingDataByTab[t]) return 'in-progress' as const;
+    const sessionId = savedMeta.ids[t];
+    if (setups[t]?.session_started || tabHasData(setups[t]) || sessionId || (sessionId && timingDataBySessionId[sessionId])) return 'in-progress' as const;
     return 'not-started' as const;
   };
-  const currentWeekendSessions = orderedSessions.filter(t => {
-    if (DEFAULT_SESSION_SLOTS.includes(t)) return true;
-    return isIntentionalExtraSession(t);
-  });
+  const currentWeekendSessions = orderedSessions;
   const activeWeekend = (() => {
     const source = setups[activeTab] || setups.base;
     const hasCurrentWeekend = Boolean(savedMeta.name) || existingSessionCount > 0;
@@ -2145,66 +2108,106 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       trackName: source.trackName || savedMeta.name,
       date: source.raceDate,
       sessions: currentWeekendSessions.map(t => ({
+        id: savedMeta.ids[t],
         label: labelForTab(t),
         status: sessionStatus(t),
       })),
     };
   })();
-  const scheduleWeekendSelection = getRaceWeekendScheduleSelection(scheduleRows);
-  const defaultWeekendSessions = [
-    { label: 'Hot Laps', status: 'not-started' as const },
-    { label: 'Heat', status: 'not-started' as const },
-    { label: 'Main', status: 'not-started' as const },
-  ];
-  const currentWeekend = scheduleWeekendSelection
-    ? {
-        trackName: scheduleWeekendSelection.race.track || '',
-        date: scheduleWeekendSelection.race.race_date || '',
-        sessions:
-          (scheduleWeekendSelection.mode === 'current'
-            ? (activeWeekend?.sessions || lastOpenedWeekend?.sessions)
-            : undefined) || defaultWeekendSessions,
+  const raceNavigation = getRaceRolloverSelection(scheduleRows, scheduleToday);
+  const centerRaceDate = raceNavigation.center?.race_date || '';
+  const centerRaceTrack = String(raceNavigation.center?.track || '').trim();
+  const centerRaceQueryKey = raceNavigation.center
+    ? `${centerRaceDate}|${centerRaceTrack.toLowerCase()}`
+    : '';
+
+  useEffect(() => {
+    if (!user || !centerRaceQueryKey || !centerRaceDate || !centerRaceTrack) {
+      setQueriedWeekendSessions(null);
+      return;
+    }
+
+    let cancelled = false;
+    setQueriedWeekendSessions(prev => prev?.raceKey === centerRaceQueryKey ? prev : null);
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('race_setups')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('race_date', centerRaceDate)
+          .eq('track_name', centerRaceTrack)
+          .order('session_order', { ascending: true })
+          .order('created_at', { ascending: true });
+        if (error) throw error;
+        if (!cancelled) {
+          setQueriedWeekendSessions({
+            raceKey: centerRaceQueryKey,
+            rows: (data || []) as RaceWeekendSessionRow[],
+          });
+        }
+      } catch {
+        if (!cancelled) setQueriedWeekendSessions({ raceKey: centerRaceQueryKey, rows: [], queryFailed: true });
       }
-    : activeWeekend || lastOpenedWeekend;
-  const currentWeekendTitle = scheduleWeekendSelection?.title;
-  const upcomingEvents = sortScheduleEntriesByDate(scheduleRows)
-    .filter(r => {
-      const days = daysFromToday(r.race_date);
-      return days !== null && days >= 0 && r.track;
-    })
-    .slice(0, 3)
-    .map(r => ({ id: r.id, track: r.track, date: r.race_date }));
-  const nextEvent = upcomingEvents[0] || null;
-  const finishedRaces = scheduleRows
-    .map(r => ({ ...r, resultPosition: parseResultPosition(r.finishing_position) }))
-    .filter(r => r.resultPosition !== null);
-  const wins = finishedRaces.filter(r => r.resultPosition === 1).length;
-  const topFives = finishedRaces.filter(r => {
-    const pos = r.resultPosition;
-    return pos !== null && pos >= 1 && pos <= 5;
-  }).length;
-  const averageFinish = finishedRaces.length > 0
-    ? Math.round((finishedRaces.reduce((sum, r) => sum + (r.resultPosition ?? 0), 0) / finishedRaces.length) * 10) / 10
+    })();
+
+    return () => { cancelled = true; };
+  }, [centerRaceDate, centerRaceQueryKey, centerRaceTrack, refreshTrigger, user]);
+
+  const exactSavedWeekendSessions = queriedWeekendSessions?.raceKey === centerRaceQueryKey && !queriedWeekendSessions.queryFailed
+    ? (
+        queriedWeekendSessions.rows.length === 0
+          ? createNewRaceWeekendSessions()
+          : resolveSavedRaceWeekendSessions(queriedWeekendSessions.rows)
+      )
     : null;
-  const positionDeltas = savedSetupsList
-    .map(setup => positionDeltaFromTiming(setup?.timing_data))
-    .filter((value): value is number => value !== null);
-  const totalPositionsGained = positionDeltas.reduce((sum, value) => sum + value, 0);
-  const positionsGainedValue =
-    totalPositionsGained > 0 ? `+${totalPositionsGained}` : String(totalPositionsGained);
-  const performanceStats = finishedRaces.length > 0 || positionDeltas.length > 0
-    ? [
-        ...(finishedRaces.length > 0 ? [
-          { label: 'Events', value: finishedRaces.length },
-          { label: 'Avg Finish', value: averageFinish ?? 0 },
-          { label: 'Top 5s', value: topFives },
-          { label: 'Wins', value: wins },
-        ] : []),
-        ...(positionDeltas.length > 0 ? [
-          { label: 'Positions Gained', value: positionsGainedValue },
-        ] : []),
-      ]
-    : [];
+  const withholdGeneratedDefaults = Boolean(
+    user && centerRaceQueryKey && (
+      queriedWeekendSessions?.raceKey !== centerRaceQueryKey ||
+      queriedWeekendSessions.queryFailed
+    )
+  );
+  const defaultWeekendSessions = createNewRaceWeekendSessions()
+    .map(session => ({ label: session.label, status: session.status }));
+  const activeWeekendMatchesCenter = Boolean(
+    raceNavigation.center &&
+    activeWeekend &&
+    activeWeekend.date === raceNavigation.center.race_date &&
+    String(activeWeekend.trackName || '').trim().toLowerCase() === String(raceNavigation.center.track || '').trim().toLowerCase()
+  );
+  const activeStatusBySessionId = new Map(
+    (activeWeekendMatchesCenter ? activeWeekend?.sessions : [])
+      ?.filter(session => Boolean(session.id))
+      .map(session => [session.id as string, session.status]) || []
+  );
+  const exactWeekendPreviewSessions = exactSavedWeekendSessions?.map(session => ({
+    id: session.id || undefined,
+    label: session.label,
+    status: (session.id && activeStatusBySessionId.get(session.id)) || session.status,
+  }));
+  const currentWeekend = raceNavigation.center
+    ? {
+        trackName: raceNavigation.center.track || '',
+        date: raceNavigation.center.race_date || '',
+        sessions:
+          exactWeekendPreviewSessions ||
+          (activeWeekendMatchesCenter ? activeWeekend?.sessions : undefined) ||
+          (withholdGeneratedDefaults ? [] : defaultWeekendSessions),
+      }
+    : activeWeekend;
+  const currentWeekendTitle = 'Current Race Weekend' as const;
+  const centerRaceLabel = getRaceCenterLabel(raceNavigation, activatedRaceKey);
+  const upcomingEvents = getUpcomingScheduleEntries(scheduleRows, scheduleToday)
+    .slice(0, 3)
+    .map(r => ({
+      id: r.id,
+      track: r.track,
+      date: r.race_date,
+      endDate: r.race_end_date || undefined,
+      organization: r.organization || undefined,
+    }));
+  const nextEvent = upcomingEvents[0] || null;
+  const performanceStats = buildPerformanceSummary(scheduleRows, savedSetupsList);
 
   const openLastSavedSetup = async () => {
     if (!user) {
@@ -2263,8 +2266,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     return setup.raceDate === race.race_date && setup.trackName.trim().toLowerCase() === track;
   };
 
-  const openScheduledRaceWeekend = async () => {
-    const race = scheduleWeekendSelection?.race;
+  const openScheduledRaceWeekend = async (race?: ScheduleRaceEntry | null) => {
     const track = (race?.track || '').trim();
     const raceDate = race?.race_date || '';
     if (!race || !track || !raceDate) {
@@ -2272,7 +2274,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       return;
     }
 
-    const currentMatch = ALL_SLOTS.find(t => setupMatchesScheduleRace(setups[t], race));
+    const currentMatch = ALL_SLOTS.find(t => isDisplayableSession(t) && setupMatchesScheduleRace(setups[t], race));
     if (currentMatch) {
       setActiveTab(currentMatch);
       setActiveView('setup');
@@ -2290,12 +2292,13 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
           .order('updated_at', { ascending: false })
           .order('created_at', { ascending: false })
           .limit(20);
-        const existing = (data || []).find((row: any) =>
-          row.setup_type !== 'base_template' &&
-          !String(row.setup_name || '').trim().toUpperCase().startsWith('[BASE TEMPLATE]')
-        );
+        const resolvedSessions = resolveSavedRaceWeekendSessions((data || []) as RaceWeekendSessionRow[]);
+        const existing = resolvedSessions[0]?.row;
         if (existing) {
-          await handleLoadSetup(existing);
+          await handleLoadSetup({
+            ...existing,
+            __groupSetups: resolvedSessions.map(session => session.row).filter(Boolean),
+          });
           return;
         }
       } catch {
@@ -2314,7 +2317,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     });
     setSetups(prefilled);
     setSavedMeta({ name: undefined, ids: {} });
-    setTimingDataByTab({});
+    setTimingDataBySessionId({});
     setSessionLabels({});
     setSessionOrders({});
     setDeletedSessionSlots({});
@@ -2323,32 +2326,37 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     setActiveView('setup');
   };
 
+  const activateScheduledRace = (race?: ScheduleRaceEntry | null) => {
+    if (!race || !user) return;
+    const key = getScheduleRaceKey(race);
+    if (!key) return;
+    setActivatedRaceKey(key);
+    try { localStorage.setItem(`${ACTIVE_RACE_SELECTION_PREFIX}${user.id}`, key); } catch {/* ignore */}
+  };
+
   const handleHomeAction = async (action: HomeAction) => {
     if (action === 'new-setup') {
       handleNewSetupClick();
       return;
     }
 
-    if (action === 'previous-weekend') {
-      await openLastSavedSetup();
+    if (action === 'previous-race') {
+      await openScheduledRaceWeekend(raceNavigation.previous);
       return;
     }
 
-    if (action === 'next-race-weekend') {
-      await openScheduledRaceWeekend();
-      return;
-    }
-
-    if (action === 'continue-weekend') {
-      const activeSavedId = savedMeta.ids[activeTab] || Object.values(savedMeta.ids)[0];
-      if (activeSavedId && user) {
-        try { localStorage.setItem(lastOpenedSetupKey(user.id), String(activeSavedId)); } catch {}
-      }
-      if (!activeWeekend && lastOpenedWeekend) {
+    if (action === 'current-race') {
+      if (raceNavigation.center) {
+        activateScheduledRace(raceNavigation.center);
+        await openScheduledRaceWeekend(raceNavigation.center);
+      } else {
         await openLastSavedSetup();
-        return;
       }
-      setActiveView('setup');
+      return;
+    }
+
+    if (action === 'next-race') {
+      await openScheduledRaceWeekend(raceNavigation.next);
       return;
     }
 
@@ -2473,6 +2481,9 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
             nextEvent={nextEvent}
             currentWeekend={currentWeekend}
             currentWeekendTitle={currentWeekendTitle}
+            hasPreviousRace={Boolean(raceNavigation.previous)}
+            hasNextRace={Boolean(raceNavigation.next)}
+            centerRaceLabel={centerRaceLabel}
             performanceStats={performanceStats}
             upcomingEvents={upcomingEvents}
             middleSlot={<RookieAdSlot placement="home_middle" user={user} />}
@@ -2491,7 +2502,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
         ) : activeView === 'parts' ? (
           <PartsReference user={user} onSignInClick={onSignInClick} />
         ) : activeView === 'schedule' ? (
-          <RaceSchedule user={user} onSignInClick={onSignInClick} />
+          <RaceSchedule user={user} onSignInClick={onSignInClick} onScheduleChanged={loadScheduleRows} />
         ) : activeView === 'create-base' ? (
           <CreateBaseSetupView
             user={user}
@@ -2627,7 +2638,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
                   <button
                     onClick={handleClearSetup}
                     className="text-[#9CA3AF] hover:text-red-500 text-sm font-medium transition-colors flex items-center gap-1 px-2 py-2 rounded focus:outline-none focus:ring-2 focus:ring-red-500"
-                    aria-label={`Clear ${TAB_LABELS[activeTab].short} tab`}
+                    aria-label={`Clear ${labelForTab(activeTab)} tab`}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
@@ -2776,16 +2787,18 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
               />
 
               <ScanTimingScreen
+                key={savedMeta.ids[activeTab] || activeTab}
                 user={user}
                 currentSetupName={savedMeta.name}
                 currentSetupId={savedMeta.ids[activeTab]}
                 currentSetupType={activeTab}
                 onSignInClick={onSignInClick}
+                onPickerOpening={saveCurrentRoute}
                 onSaved={handleTimingDataSaved}
               />
 
               <TimingDataDisplay
-                timingData={timingDataByTab[activeTab] ?? null}
+                timingData={selectedSessionId ? timingDataBySessionId[selectedSessionId] ?? null : null}
                 setupType={activeTab}
               />
 
@@ -2978,7 +2991,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
               onChange={(e) => { setAddSessionValue(e.target.value); setAddSessionError(null); }}
               onKeyDown={(e) => { if (e.key === 'Enter') submitAddSession(); if (e.key === 'Escape') setAddSessionOpen(false); }}
               className="w-full px-3 py-2 border border-[#D1D5DB] rounded-lg text-sm text-[#1A1B23] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:border-[#00A8E8]"
-              placeholder="Session name"
+              placeholder="e.g. B Main"
               aria-label="New session name"
             />
             {addSessionError && <div className="text-xs text-red-600 mt-2" role="alert">{addSessionError}</div>}

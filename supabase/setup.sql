@@ -159,12 +159,21 @@ create table if not exists public.race_schedule (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   race_date date not null,
+  race_end_date date,
   track text not null,
   organization text,
   finishing_position text default 'TBD',
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  constraint race_schedule_end_on_or_after_start
+    check (race_end_date is null or race_end_date >= race_date)
 );
+
+alter table public.race_schedule add column if not exists race_end_date date;
+alter table public.race_schedule drop constraint if exists race_schedule_end_on_or_after_start;
+alter table public.race_schedule
+  add constraint race_schedule_end_on_or_after_start
+  check (race_end_date is null or race_end_date >= race_date);
 
 create index if not exists race_schedule_user_date_idx on public.race_schedule (user_id, race_date);
 

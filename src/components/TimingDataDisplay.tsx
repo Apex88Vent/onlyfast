@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import type { TimingData } from '@/lib/timingData';
+
+export type { TimingData } from '@/lib/timingData';
 
 /**
  * Renders the timing_data jsonb (saved on a race_setups row) as a compact
@@ -13,24 +16,6 @@ import React, { useState } from 'react';
  * lap_times[] is still in timing_data on the DB record and is now rendered
  * in a collapsible dropdown so the user can verify individual laps.
  */
-export interface TimingData {
-  source?: string;
-  scanned_at?: string;
-  fastest_lap_time?: string | number | null;
-  fastest_lap_on_lap?: number | null;
-  finishing_position?: number | string | null;
-  starting_position?: number | string | null;
-  slowest_lap_time?: string | number | null;
-  average_lap_time?: string | number | null;
-  positions_gained_lost?: number | null;
-  lap_times?: any[];
-  raw_text?: string | null;
-  scan_model?: string | null;
-  scan_confidence?: number | null;
-  function_version?: string | null;
-  [key: string]: any;
-}
-
 interface Props {
   timingData?: TimingData | null;
   // Which setup tab this is being shown under, just for the label

@@ -9,9 +9,10 @@ import { sortScheduleEntriesByDate } from '@/lib/scheduleSelection';
 interface RaceScheduleProps {
   user: User | null;
   onSignInClick: () => void;
+  onScheduleChanged?: () => void | Promise<void>;
 }
 
-const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick }) => {
+const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick, onScheduleChanged }) => {
   const [races, setRaces] = useState<RaceEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -35,6 +36,7 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick }) => {
       setRaces(sortScheduleEntriesByDate((data || []).map((r: any) => ({
         id: r.id,
         race_date: r.race_date,
+        race_end_date: r.race_end_date || '',
         track: r.track || '',
         organization: r.organization || '',
         finishing_position: r.finishing_position ?? 'TBD',
@@ -71,6 +73,7 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick }) => {
           .from('race_schedule')
           .update({
             race_date: entry.race_date,
+            race_end_date: entry.race_end_date || null,
             track: entry.track,
             organization: entry.organization || null,
             finishing_position: entry.finishing_position === '' ? null : entry.finishing_position,
@@ -85,6 +88,7 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick }) => {
           .insert({
             user_id: user.id,
             race_date: entry.race_date,
+            race_end_date: entry.race_end_date || null,
             track: entry.track,
             organization: entry.organization || null,
             finishing_position: entry.finishing_position === '' ? null : entry.finishing_position,
@@ -94,6 +98,7 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick }) => {
       setFormOpen(false);
       setEditing(null);
       await fetchRaces();
+      await onScheduleChanged?.();
     } catch (e: any) {
       setFormError('Could not save: ' + (e.message || 'Unknown error'));
     } finally {
@@ -113,6 +118,7 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick }) => {
         .eq('user_id', user.id);
       if (error) throw error;
       setRaces(prev => prev.filter(r => r.id !== entry.id));
+      await onScheduleChanged?.();
     } catch (e: any) {
       setError('Could not delete: ' + (e.message || 'Unknown error'));
     }
@@ -219,6 +225,9 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick }) => {
                 {/* Details */}
                 <div className="flex-1 min-w-0">
                   <h3 className="text-base sm:text-lg font-bold text-[#1A1B23] truncate">{r.track}</h3>
+                  {r.race_end_date && r.race_end_date !== r.race_date && (
+                    <p className="text-xs text-[#00A8E8] font-semibold">Through {new Date(`${r.race_end_date}T00:00:00`).toLocaleDateString()}</p>
+                  )}
                   <p className="text-sm text-[#6B7280] truncate">{r.organization || '—'}</p>
                   <p className="text-xs mt-1">
                     <span className="text-[#9CA3AF]">Finish: </span>

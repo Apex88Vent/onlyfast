@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 export interface RaceEntry {
   id?: string;
   race_date: string;
+  race_end_date?: string;
   track: string;
   organization: string;
   finishing_position: string;
@@ -19,6 +20,7 @@ interface RaceScheduleFormProps {
 
 const emptyEntry = (): RaceEntry => ({
   race_date: new Date().toISOString().split('T')[0],
+  race_end_date: '',
   track: '',
   organization: '',
   finishing_position: 'TBD',
@@ -49,6 +51,10 @@ const RaceScheduleForm: React.FC<RaceScheduleFormProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!entry.race_date) { setLocalError('Please choose a date.'); return; }
+    if (entry.race_end_date && entry.race_end_date < entry.race_date) {
+      setLocalError('The final date cannot be before the start date.');
+      return;
+    }
     if (!entry.track.trim()) { setLocalError('Please enter a track name.'); return; }
     setLocalError('');
     onSave({
@@ -78,9 +84,14 @@ const RaceScheduleForm: React.FC<RaceScheduleFormProps> = ({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="rf-date" className={labelCls}>Date <span className="text-[#00A8E8]">*</span></label>
+            <label htmlFor="rf-date" className={labelCls}>Start Date <span className="text-[#00A8E8]">*</span></label>
             <input id="rf-date" type="date" required value={entry.race_date}
               onChange={(e) => setEntry(p => ({ ...p, race_date: e.target.value }))} className={inputCls} />
+          </div>
+          <div>
+            <label htmlFor="rf-end-date" className={labelCls}>Final Date <span className="font-normal text-[#9CA3AF]">(multi-day weekends)</span></label>
+            <input id="rf-end-date" type="date" min={entry.race_date} value={entry.race_end_date || ''}
+              onChange={(e) => setEntry(p => ({ ...p, race_end_date: e.target.value }))} className={inputCls} />
           </div>
           <div>
             <label htmlFor="rf-track" className={labelCls}>Track <span className="text-[#00A8E8]">*</span></label>
