@@ -12,6 +12,10 @@ import AuthModal from './AuthModal';
 import CookieConsent from './CookieConsent';
 import Footer from './Footer';
 import LegalModal from './LegalModal';
+import ClassChangeModal from './ClassChangeModal';
+import { useNavigate } from 'react-router-dom';
+import { getEffectiveTier, readMembership } from '@/lib/membership';
+import { getActiveClassState, initializeActiveClass } from '@/lib/activeClass';
 // --- DEV/DEMO test-account reset (remove/disable before production) ---
 import { isTestAccount, ENABLE_TEST_ACCOUNT_RESET, resetTestAccountData } from '@/lib/testAccount';
 
@@ -41,9 +45,12 @@ const isOnlyFastFilePickerOpen = (): boolean => {
 };
 
 const AppLayout: React.FC = () => {
+  const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
   const [selectedCar, setSelectedCar] = useState<string>('');
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [classChangeOpen, setClassChangeOpen] = useState(false);
+  const [unlimitedClasses, setUnlimitedClasses] = useState<boolean | null>(null);
   const [isOnboarded, setIsOnboarded] = useState(false);
   const [showHowOnlyFastWorks, setShowHowOnlyFastWorks] = useState(false);
   const [hasCheckedHowOnlyFastWorks, setHasCheckedHowOnlyFastWorks] = useState(false);
@@ -142,7 +149,7 @@ const AppLayout: React.FC = () => {
 
   useEffect(() => {
     if (!authChecked) return;
-    if (!user || selectedCar) {
+    if (!user) {
       setIsLoadingSavedCar(false);
       return;
     }
@@ -151,20 +158,28 @@ const AppLayout: React.FC = () => {
     setIsLoadingSavedCar(true);
     (async () => {
       try {
-        const { data } = await supabase
-          .from('race_setups')
-          .select('race_class')
-          .eq('user_id', user.id)
-          .not('race_class', 'is', null)
-          .order('created_at', { ascending: false })
-          .limit(1);
-
-        const savedCar = (data?.[0]?.race_class || '').trim();
-        if (!cancelled && savedCar) {
-          applySelectedCar(savedCar);
+        let state = await getActiveClassState();
+        if (!cancelled) setUnlimitedClasses(state.unlimited);
+        if (!state.active_class && selectedCar) {
+          state = await initializeActiveClass(selectedCar);
+          if (!cancelled) setUnlimitedClasses(state.unlimited);
+        }
+        if (!cancelled && state.active_class) {
+          applySelectedCar(state.active_class);
         }
       } catch {
-        /* Non-fatal: users without a saved class continue to class selection. */
+        // Compatibility fallback until the migration is deployed.
+        try {
+          const { data } = await supabase
+            .from('race_setups')
+            .select('race_class')
+            .eq('user_id', user.id)
+            .not('race_class', 'is', null)
+            .order('created_at', { ascending: false })
+            .limit(1);
+          const savedCar = (data?.[0]?.race_class || '').trim();
+          if (!cancelled && savedCar) applySelectedCar(savedCar);
+        } catch {/* Existing users without a saved class continue to onboarding. */}
       } finally {
         if (!cancelled) setIsLoadingSavedCar(false);
       }
@@ -186,6 +201,7 @@ const AppLayout: React.FC = () => {
 
       if (!session?.user) {
         setSkipHowOnlyFastWorksAfterLogin(false);
+        setUnlimitedClasses(null);
       }
 
       if (event === 'SIGNED_IN') {
@@ -272,14 +288,25 @@ const AppLayout: React.FC = () => {
     setHasCheckedHowOnlyFastWorks(true);
   }, [authChecked, user, selectedCar, showSplash, isReplayingHowOnlyFastWorks, skipHowOnlyFastWorksAfterLogin, hasSelectedMembership]);
 
-  const handleCarSelect = (car: string) => {
-    applySelectedCar(car);
+  const handleCarSelect = async (car: string) => {
+    if (!user) {
+      applySelectedCar(car);
+      return;
+    }
+    try {
+      const state = await initializeActiveClass(car);
+      setUnlimitedClasses(state.unlimited);
+      applySelectedCar(state.active_class || car);
+    } catch {
+      applySelectedCar(car);
+    }
   };
 
-  const handleBackToCarSelect = () => {
-    setIsOnboarded(false);
-    setSelectedCar('');
-    try { localStorage.removeItem('onlyfast_car'); } catch {/* ignore */}
+  const openClassChange = () => setClassChangeOpen(true);
+  const effectiveTier = getEffectiveTier(readMembership(user?.user_metadata || {}));
+  const openTeamsUpgrade = () => {
+    setClassChangeOpen(false);
+    navigate('/upgrade', { state: { plan: 'teams' } });
   };
 
   const handleOpenHowOnlyFastWorks = () => {
@@ -343,7 +370,7 @@ const AppLayout: React.FC = () => {
           user={user}
           onSignInClick={() => setAuthModalOpen(true)}
           selectedCar={selectedCar}
-          onBackToCarSelect={handleBackToCarSelect}
+          onBackToCarSelect={openClassChange}
           onOpenHowOnlyFastWorks={handleOpenHowOnlyFastWorks}
         />
         <main id="main-content" tabIndex={-1} className="flex-1">
@@ -352,6 +379,9 @@ const AppLayout: React.FC = () => {
             user={user}
             selectedCar={selectedCar}
             onSignInClick={() => setAuthModalOpen(true)}
+            onChangeClass={openClassChange}
+            classLocksEnabled={!(unlimitedClasses ?? (effectiveTier === 'team'))}
+            onUpgrade={openTeamsUpgrade}
           />
         </main>
         <Footer
@@ -366,6 +396,15 @@ const AppLayout: React.FC = () => {
           isOpen={legalModal !== null}
           onClose={() => setLegalModal(null)}
           type={legalModal || 'privacy'}
+        />
+        <ClassChangeModal
+          isOpen={classChangeOpen}
+          user={user}
+          tier={effectiveTier}
+          currentClass={selectedCar}
+          onClose={() => setClassChangeOpen(false)}
+          onChanged={applySelectedCar}
+          onUpgrade={openTeamsUpgrade}
         />
         <CookieConsent />
       </div>

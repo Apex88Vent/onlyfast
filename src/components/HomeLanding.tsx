@@ -39,6 +39,7 @@ interface HomeLandingProps {
   upcomingEvents?: UpcomingEvent[];
   middleSlot?: React.ReactNode;
   bottomSlot?: React.ReactNode;
+  onChangeClass: () => void;
   onAction: (action: HomeAction) => void;
 }
 
@@ -196,6 +197,7 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
   upcomingEvents = [],
   middleSlot,
   bottomSlot,
+  onChangeClass,
   onAction,
 }) => {
   const displayedWeekend = currentWeekend;
@@ -237,7 +239,12 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
         <section className="mb-2 sm:mb-6 bg-white rounded-2xl border border-[#E5E7EB] shadow-sm px-3 sm:px-4 py-2.5 sm:py-4">
           <div className={`grid ${topInfoCount > 1 ? 'grid-cols-2 divide-x divide-[#E5E7EB]' : 'grid-cols-1'}`}>
             {selectedCar && (
-              <div className="flex items-center justify-center gap-2 sm:gap-3 px-1 sm:px-2">
+              <button
+                type="button"
+                onClick={onChangeClass}
+                className="flex items-center justify-center gap-2 sm:gap-3 px-1 sm:px-2 rounded-lg hover:bg-[#F9FAFB] focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
+                aria-label={`Change current class from ${selectedCar}`}
+              >
                 <span className="text-[#00A8E8]" aria-hidden="true">
                   <svg className="h-6 w-6 sm:h-8 sm:w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M6 17h12l1.5-5.5A2 2 0 0 0 17.6 9H6.4a2 2 0 0 0-1.9 2.5L6 17Z" />
@@ -253,7 +260,7 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
                     <div className="text-[#4B5563] text-xs sm:text-sm font-medium truncate">{formattedCarNumber}</div>
                   )}
                 </div>
-              </div>
+              </button>
             )}
             {showNextEvent && nextEvent && (
               <div className="flex items-center justify-center gap-2 sm:gap-3 px-1 sm:px-2">

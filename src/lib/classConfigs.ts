@@ -290,6 +290,17 @@ export const CAR_CLASSES: string[] = [
   'Sport Mod',
 ];
 
+// Classes currently selectable in the app. The remaining CAR_CLASSES stay
+// visible as Coming Soon in onboarding.
+export const AVAILABLE_CAR_CLASSES = [
+  'Dwarf Cars',
+  'Modified',
+  'Sport Mod',
+  'Lightning Sprints',
+  'Pro Stock',
+  'Pure Stock',
+];
+
 export const CLASS_CONFIGS: Record<string, ClassConfig> = {
   'Dwarf Cars': {
     name: 'Dwarf Cars',

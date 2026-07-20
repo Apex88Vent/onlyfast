@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { CAR_CLASSES, CLASS_CONFIGS } from '@/lib/classConfigs';
+import { AVAILABLE_CAR_CLASSES, CAR_CLASSES, CLASS_CONFIGS } from '@/lib/classConfigs';
 import { ArrowLeft, Check } from 'lucide-react';
 // TEST-ACCOUNT BYPASS (remove before production): lets test@test.com click into
 // every "Coming Soon" discipline/class. Real users still see them locked.
@@ -12,14 +12,7 @@ interface OnboardingFlowProps {
 
 // Unlocked classes. Pro Stock & Pure Stock are now unlocked; Non-Wing Sprint
 // Cars is locked again (Coming Soon). Lightning Sprints remains usable.
-const ENABLED_CLASSES = [
-  'Dwarf Cars',
-  'Modified',
-  'Sport Mod',
-  'Lightning Sprints',
-  'Pro Stock',
-  'Pure Stock',
-];
+const ENABLED_CLASSES = AVAILABLE_CAR_CLASSES;
 
 
 

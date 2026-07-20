@@ -14,6 +14,9 @@ interface SavedSetupsProps {
   user: User | null;
   onLoad: (setup: any) => void;
   refreshTrigger: number;
+  activeClass: string;
+  classLocksEnabled: boolean;
+  onUpgrade: () => void;
 }
 
 // --- Race-day grouping helpers (UI-only organization) ---------------------
@@ -136,7 +139,14 @@ const getSetupTypeBadge = (type: string) => {
 };
 // -------------------------------------------------------------------------
 
-const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger }) => {
+const SavedSetups: React.FC<SavedSetupsProps> = ({
+  user,
+  onLoad,
+  refreshTrigger,
+  activeClass,
+  classLocksEnabled,
+  onUpgrade,
+}) => {
   const [setups, setSetups] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -161,16 +171,18 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
     setLoading(true);
     setFetchError(null);
     try {
-      const { data, error } = await supabase
-        .from('race_setups')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(50);
-      if (error) {
-        setFetchError(error.message || 'Unable to fetch your setups right now.');
-      } else if (data) {
-        setSetups(data);
+      const { data: summaryData, error: summaryError } = await supabase.rpc('list_user_setup_summaries');
+      if (!summaryError && Array.isArray(summaryData)) {
+        setSetups(summaryData.slice(0, 50));
+      } else {
+        const { data, error } = await supabase
+          .from('race_setups')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(50);
+        if (error) setFetchError(error.message || 'Unable to fetch your setups right now.');
+        else if (data) setSetups(data);
       }
     } catch (err: any) {
       setFetchError(err?.message || 'Network error — unable to reach the server.');
@@ -181,6 +193,22 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
   const groups = useMemo(() => buildGroups(setups.filter(setup =>
     isBaseSetupRow(setup) || isValidSavedRaceSession(setup as RaceWeekendSessionRow)
   )), [setups]);
+
+  const loadSavedSetup = async (setup: any, groupSetups: any[]) => {
+    if (!user) return;
+    const ids = groupSetups.map(row => row.id).filter(Boolean);
+    const { data, error } = await supabase
+      .from('race_setups')
+      .select('*')
+      .eq('user_id', user.id)
+      .in('id', ids);
+    if (error || !data?.length) {
+      setFetchError('This setup belongs to another class and is locked on your current plan.');
+      return;
+    }
+    const clicked = data.find(row => row.id === setup.id) || data[0];
+    onLoad({ ...clicked, __groupSetups: data });
+  };
 
   // ---- ADD SESSION ---------------------------------------------------------
   const openAdd = (group: SetupGroup) => {
@@ -340,6 +368,8 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
           ) : (
             <ul className="space-y-3 max-h-[560px] overflow-y-auto" aria-label="Saved setups list">
               {groups.map(group => {
+                const isLocked = classLocksEnabled && Boolean(group.raceClass) &&
+                  group.raceClass.trim().toLowerCase() !== activeClass.trim().toLowerCase();
                 const subtitleParts = [group.raceClass, group.trackName, group.org].filter(p => p && p.trim() !== '');
                 const orderedSetups = group.isBaseSetup
                   ? [...group.setups]
@@ -347,20 +377,16 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
                       .map(session => session.row)
                       .filter((row): row is RaceWeekendSessionRow => Boolean(row));
                 const firstSetup = orderedSetups[0];
-                const withGroupSetups = (setup: any) => ({
-                  ...setup,
-                  __groupSetups: orderedSetups,
-                });
                 const openFirstSetup = () => {
-                  if (firstSetup) onLoad(withGroupSetups(firstSetup));
+                  if (!isLocked && firstSetup) loadSavedSetup(firstSetup, orderedSetups);
                 };
 
                 return (
                   <li
                     key={group.key}
-                    className="bg-[#F9FAFB] rounded-xl border border-[#E5E7EB] p-4 cursor-pointer focus-within:ring-2 focus-within:ring-[#00A8E8]/30"
-                    role="button"
-                    tabIndex={0}
+                    className={`rounded-xl border p-4 ${isLocked ? 'border-[#E5E7EB] bg-[#F3F4F6] opacity-75' : 'border-[#E5E7EB] bg-[#F9FAFB] cursor-pointer focus-within:ring-2 focus-within:ring-[#00A8E8]/30'}`}
+                    role={isLocked ? undefined : 'button'}
+                    tabIndex={isLocked ? undefined : 0}
                     onClick={openFirstSetup}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
@@ -368,7 +394,7 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
                         openFirstSetup();
                       }
                     }}
-                    aria-label={`Open ${group.title || 'saved setup'}`}
+                    aria-label={isLocked ? `${group.title || 'Saved setup'} is locked because it belongs to another class` : `Open ${group.title || 'saved setup'}`}
                   >
                     {/* Parent race-day title + delete-entire-event trash icon */}
                     <div className="mb-3 flex items-start justify-between gap-2">
@@ -379,6 +405,11 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
                               BASE SETUP
                             </span>
                           )}
+                          {isLocked && (
+                            <span className="inline-flex flex-shrink-0 items-center text-[#6B7280]" title="Locked setup" aria-label="Locked setup">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="10" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+                            </span>
+                          )}
                           <div className="font-bold text-base text-[#1A1B23] truncate">{group.title || 'Untitled'}</div>
                         </div>
                         {subtitleParts.length > 0 && (
@@ -387,7 +418,7 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
                           </div>
                         )}
                       </div>
-                      <button
+                      {!isLocked && <button
                         onClick={(e) => {
                           e.stopPropagation();
                           openDelete(group);
@@ -399,19 +430,28 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                           <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" />
                         </svg>
-                      </button>
+                      </button>}
                     </div>
+
+                    {isLocked && (
+                      <button
+                        onClick={(event) => { event.stopPropagation(); onUpgrade(); }}
+                        className="mb-3 text-xs font-semibold text-[#00A8E8] underline-offset-4 hover:underline focus:outline-none focus:ring-2 focus:ring-[#00A8E8] rounded"
+                      >
+                        Upgrade to Teams to Unlock
+                      </button>
+                    )}
 
                     {/* Session chips: tap a chip to LOAD that session. Per-session
                         delete now lives on the active session page; this screen's
                         trash icon (above) deletes the whole race event. */}
                     <div className="flex flex-wrap gap-2 items-center">
-                      {orderedSetups.map(s => (
+                      {!isLocked && orderedSetups.map(s => (
                         <button
                           key={`chip-${s.id}`}
                           onClick={(e) => {
                             e.stopPropagation();
-                            onLoad(withGroupSetups(s));
+                            loadSavedSetup(s, orderedSetups);
                           }}
                           className={`inline-flex items-center px-3.5 py-1.5 rounded-full border border-[#E5E7EB] text-xs font-semibold hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-[#00A8E8] ${getSetupTypeBadge(s.setup_type)}`}
                           aria-label={`Load ${sessionLabelOf(s)} for ${group.title}`}
@@ -422,7 +462,7 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({ user, onLoad, refreshTrigger 
                       ))}
 
                       {/* Trailing [+] add-session button */}
-                      {!group.isBaseSetup && (
+                      {!isLocked && !group.isBaseSetup && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();

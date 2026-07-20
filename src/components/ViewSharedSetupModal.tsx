@@ -9,6 +9,7 @@ interface ViewSharedSetupModalProps {
   isOpen: boolean;
   onClose: () => void;
   user?: User | null;
+  onUpgrade?: () => void;
 }
 
 const has = (v: any) => v !== null && v !== undefined && String(v).trim() !== '';
@@ -49,11 +50,12 @@ const MiniTable: React.FC<{ rows: Array<[string, string]> }> = ({ rows }) => {
   );
 };
 
-const ViewSharedSetupModal: React.FC<ViewSharedSetupModalProps> = ({ isOpen, onClose, user }) => {
+const ViewSharedSetupModal: React.FC<ViewSharedSetupModalProps> = ({ isOpen, onClose, user, onUpgrade }) => {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [setup, setSetup] = useState<any>(null);
+  const [classLocked, setClassLocked] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -63,6 +65,7 @@ const ViewSharedSetupModal: React.FC<ViewSharedSetupModalProps> = ({ isOpen, onC
       setCode('');
       setError('');
       setSetup(null);
+      setClassLocked(false);
       setLoading(false);
     }
   }, [isOpen]);
@@ -80,6 +83,7 @@ const ViewSharedSetupModal: React.FC<ViewSharedSetupModalProps> = ({ isOpen, onC
     setLoading(true);
     setError('');
     setSetup(null);
+    setClassLocked(false);
     try {
       const { data: share } = await supabase
         .from('shared_setups')
@@ -103,6 +107,15 @@ const ViewSharedSetupModal: React.FC<ViewSharedSetupModalProps> = ({ isOpen, onC
         .maybeSingle();
 
       if (!row) {
+        if (user) {
+          const { data: lockState } = await supabase.rpc('get_setup_class_lock_state', { p_setup_id: share.setup_id });
+          if ((lockState as any)?.locked) {
+            setClassLocked(true);
+            setError('This setup belongs to another class and is locked on your current plan.');
+            setLoading(false);
+            return;
+          }
+        }
         setError('This shared setup is no longer available.');
         setLoading(false);
         return;
@@ -155,7 +168,7 @@ const ViewSharedSetupModal: React.FC<ViewSharedSetupModalProps> = ({ isOpen, onC
               id="share-code-input"
               type="text"
               value={code}
-              onChange={(e) => { setCode(e.target.value); setError(''); }}
+              onChange={(e) => { setCode(e.target.value); setError(''); setClassLocked(false); }}
               onKeyDown={(e) => { if (e.key === 'Enter') handleView(); }}
               placeholder="e.g. 9Jx7yLfy"
               className="w-full px-4 py-3 border border-[#E5E7EB] rounded-lg font-mono text-base tracking-widest text-center text-[#1A1B23] bg-[#F9FAFB] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:border-[#00A8E8]"
@@ -163,6 +176,11 @@ const ViewSharedSetupModal: React.FC<ViewSharedSetupModalProps> = ({ isOpen, onC
               aria-describedby={error ? 'share-code-error' : undefined}
             />
             {error && <p id="share-code-error" className="text-sm text-red-600 mt-2" role="alert">{error}</p>}
+            {classLocked && onUpgrade && (
+              <button onClick={onUpgrade} className="mt-3 text-sm font-semibold text-[#00A8E8] underline-offset-4 hover:underline focus:outline-none focus:ring-2 focus:ring-[#00A8E8] rounded">
+                Upgrade to Teams
+              </button>
+            )}
             <div className="flex justify-end gap-2 mt-5">
               <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-medium text-[#6B7280] hover:bg-[#F5F5F7] transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8]">
                 Cancel

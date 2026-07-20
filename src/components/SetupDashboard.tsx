@@ -66,6 +66,9 @@ interface SetupDashboardProps {
   user: User | null;
   selectedCar: string;
   onSignInClick: () => void;
+  onChangeClass: () => void;
+  classLocksEnabled: boolean;
+  onUpgrade: () => void;
 }
 
 const readCarNumber = (user: User | null | undefined, override?: string): string => {
@@ -296,7 +299,14 @@ const cleanPayload = (payload: Record<string, unknown>) =>
 
 const lastOpenedSetupKey = (userId: string) => `${LAST_OPENED_SETUP_PREFIX}${userId}`;
 
-const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSignInClick }) => {
+const SetupDashboard: React.FC<SetupDashboardProps> = ({
+  user,
+  selectedCar,
+  onSignInClick,
+  onChangeClass,
+  classLocksEnabled,
+  onUpgrade,
+}) => {
   const [activeTab, setActiveTab] = useState<SetupType>('base');
   // Always keep ALL 6 slot keys present so reads like setups[activeTab] are never
   // undefined (extra slots stay blank until the user adds them).
@@ -367,6 +377,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
   // Post-save full-page ad (rookie users only). Shown AFTER a successful save.
   const [showPostSaveAd, setShowPostSaveAd] = useState(false);
+  const [classLockNoticeOpen, setClassLockNoticeOpen] = useState(false);
   // Whether ads should be shown to this user at all (rookie + logged in only).
   const adsEnabled = shouldShowAds(user);
 
@@ -379,10 +390,14 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
   const orderedSessionsRef = useRef<SetupType[]>(DEFAULT_SESSION_SLOTS);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastActivityRef = useRef(Date.now());
+  const previousSelectedCarRef = useRef(selectedCar);
 
   const prefix = useId();
   const currentSetup = setups[activeTab];
   const carNumber = readCarNumber(user, carNumberOverride);
+  const effectiveTier = getEffectiveTier(readMembership(user?.user_metadata || {}));
+  const currentClassSaveRestricted = classLocksEnabled &&
+    (currentSetup.raceClass || selectedCar).trim().toLowerCase() !== selectedCar.trim().toLowerCase();
 
   const prefersReducedMotion = (() => {
     try {
@@ -476,6 +491,20 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
   useEffect(() => {
     if (!stateLoaded) return;
+    const classChanged = previousSelectedCarRef.current &&
+      previousSelectedCarRef.current.trim().toLowerCase() !== selectedCar.trim().toLowerCase();
+    previousSelectedCarRef.current = selectedCar;
+
+    if (classChanged) {
+      const cleared = emptyAllSetups();
+      (Object.keys(cleared) as SetupType[]).forEach(t => {
+        cleared[t] = { ...cleared[t], raceClass: selectedCar };
+      });
+      setSetups(cleared);
+      setSavedMeta({ name: '', ids: {} });
+      setActiveTab('base');
+      return;
+    }
     // Apply the selected class to EVERY slot (including extra sessions) without
     // dropping any slot — spread prev so extra sessions are never wiped.
     setSetups(prev => {
@@ -485,7 +514,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       });
       return next;
     });
-  }, [selectedCar, stateLoaded]);
+  }, [selectedCar, stateLoaded, classLocksEnabled]);
 
 
   useEffect(() => {
@@ -906,7 +935,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
       track_name: s.trackName || '',
       race_date: s.raceDate || new Date().toISOString().split('T')[0],
-      race_class: s.raceClass || '',
+      race_class: classLocksEnabled ? selectedCar : (s.raceClass || selectedCar),
       track_shape: s.trackShape || null,
       track_length: s.trackLength || null,
 
@@ -1102,16 +1131,21 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
     // those accounts bypass every check below automatically. Real users keep
     // their normal Rookie/Pro/Team restrictions.
     // -------------------------------------------------------------------
-    const tier = getEffectiveTier(readMembership(user.user_metadata || {}));
+    const tier = effectiveTier;
     if (tier !== 'team') {
       try {
         // Pull a lightweight snapshot of the user's existing race-weekend rows
         // so we can count saves / car types and check the 48h edit lock.
-        const { data: existingRows } = await supabase
-          .from('race_setups')
-          .select('setup_name, setup_type, race_class, created_at')
-          .eq('user_id', user.id)
-          .limit(300);
+        const { data: summaryRows, error: summaryError } = await supabase.rpc('list_user_setup_summaries');
+        let existingRows = Array.isArray(summaryRows) ? summaryRows : [];
+        if (summaryError) {
+          const { data } = await supabase
+            .from('race_setups')
+            .select('setup_name, setup_type, race_class, created_at')
+            .eq('user_id', user.id)
+            .limit(300);
+          existingRows = data || [];
+        }
 
         const rows = (existingRows || []).filter(
           (r: any) => (r.setup_type || 'base') !== 'base_template'
@@ -1150,8 +1184,12 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
         });
         if (!perm.allowed) {
           if (!silent) {
-            setSaveMessage(perm.upgradeText);
-            setTimeout(() => setSaveMessage(''), 8000);
+            if (perm.reason === 'car_type_locked') {
+              setClassLockNoticeOpen(true);
+            } else {
+              setSaveMessage(perm.upgradeText);
+              setTimeout(() => setSaveMessage(''), 8000);
+            }
           }
           setSaving(false);
           return null;
@@ -1277,6 +1315,10 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
       // First-save by an unregistered user: ask them to sign in before saving.
       try { localStorage.setItem('pending_plan_redirect', '1'); } catch {}
       onSignInClick();
+      return;
+    }
+    if (currentClassSaveRestricted) {
+      setClassLockNoticeOpen(true);
       return;
     }
     setSaveModalOpen(true);
@@ -1436,6 +1478,13 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
 
   // Load the whole "file" — all rows sharing the same setup_name
   const handleLoadSetup = async (setup: any) => {
+    if (
+      classLocksEnabled &&
+      String(setup?.race_class || '').trim().toLowerCase() !== selectedCar.trim().toLowerCase()
+    ) {
+      setClassLockNoticeOpen(true);
+      return;
+    }
     if (user && setup?.id) {
       try { localStorage.setItem(lastOpenedSetupKey(user.id), String(setup.id)); } catch {}
     }
@@ -2232,6 +2281,11 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
           await handleLoadSetup(data);
           return;
         }
+        const { data: lockState } = await supabase.rpc('get_setup_class_lock_state', { p_setup_id: lastId });
+        if ((lockState as any)?.locked) {
+          setClassLockNoticeOpen(true);
+          return;
+        }
         try { localStorage.removeItem(key); } catch {}
       } catch {
         setActiveView('saved');
@@ -2488,13 +2542,21 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
             upcomingEvents={upcomingEvents}
             middleSlot={<RookieAdSlot placement="home_middle" user={user} />}
             bottomSlot={<RookieAdSlot placement="home_bottom" user={user} />}
+            onChangeClass={onChangeClass}
             onAction={handleHomeAction}
           />
         ) : activeView === 'compare' ? (
           <SetupComparison user={user} onSignInClick={onSignInClick} />
         ) : activeView === 'saved' ? (
           <div className="space-y-6">
-            <SavedSetups user={user} onLoad={handleLoadSetup} refreshTrigger={refreshTrigger} />
+            <SavedSetups
+              user={user}
+              onLoad={handleLoadSetup}
+              refreshTrigger={refreshTrigger}
+              activeClass={selectedCar}
+              classLocksEnabled={classLocksEnabled}
+              onUpgrade={onUpgrade}
+            />
             <RookieAdSlot placement="setup_dashboard_bottom" user={user} />
           </div>
         ) : activeView === 'todo' ? (
@@ -2563,6 +2625,21 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
                     {activeTab === 'heat' && 'Adjustments made for heat races'}
                     {activeTab === 'main' && 'Final setup for the main event feature'}
                   </p>
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    <span className="inline-flex items-center bg-[#F5F5F7] text-[#4B5563] px-2.5 py-1 rounded-full text-xs font-semibold border border-[#E5E7EB]">
+                      Class: {currentSetup.raceClass || selectedCar}
+                    </span>
+                    <button
+                      onClick={onChangeClass}
+                      className="inline-flex items-center gap-1 rounded-lg border border-[#E5E7EB] bg-white text-[#374151] hover:text-[#00A8E8] hover:border-[#00A8E8]/40 px-2 py-1 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
+                      aria-label="Edit vehicle class"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                      </svg>
+                      Change Class
+                    </button>
+                  </div>
                   {savedMeta.name && (
                     <div className="flex items-center gap-2 mt-2 flex-wrap">
                       <span className="inline-flex items-center gap-1.5 bg-[#00A8E8]/10 text-[#00A8E8] px-2.5 py-1 rounded-full text-xs font-semibold border border-[#00A8E8]/20">
@@ -2647,6 +2724,12 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
                   </button>
                 </div>
               </div>
+
+              {currentClassSaveRestricted && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-4 py-3 text-sm font-medium" role="status">
+                  Changes for this class cannot be saved on your current plan. You can continue viewing and editing the setup.
+                </div>
+              )}
 
               {resumedBanner && (
                 <div className="bg-gradient-to-r from-[#00A8E8]/10 to-[#00A8E8]/5 border border-[#00A8E8]/30 rounded-xl px-4 py-3 flex items-center gap-3 flex-wrap" role="status" aria-live="polite">
@@ -3027,7 +3110,21 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({ user, selectedCar, onSi
         isOpen={viewSharedOpen}
         onClose={() => setViewSharedOpen(false)}
         user={user}
+        onUpgrade={onUpgrade}
       />
+
+      {classLockNoticeOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="class-lock-title">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+            <h2 id="class-lock-title" className="text-lg font-bold text-[#1A1B23]">This setup belongs to another class</h2>
+            <p className="mt-2 text-sm leading-6 text-[#6B7280]">Switch back to that class to use this setup, or upgrade to Teams to unlock setups across all classes.</p>
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button onClick={() => setClassLockNoticeOpen(false)} className="rounded-lg px-4 py-2 text-sm font-medium text-[#6B7280] hover:bg-[#F5F5F7] focus:outline-none focus:ring-2 focus:ring-[#00A8E8]">Close</button>
+              <button onClick={onUpgrade} className="rounded-lg bg-[#00A8E8] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0090c7] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2">Upgrade to Teams</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
