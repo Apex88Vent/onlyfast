@@ -1,9 +1,72 @@
 -- One active class for Rookie/Pro accounts, with server-enforced class changes.
 -- Existing setup rows are never updated by this migration.
 
+begin;
+
 alter table public.user_subscriptions
   add column if not exists active_race_class text,
   add column if not exists last_class_change_at timestamptz;
+
+create or replace function public.onlyfast_canonical_race_class(p_class text)
+returns text
+language sql
+immutable
+set search_path = public
+as $$
+  select class_name
+  from unnest(array[
+    'Dwarf Cars',
+    'Late Model',
+    'Lightning Sprints',
+    'Midgets',
+    'Modified',
+    'Non-Wing Sprint Cars',
+    'Pro Stock',
+    'Pure Stock',
+    'Sport Compact',
+    'Sport Mod'
+  ]::text[]) as classes(class_name)
+  where lower(class_name) = lower(trim(coalesce(p_class, '')))
+  limit 1;
+$$;
+
+create or replace function public.onlyfast_subscription_tier(p_user_id uuid)
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce((
+    select case
+      when coalesce(lower(u.raw_app_meta_data ->> 'has_admin_full_access') = 'true', false)
+        or coalesce(lower(u.raw_user_meta_data ->> 'has_admin_full_access') = 'true', false)
+        then 'admin'
+      when lower(coalesce(u.email, '')) = 'test@test.com' then 'team'
+      when lower(coalesce(s.status, '')) in ('active', 'trialing')
+        and lower(coalesce(s.plan, '')) in ('team', 'teams') then 'team'
+      when lower(coalesce(s.status, '')) in ('active', 'trialing')
+        and lower(coalesce(s.plan, '')) = 'pro' then 'pro'
+      when lower(coalesce(u.raw_user_meta_data ->> 'promo_access_level', '')) in ('team', 'teams', 'admin', 'admin_full_access')
+        and (
+          nullif(u.raw_user_meta_data ->> 'promo_access_expires_at', '') is null
+          or (u.raw_user_meta_data ->> 'promo_access_expires_at')::timestamptz > now()
+        ) then case
+          when lower(coalesce(u.raw_user_meta_data ->> 'promo_access_level', '')) in ('admin', 'admin_full_access') then 'admin'
+          else 'team'
+        end
+      when lower(coalesce(u.raw_user_meta_data ->> 'promo_access_level', '')) = 'pro'
+        and (
+          nullif(u.raw_user_meta_data ->> 'promo_access_expires_at', '') is null
+          or (u.raw_user_meta_data ->> 'promo_access_expires_at')::timestamptz > now()
+        ) then 'pro'
+      else 'rookie'
+    end
+    from auth.users u
+    left join public.user_subscriptions s on s.user_id = u.id
+    where u.id = p_user_id
+  ), 'rookie');
+$$;
 
 create or replace function public.onlyfast_has_unlimited_classes(p_user_id uuid)
 returns boolean
@@ -12,22 +75,7 @@ stable
 security definer
 set search_path = public
 as $$
-  select coalesce((
-    select
-      (lower(coalesce(s.plan, '')) in ('team', 'teams') and lower(coalesce(s.status, '')) in ('active', 'trialing'))
-      or coalesce((u.raw_user_meta_data ->> 'has_admin_full_access')::boolean, false)
-      or lower(coalesce(u.email, '')) = 'test@test.com'
-      or (
-        lower(coalesce(u.raw_user_meta_data ->> 'promo_access_level', '')) in ('team', 'teams', 'admin', 'admin_full_access')
-        and (
-          nullif(u.raw_user_meta_data ->> 'promo_access_expires_at', '') is null
-          or (u.raw_user_meta_data ->> 'promo_access_expires_at')::timestamptz > now()
-        )
-      )
-    from auth.users u
-    left join public.user_subscriptions s on s.user_id = u.id
-    where u.id = p_user_id
-  ), false);
+  select public.onlyfast_subscription_tier(p_user_id) in ('team', 'admin');
 $$;
 
 create or replace function public.onlyfast_active_race_class(p_user_id uuid)
@@ -87,18 +135,21 @@ declare
   v_active text;
   v_last timestamptz;
   v_unlimited boolean;
+  v_tier text;
   v_next timestamptz;
 begin
-  if v_user_id is null then raise exception 'Authentication required'; end if;
+  if v_user_id is null then raise exception 'CLASS_AUTH_REQUIRED'; end if;
 
   v_active := public.onlyfast_active_race_class(v_user_id);
   select s.last_class_change_at into v_last
   from public.user_subscriptions s where s.user_id = v_user_id;
-  v_unlimited := public.onlyfast_has_unlimited_classes(v_user_id);
+  v_tier := public.onlyfast_subscription_tier(v_user_id);
+  v_unlimited := v_tier in ('team', 'admin');
   v_next := case when v_last is null then null else v_last + interval '7 days' end;
 
   return jsonb_build_object(
     'active_class', v_active,
+    'tier', v_tier,
     'last_class_change_at', v_last,
     'next_eligible_at', v_next,
     'can_change', v_unlimited or v_next is null or now() >= v_next,
@@ -117,9 +168,11 @@ declare
   v_user_id uuid := auth.uid();
   v_existing text;
   v_initial text;
+  v_canonical text;
 begin
-  if v_user_id is null then raise exception 'Authentication required'; end if;
-  if nullif(trim(p_class), '') is null then raise exception 'A vehicle class is required'; end if;
+  if v_user_id is null then raise exception 'CLASS_AUTH_REQUIRED'; end if;
+  v_canonical := public.onlyfast_canonical_race_class(p_class);
+  if v_canonical is null then raise exception 'CLASS_INVALID'; end if;
 
   insert into public.user_subscriptions (user_id, active_race_class)
   values (v_user_id, null)
@@ -134,7 +187,7 @@ begin
     where r.user_id = v_user_id and nullif(trim(r.race_class), '') is not null
     order by r.updated_at desc nulls last, r.created_at desc
     limit 1;
-    v_initial := coalesce(v_initial, trim(p_class));
+    v_initial := coalesce(v_initial, v_canonical);
     update public.user_subscriptions
       set active_race_class = v_initial
       where user_id = v_user_id and nullif(trim(active_race_class), '') is null;
@@ -156,9 +209,11 @@ declare
   v_last timestamptz;
   v_next timestamptz;
   v_unlimited boolean;
+  v_canonical text;
 begin
-  if v_user_id is null then raise exception 'Authentication required'; end if;
-  if nullif(trim(p_new_class), '') is null then raise exception 'A vehicle class is required'; end if;
+  if v_user_id is null then raise exception 'CLASS_AUTH_REQUIRED'; end if;
+  v_canonical := public.onlyfast_canonical_race_class(p_new_class);
+  if v_canonical is null then raise exception 'CLASS_INVALID'; end if;
 
   insert into public.user_subscriptions (user_id, active_race_class)
   values (v_user_id, public.onlyfast_active_race_class(v_user_id))
@@ -171,8 +226,8 @@ begin
   where s.user_id = v_user_id
   for update;
 
-  if lower(trim(coalesce(v_current, ''))) = lower(trim(p_new_class)) then
-    raise exception 'Select a different vehicle class';
+  if lower(trim(coalesce(v_current, ''))) = lower(v_canonical) then
+    raise exception 'CLASS_SAME';
   end if;
 
   v_unlimited := public.onlyfast_has_unlimited_classes(v_user_id);
@@ -182,7 +237,7 @@ begin
   end if;
 
   update public.user_subscriptions
-  set active_race_class = trim(p_new_class),
+  set active_race_class = v_canonical,
       last_class_change_at = case when v_unlimited then last_class_change_at else now() end
   where user_id = v_user_id;
 
@@ -230,6 +285,8 @@ as $$
   ), jsonb_build_object('locked', false));
 $$;
 
+revoke all on function public.onlyfast_canonical_race_class(text) from public;
+revoke all on function public.onlyfast_subscription_tier(uuid) from public;
 revoke all on function public.onlyfast_has_unlimited_classes(uuid) from public;
 revoke all on function public.onlyfast_active_race_class(uuid) from public;
 revoke all on function public.onlyfast_can_access_setup_class(uuid, text) from public;
@@ -245,6 +302,8 @@ grant execute on function public.initialize_active_race_class(text) to authentic
 grant execute on function public.change_active_race_class(text) to authenticated;
 grant execute on function public.list_user_setup_summaries() to authenticated;
 grant execute on function public.get_setup_class_lock_state(uuid) to authenticated;
+grant execute on function public.onlyfast_canonical_race_class(text) to authenticated;
+grant execute on function public.onlyfast_subscription_tier(uuid) to authenticated;
 grant execute on function public.onlyfast_has_unlimited_classes(uuid) to authenticated;
 grant execute on function public.onlyfast_active_race_class(uuid) to authenticated;
 grant execute on function public.onlyfast_can_access_setup_class(uuid, text) to authenticated;
@@ -307,3 +366,7 @@ create policy shared_setups_insert_own
       where r.id = setup_id and r.user_id = auth.uid()
     )
   );
+
+notify pgrst, 'reload schema';
+
+commit;

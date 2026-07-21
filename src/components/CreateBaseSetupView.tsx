@@ -60,6 +60,11 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
   const [message, setMessage] = useState('');
   const [customFieldsOpen, setCustomFieldsOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [copySourceId, setCopySourceId] = useState('');
+  const [renameTarget, setRenameTarget] = useState<any | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [renameBusy, setRenameBusy] = useState(false);
+  const [renameError, setRenameError] = useState('');
 
   // Load draft from localStorage
   useEffect(() => {
@@ -319,6 +324,80 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleCopySource = (id: string) => {
+    setCopySourceId(id);
+    if (!id) {
+      setTemplate({ ...emptyTemplate(), raceClass: selectedCar || '' });
+      return;
+    }
+
+    const source = templates.find(t => t.id === id);
+    if (!source) return;
+    const copied = loadTemplateIntoState(source);
+    if (source.custom_fields) {
+      Object.entries(source.custom_fields).forEach(([key, value]) => {
+        const existing = customFields.find(f => f.name === key);
+        if (existing) copied[`custom_${existing.id}`] = value as string;
+      });
+    }
+    copied.setup_name = '';
+    setEditingId(null);
+    setTemplate({ ...copied });
+  };
+
+  const openRename = (t: any) => {
+    setRenameTarget(t);
+    setRenameValue((t.setup_name || '').replace(/^\[BASE TEMPLATE\]\s*/, ''));
+    setRenameError('');
+  };
+
+  const closeRename = () => {
+    if (renameBusy) return;
+    setRenameTarget(null);
+    setRenameValue('');
+    setRenameError('');
+  };
+
+  const submitRename = async () => {
+    if (!user || !renameTarget) return;
+    const nextName = renameValue.trim();
+    if (!nextName) {
+      setRenameError('Please enter a base setup name.');
+      return;
+    }
+
+    const storedName = String(renameTarget.setup_name || '').startsWith('[BASE TEMPLATE]')
+      ? `[BASE TEMPLATE] ${nextName}`
+      : nextName;
+
+    setRenameBusy(true);
+    setRenameError('');
+    const { error } = await supabase
+      .from('race_setups')
+      .update({ setup_name: storedName })
+      .eq('id', renameTarget.id)
+      .eq('user_id', user.id)
+      .select('id')
+      .single();
+
+    if (error) {
+      setRenameError(error.message || 'Unable to rename this base setup.');
+      setRenameBusy(false);
+      return;
+    }
+
+    setTemplates(prev => prev.map(t => t.id === renameTarget.id ? { ...t, setup_name: storedName } : t));
+    if (editingId === renameTarget.id) {
+      setTemplate(prev => ({ ...prev, setup_name: nextName }));
+    }
+    setMessage(`Renamed base setup to "${nextName}"`);
+    setTimeout(() => setMessage(''), 3000);
+    setRenameBusy(false);
+    setRenameTarget(null);
+    setRenameValue('');
+    onTemplatesChange?.();
+  };
+
   const handleDelete = async (id: string) => {
     if (!user) return;
     if (!confirm('Delete this base template?')) return;
@@ -342,6 +421,7 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
       if (!confirm('Start a new blank base template? Current draft will be cleared.')) return;
     }
     setEditingId(null);
+    setCopySourceId('');
     setTemplate({ ...emptyTemplate(), raceClass: selectedCar || '' });
   };
 
@@ -407,6 +487,12 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
                   Edit
                 </button>
                 <button
+                  onClick={() => openRename(t)}
+                  className="text-[#6B7280] hover:text-[#1A1B23] text-xs font-semibold px-2 py-1 rounded hover:bg-[#E5E7EB] transition-colors"
+                >
+                  Rename
+                </button>
+                <button
                   onClick={() => handleDelete(t.id)}
                   className="text-red-500 hover:text-red-700 text-xs font-semibold px-2 py-1 rounded hover:bg-red-50 transition-colors"
                 >
@@ -420,6 +506,29 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
 
       {/* Template name */}
       <section className="bg-white rounded-2xl border border-[#E5E7EB] p-5 shadow-sm">
+        {!editingId && templates.length > 0 && (
+          <div className="mb-4">
+            <label htmlFor={`${prefix}-copy-source`} className="block text-xs font-semibold text-[#4B5563] uppercase tracking-wider mb-1">
+              Start from existing base setup
+            </label>
+            <select
+              id={`${prefix}-copy-source`}
+              value={copySourceId}
+              onChange={(e) => handleCopySource(e.target.value)}
+              className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-lg focus:ring-2 focus:ring-[#00A8E8] focus:border-[#00A8E8] outline-none transition-all text-[#1A1B23] bg-[#F9FAFB] text-sm font-medium"
+            >
+              <option value="">Blank base setup</option>
+              {templates.map(t => (
+                <option key={t.id} value={t.id}>
+                  {(t.setup_name || 'Untitled').replace(/^\[BASE TEMPLATE\]\s*/, '')} ({t.race_class || 'No class'})
+                </option>
+              ))}
+            </select>
+            {copySourceId && (
+              <p className="text-xs text-[#6B7280] mt-1.5">Setup values copied into a new draft. The original will not be changed.</p>
+            )}
+          </div>
+        )}
         <label htmlFor={`${prefix}-name`} className="block text-xs font-semibold text-[#4B5563] uppercase tracking-wider mb-1">
           Template Name
         </label>
@@ -439,7 +548,7 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
         data={template as any}
         customFields={customFields}
         onChange={handleChange}
-        raceClass={selectedCar}
+        raceClass={template.raceClass || selectedCar}
         activeTab="base"
       />
 
@@ -488,6 +597,32 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
           {saving ? 'Saving...' : editingId ? 'Update Template' : 'Save Template'}
         </button>
       </div>
+
+      {renameTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-label="Rename Base Setup">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <h3 className="text-lg font-bold text-[#1A1B23] mb-1">Rename Base Setup</h3>
+            <p className="text-sm text-[#6B7280] mb-4">Only this base setup's name will change.</p>
+            <label htmlFor={`${prefix}-rename`} className="block text-xs font-semibold text-[#4B5563] uppercase tracking-wider mb-1">Base setup name</label>
+            <input
+              id={`${prefix}-rename`}
+              type="text"
+              value={renameValue}
+              autoFocus
+              onChange={(e) => { setRenameValue(e.target.value); setRenameError(''); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') submitRename(); if (e.key === 'Escape') closeRename(); }}
+              className="w-full px-3 py-2.5 border border-[#D1D5DB] rounded-lg text-sm text-[#1A1B23] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:border-[#00A8E8]"
+            />
+            {renameError && <div className="text-xs text-red-600 mt-2" role="alert">{renameError}</div>}
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={closeRename} disabled={renameBusy} className="px-4 py-2 rounded-lg text-sm font-medium text-[#6B7280] hover:bg-[#F5F5F7] transition-colors disabled:opacity-50">Cancel</button>
+              <button onClick={submitRename} disabled={renameBusy} className="px-4 py-2 rounded-lg text-sm font-semibold bg-[#00A8E8] hover:bg-[#0090c7] text-white transition-colors disabled:opacity-50">
+                {renameBusy ? 'Renaming...' : 'Rename'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

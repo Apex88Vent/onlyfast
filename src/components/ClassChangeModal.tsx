@@ -99,11 +99,17 @@ const ClassChangeModal: React.FC<ClassChangeModalProps> = ({
       onChanged(selectedClass);
       onClose();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : '';
+      const message = err instanceof Error
+        ? err.message
+        : String((err as { message?: unknown } | null)?.message || '');
       const cooldownValue = message.match(/CLASS_CHANGE_COOLDOWN:([^\s]+)/)?.[1];
       if (cooldownValue) {
         setNextEligibleAt(cooldownValue);
         setStep('cooldown');
+      } else if (message.includes('CLASS_INVALID')) {
+        setError('That class is not available.');
+      } else if (message.includes('CLASS_AUTH_REQUIRED') || message.toLowerCase().includes('jwt')) {
+        setError('Please sign in again to change classes.');
       } else {
         setError('The class could not be changed. Please try again.');
       }

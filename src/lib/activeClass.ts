@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase';
 
 export interface ActiveClassState {
   active_class: string | null;
+  tier: 'rookie' | 'pro' | 'team' | 'admin' | null;
   last_class_change_at: string | null;
   next_eligible_at: string | null;
   can_change: boolean;
@@ -12,6 +13,7 @@ const asState = (value: unknown): ActiveClassState => {
   const row = (Array.isArray(value) ? value[0] : value) as Partial<ActiveClassState> | null;
   return {
     active_class: row?.active_class || null,
+    tier: row?.tier || null,
     last_class_change_at: row?.last_class_change_at || null,
     next_eligible_at: row?.next_eligible_at || null,
     can_change: row?.can_change !== false,
@@ -24,19 +26,28 @@ export const sameClass = (a?: string | null, b?: string | null) =>
 
 export async function getActiveClassState(): Promise<ActiveClassState> {
   const { data, error } = await supabase.rpc('get_active_race_class_state');
-  if (error) throw error;
+  if (error) {
+    if (import.meta.env.DEV) console.error('[class-change] get state failed', { code: error.code, message: error.message });
+    throw error;
+  }
   return asState(data);
 }
 
 export async function initializeActiveClass(car: string): Promise<ActiveClassState> {
   const { data, error } = await supabase.rpc('initialize_active_race_class', { p_class: car });
-  if (error) throw error;
+  if (error) {
+    if (import.meta.env.DEV) console.error('[class-change] initialize failed', { code: error.code, message: error.message });
+    throw error;
+  }
   return asState(data);
 }
 
 export async function changeActiveClass(car: string): Promise<ActiveClassState> {
   const { data, error } = await supabase.rpc('change_active_race_class', { p_new_class: car });
-  if (error) throw error;
+  if (error) {
+    if (import.meta.env.DEV) console.error('[class-change] change failed', { code: error.code, message: error.message });
+    throw error;
+  }
   return asState(data);
 }
 
