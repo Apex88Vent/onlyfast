@@ -16,8 +16,9 @@ import ClassChangeModal from './ClassChangeModal';
 import { useNavigate } from 'react-router-dom';
 import { getEffectiveTier, readMembership } from '@/lib/membership';
 import { getActiveClassState, initializeActiveClass } from '@/lib/activeClass';
-// --- DEV/DEMO test-account reset (remove/disable before production) ---
-import { isTestAccount, ENABLE_TEST_ACCOUNT_RESET, resetTestAccountData } from '@/lib/testAccount';
+import { resetTestAccountData } from '@/lib/testAccount';
+import { useBetaFeatures } from '@/hooks/useBetaFeatures';
+import { BETA_FEATURES } from '@/lib/betaFeatures';
 
 const FILE_PICKER_ACTIVE_KEY = 'onlyfast_file_picker_active';
 const FILE_PICKER_STARTED_AT_KEY = 'onlyfast_file_picker_started_at';
@@ -46,6 +47,7 @@ const isOnlyFastFilePickerOpen = (): boolean => {
 
 const AppLayout: React.FC = () => {
   const navigate = useNavigate();
+  const { hasBetaFeature, testerKind } = useBetaFeatures();
   const [user, setUser] = useState<User | null>(null);
   const [selectedCar, setSelectedCar] = useState<string>('');
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -221,31 +223,6 @@ const AppLayout: React.FC = () => {
         } catch {/* ignore */}
       }
 
-      // --- DEV/DEMO reset-on-login fallback -----------------------------
-      // Logout normally resets the test account, but logout can't run if the
-      // browser was closed or the session expired. As a safety net, when the
-      // dedicated test account SIGNS IN, reset its data so it always starts
-      // brand-new. Guarded by a per-session marker so it runs once per login
-      // (not on every token refresh). Remove/disable before production via
-      // ENABLE_TEST_ACCOUNT_RESET (see src/lib/testAccount.ts).
-      if (
-        ENABLE_TEST_ACCOUNT_RESET &&
-        event === 'SIGNED_IN' &&
-        isTestAccount(session?.user?.email)
-      ) {
-        const marker = `test_reset_done_${session?.user?.id ?? 'x'}`;
-        let shouldReset = true;
-        try {
-          shouldReset = !sessionStorage.getItem(marker);
-          if (shouldReset) sessionStorage.setItem(marker, '1');
-        } catch {
-          shouldReset = true;
-        }
-        if (shouldReset) {
-          resetTestAccountData();
-        }
-      }
-      // ------------------------------------------------------------------
     });
 
     // Initial check
@@ -259,6 +236,26 @@ const AppLayout: React.FC = () => {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  // Reset-on-login fallback for the disposable experimental account. Waiting
+  // for the account-specific flag lookup avoids any email-based authorization
+  // and keeps a failed lookup on the production path.
+  useEffect(() => {
+    const canReset =
+      testerKind === 'experimental' &&
+      hasBetaFeature(BETA_FEATURES.testAccountReset);
+    if (!user || !canReset) return;
+
+    const marker = `test_reset_done_${user.id}`;
+    let shouldReset = true;
+    try {
+      shouldReset = !sessionStorage.getItem(marker);
+      if (shouldReset) sessionStorage.setItem(marker, '1');
+    } catch {
+      shouldReset = true;
+    }
+    if (shouldReset) void resetTestAccountData();
+  }, [hasBetaFeature, testerKind, user]);
 
   useEffect(() => {
     if (showSplash || isReplayingHowOnlyFastWorks) return;

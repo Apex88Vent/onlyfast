@@ -5,14 +5,13 @@
 //
 // Recommended Supabase setting:
 // - Verify JWT: ON. This function also verifies the bearer token server-side
-//   and only allows the dedicated test account email.
+//   and checks the caller's account-level reset feature.
 //
 // =============================================================================
 // reset-test-account  (Supabase Edge Function)  — DEV/DEMO ONLY
 // -----------------------------------------------------------------------------
-// Securely resets the APP DATA for the single dedicated dev/demo account
-// (test@test.com) so it can be reused for testing. It NEVER deletes the Supabase
-// Auth user, so the account remains reusable with its existing password.
+// Securely resets APP DATA for the authorized experimental account. It NEVER
+// deletes the Supabase Auth user, so the account remains reusable.
 //
 // SAFETY MODEL (all enforced server-side — the frontend flag is NOT a boundary):
 //   1) SERVER-SIDE ENABLE FLAG
@@ -21,15 +20,15 @@
 //   2) JWT VERIFICATION
 //      Manually verifies the caller's bearer token via auth.getUser(token).
 //      (Also deploy with "Verify JWT" = ON for defense-in-depth.)
-//   3) EMAIL ALLOWLIST
-//      Only proceeds if the VERIFIED user's email === TEST_ACCOUNT_EMAIL.
-//      A normal user calling this function gets 403 and nothing is touched.
+//   3) ACCOUNT-SPECIFIC FEATURE CHECK
+//      Only proceeds when the verified Auth user ID belongs to an experimental
+//      beta tester with test_account_reset explicitly enabled.
 //   4) NO CLIENT-SUPPLIED IDS
 //      user_id is derived from the verified token, never from the request body.
 //   5) NO BILLING SIDE-EFFECTS
 //      Only the LOCAL public.user_subscriptions row is cleared. No Stripe / Apple
 //      / Google APIs are ever called, so no real billing record can be affected.
-//      (test@test.com is never expected to hold a real paid subscription.)
+//      (the disposable experimental account should never hold real billing.)
 //
 // DEPLOY (dashboard):
 //   - Function name: reset-test-account
@@ -45,13 +44,12 @@
 //   supabase secrets set TEST_ACCOUNT_RESET_ENABLED=true
 //   supabase functions deploy reset-test-account
 //
-// To remove before production: delete the function + this file + the client
-// call sites (Header.tsx, AppLayout.tsx) and set ENABLE_TEST_ACCOUNT_RESET=false.
+// To disable, turn off test_account_reset for the experimental account or set
+// TEST_ACCOUNT_RESET_ENABLED=false on the server.
 // =============================================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-const TEST_ACCOUNT_EMAIL = 'test@test.com';
+import { hasBetaFeatureForUser } from '../_shared/beta-features.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -98,9 +96,14 @@ Deno.serve(async (req: Request) => {
     }
     const verifiedUser = userData.user;
 
-    // (3) EMAIL ALLOWLIST — only ever the dedicated test account -------------
-    const email = (verifiedUser.email ?? '').trim().toLowerCase();
-    if (email !== TEST_ACCOUNT_EMAIL) {
+    // (3) ACCOUNT FLAG — derived from the verified Auth user ID --------------
+    const canReset = await hasBetaFeatureForUser(
+      admin,
+      verifiedUser.id,
+      'test_account_reset',
+      'experimental',
+    );
+    if (!canReset) {
       return json({ error: 'Forbidden: this endpoint only resets the test account.' }, 403);
     }
 
@@ -145,7 +148,7 @@ Deno.serve(async (req: Request) => {
       user_metadata: {},
     });
 
-    return json({ ok: true, email, userId, results });
+    return json({ ok: true, userId, results });
   } catch (err) {
     return json({ error: String((err as Error)?.message ?? err) }, 500);
   }

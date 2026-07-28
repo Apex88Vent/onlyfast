@@ -3,7 +3,8 @@
 // always unlocks everything regardless of Stripe status.
 
 import { supabase } from '@/lib/supabase';
-// TEST-ACCOUNT BYPASS (remove before production): grants test@test.com full access.
+// The disposable experimental account can retain its legacy full-access mode
+// through an explicit account-level feature flag.
 import { isCurrentUserTestAccount } from '@/lib/testAccount';
 import {
   readMembership,
@@ -93,11 +94,11 @@ export function deriveAccountStatus(
   row: UserSubscriptionRow | null,
   metadata?: Record<string, any> | null
 ): AccountStatus {
-  // TEST-ACCOUNT BYPASS (remove before production): the dedicated demo account
-  // (test@test.com) is treated as fully paid so every gate that checks `isPaid`
+  // The explicitly flagged experimental account is treated as fully paid so
+  // every gate that checks `isPaid`
   // (e.g. the save → /pricing redirect) passes through. This does NOT create or
   // modify any Stripe/subscription record — it's a pure in-memory override that
-  // only ever applies to test@test.com. Real users are completely unaffected.
+  // only applies to that stored Auth user ID. Other users are unaffected.
   if (isCurrentUserTestAccount()) {
     return { label: 'Teams', plan: 'teams', isPaid: true, isAdmin: false, row };
   }

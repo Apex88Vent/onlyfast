@@ -4,8 +4,9 @@ import { User } from '@supabase/supabase-js';
 import SettingsModal from './SettingsModal';
 import AppMenu, { MenuAction } from './AppMenu';
 import { fetchUserSubscription, deriveAccountStatus } from '@/lib/subscription';
-// --- DEV/DEMO test-account reset (remove/disable before production) ---
-import { isTestAccount, ENABLE_TEST_ACCOUNT_RESET, resetTestAccountData } from '@/lib/testAccount';
+import { resetTestAccountData } from '@/lib/testAccount';
+import { useBetaFeatures } from '@/hooks/useBetaFeatures';
+import { BETA_FEATURES } from '@/lib/betaFeatures';
 
 // Display label for the membership badge shown next to the user's name.
 type PlanLabel = 'Rookie' | 'Pro' | 'Team' | 'Admin';
@@ -31,6 +32,10 @@ const getNickname = (user: User | null, override?: string): string => {
 };
 
 const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBackToCarSelect, onOpenHowOnlyFastWorks }) => {
+  const { hasBetaFeature, testerKind } = useBetaFeatures();
+  const hasExperimentalFullAccess =
+    testerKind === 'experimental' &&
+    hasBetaFeature(BETA_FEATURES.testAccountFullAccess);
   const [showDropdown, setShowDropdown] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -64,27 +69,27 @@ const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBac
     const onUpdated = () => load();
     window.addEventListener('subscription-updated', onUpdated);
     return () => { cancelled = true; window.removeEventListener('subscription-updated', onUpdated); };
-  }, [user]);
+  }, [hasExperimentalFullAccess, user]);
 
 
   const handleSignOut = async () => {
     setShowDropdown(false);
 
-    // --- DEV/DEMO test-account reset on logout ---------------------------
-    // If the dedicated test account is logging out, wipe its app data first so
-    // the next login starts brand-new. This is gated behind ENABLE_TEST_ACCOUNT_RESET
-    // (see src/lib/testAccount.ts) and is safe to remove before production.
-    if (ENABLE_TEST_ACCOUNT_RESET && isTestAccount(user?.email)) {
+    // Only the stored experimental account role plus its explicit reset flag
+    // may trigger this. The Edge Function repeats the same check server-side.
+    if (
+      testerKind === 'experimental' &&
+      hasBetaFeature(BETA_FEATURES.testAccountReset)
+    ) {
       setResettingTestAccount(true);
       try {
-        // Delegates to the secure Edge Function (verifies JWT + email server-side).
+        // Delegates to the secure Edge Function (verifies JWT + user flag).
         // Returns false (and logs a developer warning) on failure — we still log out.
         await resetTestAccountData();
       } finally {
         setResettingTestAccount(false);
       }
     }
-    // --------------------------------------------------------------------
 
     await supabase.auth.signOut();
   };

@@ -53,7 +53,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
   // ------------------------------------------------------------------
   // SETUP-ASSIST USAGE LIMIT (centralized via checkSetupAssistPermission)
   // ------------------------------------------------------------------
-  // The effective tier resolves test@test.com / admin / promo to 'team' and
+  // The effective tier resolves experimental full-access / admin / promo to 'team' and
   // Pro to 'pro' — both are 'unlimited', so they bypass every check here.
   // Only Rookie (limit = 1 per race weekend) is ever gated.
 

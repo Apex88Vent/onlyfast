@@ -2,7 +2,8 @@
 // Single source of truth for OnlyFast membership/plan gating.
 
 import { supabase } from '@/lib/supabase';
-// TEST-ACCOUNT BYPASS (remove before production): grants test@test.com full access.
+// The disposable experimental account can retain its legacy full-access mode
+// through an explicit account-level feature flag.
 import { isCurrentUserTestAccount } from '@/lib/testAccount';
 
 export type MembershipTier = 'rookie' | 'pro' | 'team';
@@ -332,8 +333,8 @@ export interface UserAccess {
 
 // Resolve effective tier accounting for promo expiration.
 export function getEffectiveTier(state: MembershipState): MembershipTier {
-  // TEST-ACCOUNT BYPASS (remove before production): test@test.com always gets
-  // the top tier so every feature/limit is unlocked. Real users unaffected.
+  // The explicitly flagged experimental account gets the top tier so existing
+  // production feature/limit checks remain testable. Other users are unaffected.
   if (isCurrentUserTestAccount()) return 'team';
   if (state.has_admin_full_access) return 'team';
   if (
@@ -361,8 +362,8 @@ export function hasFeatureAccess(
   state: MembershipState,
   featureName: keyof TierLimits
 ): boolean {
-  // TEST-ACCOUNT BYPASS (remove before production): unlock every feature flag
-  // for test@test.com only. Real users keep their normal restrictions.
+  // Preserve the legacy full-access behavior only for the account explicitly
+  // assigned test_account_full_access. Other users keep normal restrictions.
   if (isCurrentUserTestAccount()) return true;
   if (state.has_admin_full_access) return true;
 
@@ -381,8 +382,8 @@ export function hasFeatureAccess(
 // Single place that decides whether a save is allowed for the user's tier,
 // using the existing `tierLimits` values (no new limit numbers introduced).
 //
-// NOTE: pass the EFFECTIVE tier (from getEffectiveTier). Because test@test.com
-// and admin both resolve to 'team' there, this helper automatically lets them
+// NOTE: pass the EFFECTIVE tier (from getEffectiveTier). Because the explicitly
+// flagged experimental account and admin both resolve to 'team', this helper lets them
 // bypass every restriction below — no special-casing required here.
 
 export type SaveKind = 'race_weekend' | 'base_template';
@@ -508,8 +509,8 @@ export function isRaceWeekendEditLocked(
 // CURRENT race weekend, using the existing `setupAssistsPerRaceWeekend` tier
 // limit. Pure + synchronous so it is easy to test and call from the AI flow.
 //
-// Pass the EFFECTIVE tier (from getEffectiveTier). Because test@test.com and
-// admin both resolve to 'team' (which is 'unlimited'), they bypass this check
+// Pass the EFFECTIVE tier (from getEffectiveTier). Because the explicitly flagged
+// experimental account and admin resolve to 'team' (which is 'unlimited'), they bypass this check
 // automatically — no special-casing required. Pro is also 'unlimited'.
 
 export interface SetupAssistPermission {

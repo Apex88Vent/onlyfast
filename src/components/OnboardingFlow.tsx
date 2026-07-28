@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AVAILABLE_CAR_CLASSES, CAR_CLASSES, CLASS_CONFIGS } from '@/lib/classConfigs';
 import { ArrowLeft, Check } from 'lucide-react';
-// TEST-ACCOUNT BYPASS (remove before production): lets test@test.com click into
-// every "Coming Soon" discipline/class. Real users still see them locked.
+// The explicitly flagged experimental account can click into every
+// "Coming Soon" discipline/class. Other users still see them locked.
 import { isCurrentUserTestAccount } from '@/lib/testAccount';
 
 interface OnboardingFlowProps {

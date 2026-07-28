@@ -1127,7 +1127,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
 
     // -------------------------------------------------------------------
     // CENTRALIZED TIER ENFORCEMENT (uses tierLimits via checkSavePermission).
-    // The effective tier already resolves test@test.com / admin → 'team', so
+    // The effective tier already resolves experimental full-access / admin → 'team', so
     // those accounts bypass every check below automatically. Real users keep
     // their normal Rookie/Pro/Team restrictions.
     // -------------------------------------------------------------------

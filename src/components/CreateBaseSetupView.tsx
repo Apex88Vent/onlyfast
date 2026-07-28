@@ -206,7 +206,7 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
     // at EVERY car type this user has saved — base templates AND race-weekend
     // setups (base/heat/main). Pulling car types only from `templates` was the
     // bug that let a Pro user lock one car type via a race weekend, then save a
-    // base template for a *different* car type. test@test.com / admin resolve to
+    // base template for a *different* car type. Experimental full-access / admin resolve to
     // 'team' here → unlimited, so they pass automatically.
     const tier = getEffectiveTier(readMembership(user.user_metadata || {}));
     if (tier !== 'team') {

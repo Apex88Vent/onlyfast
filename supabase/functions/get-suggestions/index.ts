@@ -36,6 +36,7 @@
 // Returns: { suggestion: string }
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { hasBetaFeatureForUser } from '../_shared/beta-features.ts';
 
 export const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -154,13 +155,21 @@ function normalizePlan(plan: unknown): MembershipTier | 'free' {
 
 async function resolveEffectiveTier(admin: any, user: any): Promise<MembershipTier> {
   const email = String(user?.email || '').trim().toLowerCase();
-  const testEmail = String(Deno.env.get('TEST_ACCOUNT_EMAIL') || 'test@test.com').trim().toLowerCase();
   const adminEmails = String(Deno.env.get('ONLYFAST_ADMIN_EMAILS') || '')
     .split(',')
     .map((v) => v.trim().toLowerCase())
     .filter(Boolean);
 
-  if (email && email === testEmail) return 'team';
+  if (
+    await hasBetaFeatureForUser(
+      admin,
+      user.id,
+      'test_account_full_access',
+      'experimental',
+    )
+  ) {
+    return 'team';
+  }
   if (email && adminEmails.includes(email)) return 'team';
   if (user?.app_metadata?.has_admin_full_access === true) return 'team';
   if (user?.user_metadata?.has_admin_full_access === true) return 'team';
