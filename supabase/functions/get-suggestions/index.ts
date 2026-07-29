@@ -25,7 +25,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { hasBetaFeatureForUser } from '../_shared/beta-features.ts';
 import { createOnlyLapsSetupContextStore } from '../_shared/onlylaps-setup-context-store.ts';
-import { loadSetupAssistOnlyLapsPromptContext } from '../_shared/setup-assist-onlylaps-context.ts';
+import {
+  appendOnlyLapsTelemetryToSetupAssistPrompt,
+  loadSetupAssistOnlyLapsPromptContext,
+  toBetaSetupAssistTelemetryDebug,
+} from '../_shared/setup-assist-onlylaps-context.ts';
 
 export const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -349,22 +353,10 @@ Based on this information, provide specific, actionable setup change suggestions
 3. Priority of changes (what to try first)
 
 Keep suggestions practical and specific to dirt track oval racing${classNote}. Format with clear headers for each phase. If a phase is "perfect", acknowledge it briefly and move on. Be concise but thorough.`;
-    const prompt = telemetry.promptContext
-      ? `${basePrompt}
-
-${telemetry.promptContext.promptSection}
-
-Use the telemetry only as additional evidence alongside driver feedback, the
-current setup, setup changes, and track/session context. Distinguish likely
-setup-related behavior, likely driver-technique behavior, behavior that could
-be either, and insufficient evidence. Do not force a setup change merely
-because telemetry is present. If feedback conflicts with telemetry, explain
-the evidence for each. Keep recommendations conservative and avoid changing
-many variables at once unless evidence is strong. When telemetry materially
-influences the recommendation, briefly explain the relevant evidence without
-dumping the telemetry package or exposing internal JSON, identifiers, model
-names, or database details.`
-      : basePrompt;
+    const prompt = appendOnlyLapsTelemetryToSetupAssistPrompt(
+      basePrompt,
+      telemetry.promptContext,
+    );
 
     const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -400,11 +392,33 @@ names, or database details.`
     const data = await aiResponse.json();
     const suggestion =
       data?.choices?.[0]?.message?.content?.trim() || 'Unable to generate suggestions at this time.';
+    const telemetryDebug = hasTelemetryBetaAccess
+      ? toBetaSetupAssistTelemetryDebug(telemetry.debug, suggestion)
+      : null;
+    console.log('[get-suggestions] telemetry result', {
+      beta_enabled: hasTelemetryBetaAccess,
+      linked: telemetry.debug.linked,
+      context_loaded: telemetry.debug.telemetry_context_loaded,
+      context_used: telemetry.debug.telemetry_context_used,
+      evidence_referenced:
+        telemetryDebug?.telemetry_evidence_referenced ?? false,
+      measured_fact_count: telemetry.debug.measured_fact_count,
+      corner_count: telemetry.debug.corner_count,
+      sector_count: telemetry.debug.sector_count,
+      analysis_available: telemetry.debug.analysis_available,
+      character_count: telemetry.debug.telemetry_context_character_count,
+      truncated: telemetry.debug.telemetry_context_truncated,
+      fallback_reason: telemetry.debug.fallback_reason,
+    });
 
     const recordError = await recordSetupAssistUsage(auth.admin, auth.user.id, tier, raceWeekendScope);
     if (recordError) return recordError;
 
-    return json({ suggestion });
+    return json(
+      telemetryDebug
+        ? { suggestion, telemetry_debug: telemetryDebug }
+        : { suggestion },
+    );
   } catch (error) {
     console.error('get-suggestions failed', error);
     return json({ error: 'Setup Assist could not generate suggestions right now. Please try again.' }, 500);

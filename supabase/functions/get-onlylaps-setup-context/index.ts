@@ -11,6 +11,7 @@ import {
 } from '../_shared/onlylaps-setup-context.ts';
 import { createOnlyLapsSetupContextStore } from '../_shared/onlylaps-setup-context-store.ts';
 import { hasBetaFeatureForUser } from '../_shared/beta-features.ts';
+import { inspectOnlyLapsMeasuredEvidence } from '../_shared/setup-assist-onlylaps-context.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -103,8 +104,16 @@ Deno.serve(async (req) => {
       store: createOnlyLapsSetupContextStore(auth.admin),
     });
     if (statusOnly) {
+      const evidence = inspectOnlyLapsMeasuredEvidence(context);
       return json({
-        linked: context.linked,
+        linked: evidence.linked,
+        context_loaded: evidence.contextLoaded,
+        usable_measured_facts: evidence.usableMeasuredFacts,
+        measured_fact_count: evidence.measuredFactCount,
+        corner_count: evidence.cornerCount,
+        sector_count: evidence.sectorCount,
+        analysis_available: evidence.analysisAvailable,
+        fallback_reason: evidence.fallbackReason,
         display_name: context.linked
           ? context.session.display_name
           : null,

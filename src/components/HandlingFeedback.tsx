@@ -28,6 +28,69 @@ interface HandlingFeedbackProps {
   onlyLapsTelemetryEnabled?: boolean;
 }
 
+interface BetaTelemetryDebug {
+  linked: boolean;
+  context_loaded: boolean;
+  context_used: boolean;
+  telemetry_evidence_referenced: boolean;
+  measured_fact_count: number;
+  corner_count: number;
+  sector_count: number;
+  analysis_available: boolean;
+  character_count: number;
+  truncated: boolean;
+  fallback_reason: string | null;
+}
+
+function readBetaTelemetryDebug(value: unknown): BetaTelemetryDebug | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const debug = value as Record<string, unknown>;
+  if (
+    typeof debug.linked !== 'boolean' ||
+    typeof debug.context_loaded !== 'boolean' ||
+    typeof debug.context_used !== 'boolean' ||
+    typeof debug.telemetry_evidence_referenced !== 'boolean'
+  ) {
+    return null;
+  }
+  const number = (key: string) =>
+    typeof debug[key] === 'number' && Number.isFinite(debug[key])
+      ? Number(debug[key])
+      : 0;
+  return {
+    linked: debug.linked,
+    context_loaded: debug.context_loaded,
+    context_used: debug.context_used,
+    telemetry_evidence_referenced:
+      debug.telemetry_evidence_referenced,
+    measured_fact_count: number('measured_fact_count'),
+    corner_count: number('corner_count'),
+    sector_count: number('sector_count'),
+    analysis_available: debug.analysis_available === true,
+    character_count: number('character_count'),
+    truncated: debug.truncated === true,
+    fallback_reason:
+      typeof debug.fallback_reason === 'string'
+        ? debug.fallback_reason
+        : null,
+  };
+}
+
+function telemetryReasonLabel(reason: string | null): string {
+  const labels: Record<string, string> = {
+    feature_gate_disabled: 'feature gate disabled',
+    no_active_session: 'no active saved session',
+    no_link: 'no linked session',
+    ownership_failed: 'ownership validation failed',
+    context_query_failed: 'telemetry query failed',
+    no_valid_laps: 'no valid lap metrics',
+    no_measured_metrics: 'no usable measured metrics',
+    formatting_failed: 'telemetry formatting failed',
+    context_empty: 'formatted telemetry was empty',
+  };
+  return reason ? labels[reason] || reason.replaceAll('_', ' ') : 'unknown';
+}
+
 const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
   entryHandling,
   midHandling,
@@ -49,9 +112,11 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
   // (or when they need to save the race weekend first to track the free assist).
   const [assistNotice, setAssistNotice] = useState('');
   const [telemetryStatus, setTelemetryStatus] = useState<{
-    state: 'loading' | 'included' | 'none' | 'unavailable';
+    state: 'loading' | 'available' | 'no_metrics' | 'none' | 'unavailable';
     displayName: string | null;
   }>({ state: 'none', displayName: null });
+  const [telemetryRequestDebug, setTelemetryRequestDebug] =
+    useState<BetaTelemetryDebug | null>(null);
   const [telemetryStatusRefresh, setTelemetryStatusRefresh] = useState(0);
   const telemetryStatusRequestRef = useRef(0);
   const prefix = useId();
@@ -120,13 +185,25 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
           return;
         }
         if (error) throw error;
-        if (data?.linked === true) {
+        if (
+          data?.linked === true &&
+          data?.context_loaded === true &&
+          data?.usable_measured_facts === true
+        ) {
           setTelemetryStatus({
-            state: 'included',
+            state: 'available',
             displayName:
               typeof data.display_name === 'string'
                 ? data.display_name
                 : 'Timing Session',
+          });
+        } else if (data?.linked === true) {
+          setTelemetryStatus({
+            state: 'no_metrics',
+            displayName:
+              typeof data.display_name === 'string'
+                ? data.display_name
+                : null,
           });
         } else {
           setTelemetryStatus({ state: 'none', displayName: null });
@@ -304,6 +381,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
 
     setLoading(true);
     setSuggestions('');
+    setTelemetryRequestDebug(null);
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token;
@@ -326,6 +404,11 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
       });
       if (data?.suggestion) {
         setSuggestions(data.suggestion);
+        setTelemetryRequestDebug(
+          onlyLapsTelemetryEnabled
+            ? readBetaTelemetryDebug(data.telemetry_debug)
+            : null,
+        );
       } else if (error) {
         const diag = await describeInvokeError(error);
         // eslint-disable-next-line no-console
@@ -357,6 +440,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
 
     setWhatIfLoading(true);
     setWhatIfResponse('');
+    setTelemetryRequestDebug(null);
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token;
@@ -380,6 +464,11 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
       });
       if (data?.suggestion) {
         setWhatIfResponse(data.suggestion);
+        setTelemetryRequestDebug(
+          onlyLapsTelemetryEnabled
+            ? readBetaTelemetryDebug(data.telemetry_debug)
+            : null,
+        );
       } else if (error) {
         const diag = await describeInvokeError(error);
         // eslint-disable-next-line no-console
@@ -435,11 +524,20 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
           role="status"
           aria-live="polite"
         >
-          {telemetryStatus.state === 'included' ? (
+          {telemetryStatus.state === 'available' ? (
             <>
               <span className="font-semibold text-[#00A8E8]">
-                OnlyLaps telemetry included
+                OnlyLaps telemetry available
               </span>
+              {telemetryStatus.displayName && (
+                <span className="block truncate">
+                  {telemetryStatus.displayName}
+                </span>
+              )}
+            </>
+          ) : telemetryStatus.state === 'no_metrics' ? (
+            <>
+              <span>OnlyLaps telemetry linked, but no usable metrics were found</span>
               {telemetryStatus.displayName && (
                 <span className="block truncate">
                   {telemetryStatus.displayName}
@@ -452,6 +550,29 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
             'OnlyLaps telemetry unavailable'
           ) : (
             'No OnlyLaps telemetry linked'
+          )}
+        </div>
+      )}
+
+      {onlyLapsTelemetryEnabled && telemetryRequestDebug && (
+        <div className="text-[10px] text-[#6B7280] border border-dashed border-[#D1D5DB] bg-[#F9FAFB] rounded-md px-2.5 py-1.5 -mt-1 mb-3">
+          {telemetryRequestDebug.context_used ? (
+            <>
+              Telemetry used: Yes
+              {' · '}Measured facts: {telemetryRequestDebug.measured_fact_count}
+              {' · '}Corners: {telemetryRequestDebug.corner_count}
+              {' · '}Sectors: {telemetryRequestDebug.sector_count}
+              {' · '}Evidence cited:{' '}
+              {telemetryRequestDebug.telemetry_evidence_referenced
+                ? 'Yes'
+                : 'No'}
+            </>
+          ) : (
+            <>
+              Telemetry used: No
+              {' · '}Reason:{' '}
+              {telemetryReasonLabel(telemetryRequestDebug.fallback_reason)}
+            </>
           )}
         </div>
       )}

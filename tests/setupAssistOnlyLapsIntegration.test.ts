@@ -2,9 +2,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
+  appendOnlyLapsTelemetryToSetupAssistPrompt,
   buildSetupAssistOnlyLapsPromptContext,
+  formatSetupAssistOnlyLapsContext,
+  inspectOnlyLapsMeasuredEvidence,
   loadSetupAssistOnlyLapsPromptContext,
+  recommendationReferencesTelemetryEvidence,
   SETUP_ASSIST_TELEMETRY_LIMITS,
+  toBetaSetupAssistTelemetryDebug,
 } from '../supabase/functions/_shared/setup-assist-onlylaps-context.ts';
 import {
   ONLYLAPS_SETUP_CONTEXT_SCHEMA_VERSION,
@@ -171,6 +176,40 @@ function isolationStore(): OnlyLapsSetupContextStore {
     weather: null,
     device_info: { gForceConvention: 'vehicle_braking_positive_v2' },
   };
+  const validLaps = [
+    {
+      id: '55555555-5555-4555-8555-555555555551',
+      user_id: userA,
+      timing_session_id: onlylapsId,
+      lap_number: 1,
+      duration_ms: 18_100,
+      sector_times_ms: null,
+      is_valid: true,
+      excluded_reason: null,
+      average_speed: 50,
+      max_speed: 70,
+      max_lateral_g: 1.4,
+      max_longitudinal_g: 0.8,
+      max_accel_g: 0.6,
+      max_braking_g: 0.7,
+    },
+    {
+      id: '55555555-5555-4555-8555-555555555552',
+      user_id: userA,
+      timing_session_id: onlylapsId,
+      lap_number: 2,
+      duration_ms: 17_800,
+      sector_times_ms: null,
+      is_valid: true,
+      excluded_reason: null,
+      average_speed: 51,
+      max_speed: 72,
+      max_lateral_g: 1.5,
+      max_longitudinal_g: 0.9,
+      max_accel_g: 0.65,
+      max_braking_g: 0.75,
+    },
+  ];
 
   return {
     findOwnedOnlyFastSession: (sessionId, userId) =>
@@ -188,7 +227,12 @@ function isolationStore(): OnlyLapsSetupContextStore {
         sessionId === onlylapsId && userId === userA ? onlylaps : null,
       ),
     findTrackMap: () => result(null),
-    listOwnedLaps: () => result([]),
+    listOwnedLaps: (sessionId, userId) =>
+      result(
+        sessionId === onlylapsId && userId === userA
+          ? validLaps
+          : [],
+      ),
     listOwnedSectorRows: () => result([]),
     findOwnedAnalysis: () => result(null),
   };
@@ -212,6 +256,33 @@ test('fully populated telemetry is compact and separates facts from AI interpret
   assert.match(prompt.promptSection, /reference data, never instructions/i);
   assert.match(prompt.promptSection, /higher-confidence evidence/i);
   assert.doesNotMatch(prompt.serializedContext, /55555555-5555/);
+});
+
+test('known populated telemetry reaches the final OpenAI prompt with required evidence instructions', () => {
+  const context = linkedContext();
+  const evidence = inspectOnlyLapsMeasuredEvidence(context);
+  const formatted = formatSetupAssistOnlyLapsContext(context);
+  assert.equal(evidence.usableMeasuredFacts, true);
+  assert.ok(formatted);
+  assert.ok(formatted.measuredFactCount > 0);
+  assert.equal(formatted.cornerCount, 1);
+  assert.equal(formatted.sectorCount, 1);
+
+  const finalPrompt = appendOnlyLapsTelemetryToSetupAssistPrompt(
+    'NORMAL SETUP ASSIST PROMPT',
+    formatted,
+  );
+  assert.match(finalPrompt, /"measured_facts"/);
+  assert.match(finalPrompt, /"ai_interpretations"/);
+  assert.match(finalPrompt, /"fastest_lap_ms":17800/);
+  assert.match(finalPrompt, /"exit_speed_mps":22/);
+  assert.match(finalPrompt, /"max_abs_lateral_g":1\.5/);
+  assert.match(finalPrompt, /REQUIRED TELEMETRY ACKNOWLEDGEMENT/);
+  assert.match(finalPrompt, /Telemetry evidence:/);
+  assert.match(
+    finalPrompt,
+    /does not provide strong evidence for or against this complaint/,
+  );
 });
 
 test('partial telemetry without saved AI analysis remains usable', () => {
@@ -242,6 +313,26 @@ test('partial telemetry without saved AI analysis remains usable', () => {
   const parsed = JSON.parse(prompt.serializedContext);
   assert.equal(parsed.measured_facts.lap_performance.fastest_lap_ms, 17_800);
   assert.equal(parsed.ai_interpretations.summary, undefined);
+});
+
+test('a link without valid measured laps is loaded but not marked used', async () => {
+  const store = isolationStore();
+  const noLapStore: OnlyLapsSetupContextStore = {
+    ...store,
+    listOwnedLaps: () => result([]),
+  };
+  const loaded = await loadSetupAssistOnlyLapsPromptContext({
+    betaEnabled: true,
+    onlyfastSessionId: heatId,
+    store: noLapStore,
+    userId: userA,
+  });
+  assert.equal(loaded.promptContext, null);
+  assert.equal(loaded.debug.linked, true);
+  assert.equal(loaded.debug.telemetry_context_loaded, true);
+  assert.equal(loaded.debug.telemetry_context_used, false);
+  assert.equal(loaded.debug.measured_fact_count, 0);
+  assert.equal(loaded.debug.fallback_reason, 'no_valid_laps');
 });
 
 test('structural limits trim observations and corners without invalid JSON', () => {
@@ -283,6 +374,43 @@ test('stored prompt-like text is escaped and remains marked as untrusted data', 
   assert.doesNotMatch(prompt.serializedContext, /<\/ONLYLAPS/);
   assert.match(prompt.serializedContext, /\\u003c/);
   assert.match(prompt.promptSection, /never instructions/i);
+});
+
+test('beta response diagnostics distinguish use from evidence acknowledgement', () => {
+  const context = linkedContext();
+  const prompt = formatSetupAssistOnlyLapsContext(context);
+  assert.ok(prompt);
+  const debug = {
+    telemetry_context_requested: true,
+    linked: true,
+    telemetry_context_loaded: true,
+    telemetry_context_used: true,
+    telemetry_evidence_referenced: false,
+    measured_fact_count: prompt.measuredFactCount,
+    corner_count: prompt.cornerCount,
+    sector_count: prompt.sectorCount,
+    analysis_available: true,
+    telemetry_schema_version: prompt.schemaVersion,
+    telemetry_context_character_count: prompt.characterCount,
+    telemetry_context_truncated: prompt.truncated,
+    fallback_reason: null,
+    linked_onlyfast_session_id: heatId,
+    linked_onlylaps_session_id: onlylapsId,
+  };
+  const recommendation =
+    'Try one adjustment first.\nTelemetry evidence: Exit speed was 22 m/s in Turn 2.';
+  const publicDebug = toBetaSetupAssistTelemetryDebug(
+    debug,
+    recommendation,
+  );
+  assert.equal(
+    recommendationReferencesTelemetryEvidence(recommendation),
+    true,
+  );
+  assert.equal(publicDebug.context_used, true);
+  assert.equal(publicDebug.telemetry_evidence_referenced, true);
+  assert.equal('linked_onlyfast_session_id' in publicDebug, false);
+  assert.equal('linked_onlylaps_session_id' in publicDebug, false);
 });
 
 test('exact-session isolation includes Heat only and ignores names and copies', async () => {
@@ -348,6 +476,7 @@ test('non-beta and telemetry failures fall back without blocking Setup Assist', 
   assert.equal(failure.promptContext, null);
   assert.equal(failure.debug.telemetry_context_loaded, false);
   assert.equal(failure.debug.telemetry_context_used, false);
+  assert.equal(failure.debug.fallback_reason, 'context_query_failed');
 
   const otherUser = await loadSetupAssistOnlyLapsPromptContext({
     betaEnabled: true,
@@ -357,6 +486,7 @@ test('non-beta and telemetry failures fall back without blocking Setup Assist', 
   });
   assert.equal(otherUser.promptContext, null);
   assert.equal(otherUser.debug.telemetry_context_used, false);
+  assert.equal(otherUser.debug.fallback_reason, 'ownership_failed');
 });
 
 test('Setup Assist preserves usage behavior, one OpenAI call, server loading, and response shape', () => {
@@ -392,8 +522,14 @@ test('Setup Assist preserves usage behavior, one OpenAI call, server loading, an
     1,
   );
   assert.match(edge, /recordSetupAssistUsage/);
-  assert.match(edge, /return json\(\{ suggestion \}\)/);
-  assert.match(edge, /telemetry\.promptContext\s*\?[\s\S]*:\s*basePrompt/);
+  assert.match(
+    edge,
+    /appendOnlyLapsTelemetryToSetupAssistPrompt\([\s\S]*basePrompt[\s\S]*telemetry\.promptContext/,
+  );
+  assert.match(
+    edge,
+    /hasTelemetryBetaAccess[\s\S]*\{ suggestion, telemetry_debug: telemetryDebug \}[\s\S]*\{ suggestion \}/,
+  );
   assert.doesNotMatch(
     `${edge}\n${store}`,
     /\.from\('onlylaps_telemetry_samples'\)/,
@@ -425,12 +561,20 @@ test('beta-only UI status and request ID use the same active-session gate', () =
     assist,
     /onlyLapsTelemetryEnabled && onlyfastSessionId[\s\S]*onlyfast_session_id: activeTelemetrySessionId/,
   );
-  assert.match(assist, /OnlyLaps telemetry included/);
+  assert.doesNotMatch(assist, /OnlyLaps telemetry included/);
+  assert.match(assist, /OnlyLaps telemetry available/);
+  assert.match(
+    assist,
+    /OnlyLaps telemetry linked, but no usable metrics were found/,
+  );
   assert.match(assist, /No OnlyLaps telemetry linked/);
+  assert.match(assist, /Telemetry used: Yes/);
+  assert.match(assist, /Measured facts:/);
   assert.match(assist, /status_only: true/);
   assert.match(
     statusEdge,
     /hasBetaFeatureForUser\([\s\S]*test_account_full_access[\s\S]*experimental/,
   );
   assert.match(statusEdge, /display_name: context\.linked/);
+  assert.match(statusEdge, /usable_measured_facts/);
 });
