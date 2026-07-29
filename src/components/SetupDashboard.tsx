@@ -16,6 +16,7 @@ import BaseTemplatePicker from './BaseTemplatePicker';
 import TodoList from './TodoList';
 import ScanTimingScreen from './ScanTimingScreen';
 import TimingDataDisplay from './TimingDataDisplay';
+import OnlyLapsSessionLinkCard from './OnlyLapsSessionLinkCard';
 import { attachTimingDataToSession, type TimingData } from '@/lib/timingData';
 import { buildPerformanceSummary, parsePerformancePosition } from '@/lib/performanceSummary';
 import PartsReference from './PartsReference';
@@ -30,6 +31,8 @@ import {
   type ScheduleRaceEntry,
 } from '@/lib/scheduleSelection';
 import { SAFE_BACK_DASHBOARD_EVENT, consumePendingSafeBackDashboardView } from '@/lib/safeBack';
+import { useBetaFeatures } from '@/hooks/useBetaFeatures';
+import { BETA_FEATURES } from '@/lib/betaFeatures';
 
 import {
   enqueue as enqueuePending,
@@ -307,6 +310,10 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   classLocksEnabled,
   onUpgrade,
 }) => {
+  const { hasBetaFeature, testerKind } = useBetaFeatures();
+  const onlyLapsLinkingEnabled =
+    testerKind === 'experimental' &&
+    hasBetaFeature(BETA_FEATURES.testAccountFullAccess);
   const [activeTab, setActiveTab] = useState<SetupType>('base');
   // Always keep ALL 6 slot keys present so reads like setups[activeTab] are never
   // undefined (extra slots stay blank until the user adds them).
@@ -2729,6 +2736,13 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
                 <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-4 py-3 text-sm font-medium" role="status">
                   Changes for this class cannot be saved on your current plan. You can continue viewing and editing the setup.
                 </div>
+              )}
+
+              {onlyLapsLinkingEnabled && savedMeta.ids[activeTab] && (
+                <OnlyLapsSessionLinkCard
+                  key={savedMeta.ids[activeTab]}
+                  onlyfastSessionId={savedMeta.ids[activeTab]!}
+                />
               )}
 
               {resumedBanner && (
