@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   Dialog,
   DialogContent,
@@ -94,6 +100,8 @@ const OnlyLapsSessionLinkCard: React.FC<
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const activeSessionIdRef = useRef<string | null>(onlyfastSessionId);
+  const requestVersionRef = useRef(0);
 
   const load = useCallback(
     async (
@@ -101,14 +109,27 @@ const OnlyLapsSessionLinkCard: React.FC<
       offset = 0,
       append = false,
     ) => {
+      const requestedSessionId = onlyfastSessionId;
+      const requestVersion = ++requestVersionRef.current;
       setLoading(true);
       setError(null);
       try {
         const next = await loadOnlyLapsSessionCandidates(
-          onlyfastSessionId,
+          requestedSessionId,
           scope,
           offset,
         );
+        if (
+          activeSessionIdRef.current !== requestedSessionId ||
+          requestVersionRef.current !== requestVersion
+        ) {
+          return;
+        }
+        if (next.onlyfast_session_id !== requestedSessionId) {
+          setResult(null);
+          setError('OnlyLaps returned data for a different saved session.');
+          return;
+        }
         setResult((previous) => {
           if (!append || !previous) return next;
           const merged = new Map(
@@ -122,42 +143,45 @@ const OnlyLapsSessionLinkCard: React.FC<
           return { ...next, candidates: [...merged.values()] };
         });
       } catch (loadError) {
+        if (
+          activeSessionIdRef.current !== requestedSessionId ||
+          requestVersionRef.current !== requestVersion
+        ) {
+          return;
+        }
         setError(
           loadError instanceof Error
             ? loadError.message
             : 'OnlyLaps sessions could not be loaded.',
         );
       } finally {
-        setLoading(false);
+        if (
+          activeSessionIdRef.current === requestedSessionId &&
+          requestVersionRef.current === requestVersion
+        ) {
+          setLoading(false);
+        }
       }
     },
     [onlyfastSessionId],
   );
 
   useEffect(() => {
-    let active = true;
+    activeSessionIdRef.current = onlyfastSessionId;
+    requestVersionRef.current += 1;
     setResult(null);
+    setPickerOpen(false);
+    setBusyId(null);
     setLoading(true);
     setError(null);
-    loadOnlyLapsSessionCandidates(onlyfastSessionId, 'suggested', 0)
-      .then((next) => {
-        if (active) setResult(next);
-      })
-      .catch((loadError) => {
-        if (!active) return;
-        setError(
-          loadError instanceof Error
-            ? loadError.message
-            : 'OnlyLaps sessions could not be loaded.',
-        );
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+    void load('suggested');
     return () => {
-      active = false;
+      if (activeSessionIdRef.current === onlyfastSessionId) {
+        activeSessionIdRef.current = null;
+      }
+      requestVersionRef.current += 1;
     };
-  }, [onlyfastSessionId]);
+  }, [load, onlyfastSessionId]);
 
   const suggestion = useMemo(
     () =>
@@ -173,24 +197,29 @@ const OnlyLapsSessionLinkCard: React.FC<
     candidate: OnlyLapsSessionCandidate,
     source: 'picker' | 'suggestion',
   ) => {
+    const requestedSessionId = onlyfastSessionId;
     setBusyId(candidate.onlylaps_session_id);
     setError(null);
     try {
       await linkOnlyLapsSession(
-        onlyfastSessionId,
+        requestedSessionId,
         candidate,
         source,
       );
+      if (activeSessionIdRef.current !== requestedSessionId) return;
       setPickerOpen(false);
       await load('suggested');
     } catch (linkError) {
+      if (activeSessionIdRef.current !== requestedSessionId) return;
       setError(
         linkError instanceof Error
           ? linkError.message
           : 'The session could not be linked.',
       );
     } finally {
-      setBusyId(null);
+      if (activeSessionIdRef.current === requestedSessionId) {
+        setBusyId(null);
+      }
     }
   };
 
@@ -199,19 +228,24 @@ const OnlyLapsSessionLinkCard: React.FC<
       'Unlink this OnlyLaps session? No session, lap, telemetry, analysis, or share data will be deleted.',
     );
     if (!confirmed) return;
+    const requestedSessionId = onlyfastSessionId;
     setBusyId('unlink');
     setError(null);
     try {
-      await unlinkOnlyLapsSession(onlyfastSessionId);
+      await unlinkOnlyLapsSession(requestedSessionId);
+      if (activeSessionIdRef.current !== requestedSessionId) return;
       await load('suggested');
     } catch (unlinkError) {
+      if (activeSessionIdRef.current !== requestedSessionId) return;
       setError(
         unlinkError instanceof Error
           ? unlinkError.message
           : 'The session could not be unlinked.',
       );
     } finally {
-      setBusyId(null);
+      if (activeSessionIdRef.current === requestedSessionId) {
+        setBusyId(null);
+      }
     }
   };
 

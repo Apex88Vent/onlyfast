@@ -16,7 +16,7 @@ import BaseTemplatePicker from './BaseTemplatePicker';
 import TodoList from './TodoList';
 import ScanTimingScreen from './ScanTimingScreen';
 import TimingDataDisplay from './TimingDataDisplay';
-import OnlyLapsSessionLinkCard from './OnlyLapsSessionLinkCard';
+import ActiveOnlyLapsSessionLinkSlot from './ActiveOnlyLapsSessionLinkSlot';
 import { attachTimingDataToSession, type TimingData } from '@/lib/timingData';
 import { buildPerformanceSummary, parsePerformancePosition } from '@/lib/performanceSummary';
 import PartsReference from './PartsReference';
@@ -2738,12 +2738,11 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
                 </div>
               )}
 
-              {onlyLapsLinkingEnabled && savedMeta.ids[activeTab] && (
-                <OnlyLapsSessionLinkCard
-                  key={savedMeta.ids[activeTab]}
-                  onlyfastSessionId={savedMeta.ids[activeTab]!}
-                />
-              )}
+              <ActiveOnlyLapsSessionLinkSlot
+                enabled={onlyLapsLinkingEnabled}
+                activeSessionSlot={activeTab}
+                sessionIds={savedMeta.ids}
+              />
 
               {resumedBanner && (
                 <div className="bg-gradient-to-r from-[#00A8E8]/10 to-[#00A8E8]/5 border border-[#00A8E8]/30 rounded-xl px-4 py-3 flex items-center gap-3 flex-wrap" role="status" aria-live="polite">

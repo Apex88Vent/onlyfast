@@ -342,6 +342,114 @@ test('one OnlyLaps session cannot be linked to two OnlyFast sessions', async () 
   );
 });
 
+test('Hot Laps, Heat, Main, link changes, unlinks, and copied rows stay independent', async () => {
+  const hotLapsSessionId =
+    '11111111-1111-4111-8111-111111111115';
+  const copiedSessionId =
+    '11111111-1111-4111-8111-111111111114';
+  const alternateOnlyLapsId =
+    '22222222-2222-4222-8222-222222222225';
+  const hotLapsRow: OnlyFastLinkingSessionRow = {
+    ...onlyfastHeat,
+    id: hotLapsSessionId,
+    session_label: 'Hot Laps',
+    setup_type: 'base',
+  };
+  const alternateOnlyLapsRow: OnlyLapsCandidateSessionRow = {
+    ...heatSession,
+    id: alternateOnlyLapsId,
+    session_name: 'Heat Race Alternate',
+    started_at: '2026-07-28T20:00:00.000Z',
+  };
+  const { state, store } = createStatefulStore({
+    onlyfastRows: [hotLapsRow, onlyfastHeat, onlyfastMain],
+    sessionRows: [
+      heatSession,
+      mainSession,
+      alternateOnlyLapsRow,
+      otherUserSession,
+    ],
+  });
+
+  await linkOnlyLapsSession({
+    onlyfastSessionId: fastA,
+    onlylapsSessionId: lapsHeat,
+    userId: userA,
+    store,
+  });
+  await linkOnlyLapsSession({
+    onlyfastSessionId: fastB,
+    onlylapsSessionId: lapsMain,
+    userId: userA,
+    store,
+  });
+
+  const unlinkedHotLapsView = await listOnlyLapsSessionCandidates({
+    onlyfastSessionId: hotLapsSessionId,
+    userId: userA,
+    store,
+  });
+  const heatView = await listOnlyLapsSessionCandidates({
+    onlyfastSessionId: fastA,
+    userId: userA,
+    store,
+  });
+  const mainView = await listOnlyLapsSessionCandidates({
+    onlyfastSessionId: fastB,
+    userId: userA,
+    store,
+  });
+  assert.equal(unlinkedHotLapsView.current_session, null);
+  assert.equal(heatView.current_session?.onlylaps_session_id, lapsHeat);
+  assert.equal(mainView.current_session?.onlylaps_session_id, lapsMain);
+
+  await linkOnlyLapsSession({
+    onlyfastSessionId: fastA,
+    onlylapsSessionId: alternateOnlyLapsId,
+    userId: userA,
+    store,
+  });
+  const mainAfterHeatChange = await listOnlyLapsSessionCandidates({
+    onlyfastSessionId: fastB,
+    userId: userA,
+    store,
+  });
+  assert.equal(
+    mainAfterHeatChange.current_session?.onlylaps_session_id,
+    lapsMain,
+  );
+
+  await unlinkOnlyLapsSession({
+    onlyfastSessionId: fastA,
+    userId: userA,
+    store,
+  });
+  const mainAfterOtherUnlink = await listOnlyLapsSessionCandidates({
+    onlyfastSessionId: fastB,
+    userId: userA,
+    store,
+  });
+  assert.equal(
+    mainAfterOtherUnlink.current_session?.onlylaps_session_id,
+    lapsMain,
+  );
+
+  state.onlyfastRows.push({
+    ...onlyfastHeat,
+    id: copiedSessionId,
+    session_label: 'Copied Heat',
+  });
+  const copiedView = await listOnlyLapsSessionCandidates({
+    onlyfastSessionId: copiedSessionId,
+    userId: userA,
+    store,
+  });
+  assert.equal(copiedView.current_link, null);
+  assert.equal(copiedView.current_session, null);
+  assert.equal(state.links.length, 1);
+  assert.equal(state.links[0].onlyfast_session_id, fastB);
+});
+
 test('renaming either session changes display only and leaves the ID link intact', async () => {
   const { state, store } = createStatefulStore();
   await linkOnlyLapsSession({
@@ -505,7 +613,7 @@ test('UI and backend reuse the existing experimental test-account gate', () => {
   );
   assert.match(
     dashboard,
-    /onlyLapsLinkingEnabled && savedMeta\.ids\[activeTab\]/,
+    /enabled=\{onlyLapsLinkingEnabled\}/,
   );
   assert.match(
     edge,
