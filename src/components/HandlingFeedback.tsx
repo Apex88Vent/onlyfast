@@ -1,4 +1,4 @@
-import React, { useState, useId } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import {
@@ -6,6 +6,7 @@ import {
   readMembership,
   checkSetupAssistPermission,
 } from '@/lib/membership';
+import { ONLYLAPS_SESSION_LINK_CHANGED_EVENT } from '@/lib/onlylapsSessionScope';
 
 interface HandlingFeedbackProps {
   entryHandling: string;
@@ -21,10 +22,22 @@ interface HandlingFeedbackProps {
    * empty/undefined the race weekend hasn't been saved yet.
    */
   raceWeekendKey?: string;
+  /** Exact public.race_setups.id for the active saved session. */
+  onlyfastSessionId?: string;
+  /** Same experimental test-account gate used by the telemetry link card. */
+  onlyLapsTelemetryEnabled?: boolean;
 }
 
 const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
-  entryHandling, midHandling, exitHandling, setupData, raceClass, user, raceWeekendKey
+  entryHandling,
+  midHandling,
+  exitHandling,
+  setupData,
+  raceClass,
+  user,
+  raceWeekendKey,
+  onlyfastSessionId,
+  onlyLapsTelemetryEnabled = false,
 }) => {
   const [suggestions, setSuggestions] = useState('');
   const [loading, setLoading] = useState(false);
@@ -35,6 +48,12 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
   // Inline notice surfaced when a Rookie hits the per-race-weekend assist limit
   // (or when they need to save the race weekend first to track the free assist).
   const [assistNotice, setAssistNotice] = useState('');
+  const [telemetryStatus, setTelemetryStatus] = useState<{
+    state: 'loading' | 'included' | 'none' | 'unavailable';
+    displayName: string | null;
+  }>({ state: 'none', displayName: null });
+  const [telemetryStatusRefresh, setTelemetryStatusRefresh] = useState(0);
+  const telemetryStatusRequestRef = useRef(0);
   const prefix = useId();
 
   const hasHandling = entryHandling || midHandling || exitHandling;
@@ -49,6 +68,95 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
   const filledCount = importantFields.filter(f => setupData[f] && setupData[f].trim() !== '').length;
   const totalFields = importantFields.length;
   const completionPct = Math.round((filledCount / totalFields) * 100);
+
+  useEffect(() => {
+    const handleLinkChanged = (event: Event) => {
+      const changedSessionId = (
+        event as CustomEvent<{ onlyfastSessionId?: string }>
+      ).detail?.onlyfastSessionId;
+      if (changedSessionId === onlyfastSessionId) {
+        setTelemetryStatusRefresh((value) => value + 1);
+      }
+    };
+    window.addEventListener(
+      ONLYLAPS_SESSION_LINK_CHANGED_EVENT,
+      handleLinkChanged,
+    );
+    return () => {
+      window.removeEventListener(
+        ONLYLAPS_SESSION_LINK_CHANGED_EVENT,
+        handleLinkChanged,
+      );
+    };
+  }, [onlyfastSessionId]);
+
+  useEffect(() => {
+    const requestVersion = ++telemetryStatusRequestRef.current;
+    if (!onlyLapsTelemetryEnabled) return;
+    if (!onlyfastSessionId) {
+      setTelemetryStatus({ state: 'none', displayName: null });
+      return;
+    }
+
+    setTelemetryStatus({ state: 'loading', displayName: null });
+    const loadStatus = async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData.session?.access_token;
+        if (!accessToken) throw new Error('Missing session');
+        const { data, error } = await supabase.functions.invoke(
+          'get-onlylaps-setup-context',
+          {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            body: {
+              onlyfast_session_id: onlyfastSessionId,
+              status_only: true,
+            },
+          },
+        );
+        if (
+          telemetryStatusRequestRef.current !== requestVersion
+        ) {
+          return;
+        }
+        if (error) throw error;
+        if (data?.linked === true) {
+          setTelemetryStatus({
+            state: 'included',
+            displayName:
+              typeof data.display_name === 'string'
+                ? data.display_name
+                : 'Timing Session',
+          });
+        } else {
+          setTelemetryStatus({ state: 'none', displayName: null });
+        }
+      } catch {
+        if (telemetryStatusRequestRef.current === requestVersion) {
+          setTelemetryStatus({
+            state: 'unavailable',
+            displayName: null,
+          });
+        }
+      }
+    };
+    void loadStatus();
+
+    return () => {
+      if (telemetryStatusRequestRef.current === requestVersion) {
+        telemetryStatusRequestRef.current += 1;
+      }
+    };
+  }, [
+    onlyLapsTelemetryEnabled,
+    onlyfastSessionId,
+    telemetryStatusRefresh,
+  ]);
+
+  const activeTelemetrySessionId =
+    onlyLapsTelemetryEnabled && onlyfastSessionId
+      ? onlyfastSessionId
+      : undefined;
 
   // ------------------------------------------------------------------
   // SETUP-ASSIST USAGE LIMIT (centralized via checkSetupAssistPermission)
@@ -174,7 +282,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
         'Quick version:',
         '1. Open https://supabase.com/dashboard/project/thpyjvwtfvfxiufchrxn/functions',
         '2. Deploy a new function named exactly "get-suggestions" (Verify JWT: ON)',
-        '3. Paste the code from DEPLOY_AI_FUNCTION.md (or docs/edge-functions/get-suggestions.ts)',
+        '3. Deploy the repository function folder so its required _shared modules are bundled; do not paste index.ts by itself',
         '4. Project Settings > Edge Functions > Secrets > add OPENAI_API_KEY and SUPABASE_SERVICE_ROLE_KEY',
         '',
         'Note: GPS / weather autofill no longer needs an edge function — it now calls Open-Meteo directly from the browser.'
@@ -213,6 +321,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
           currentSetup: setupData,
           raceClass,
           race_weekend_key: gate.key,
+          onlyfast_session_id: activeTelemetrySessionId,
         }
       });
       if (data?.suggestion) {
@@ -266,6 +375,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
           raceClass,
           whatIfQuestion: whatIfQuestion.trim(),
           race_weekend_key: gate.key,
+          onlyfast_session_id: activeTelemetrySessionId,
         }
       });
       if (data?.suggestion) {
@@ -318,6 +428,33 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
           OnlyFast Setup Assist
         </h3>
       </div>
+
+      {onlyLapsTelemetryEnabled && (
+        <div
+          className="text-[11px] text-[#6B7280] -mt-2 mb-3"
+          role="status"
+          aria-live="polite"
+        >
+          {telemetryStatus.state === 'included' ? (
+            <>
+              <span className="font-semibold text-[#00A8E8]">
+                OnlyLaps telemetry included
+              </span>
+              {telemetryStatus.displayName && (
+                <span className="block truncate">
+                  {telemetryStatus.displayName}
+                </span>
+              )}
+            </>
+          ) : telemetryStatus.state === 'loading' ? (
+            'Checking OnlyLaps telemetry…'
+          ) : telemetryStatus.state === 'unavailable' ? (
+            'OnlyLaps telemetry unavailable'
+          ) : (
+            'No OnlyLaps telemetry linked'
+          )}
+        </div>
+      )}
 
       {/* Completion Advisory */}
       <div

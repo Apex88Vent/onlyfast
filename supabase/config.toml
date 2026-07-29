@@ -418,3 +418,6 @@ verify_jwt = true
 
 [functions.manage-onlylaps-session-link]
 verify_jwt = true
+
+[functions.get-suggestions]
+verify_jwt = true

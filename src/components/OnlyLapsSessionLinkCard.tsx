@@ -19,6 +19,7 @@ import {
   type OnlyLapsSessionPickerResult,
   unlinkOnlyLapsSession,
 } from '@/lib/onlylapsSessionLink';
+import { notifyOnlyLapsSessionLinkChanged } from '@/lib/onlylapsSessionScope';
 
 interface OnlyLapsSessionLinkCardProps {
   onlyfastSessionId: string;
@@ -207,6 +208,7 @@ const OnlyLapsSessionLinkCard: React.FC<
         source,
       );
       if (activeSessionIdRef.current !== requestedSessionId) return;
+      notifyOnlyLapsSessionLinkChanged(requestedSessionId);
       setPickerOpen(false);
       await load('suggested');
     } catch (linkError) {
@@ -234,6 +236,7 @@ const OnlyLapsSessionLinkCard: React.FC<
     try {
       await unlinkOnlyLapsSession(requestedSessionId);
       if (activeSessionIdRef.current !== requestedSessionId) return;
+      notifyOnlyLapsSessionLinkChanged(requestedSessionId);
       await load('suggested');
     } catch (unlinkError) {
       if (activeSessionIdRef.current !== requestedSessionId) return;

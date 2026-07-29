@@ -2909,6 +2909,8 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
                 raceClass={currentSetup.raceClass}
                 user={user}
                 raceWeekendKey={savedMeta.name || undefined}
+                onlyfastSessionId={selectedSessionId}
+                onlyLapsTelemetryEnabled={onlyLapsLinkingEnabled}
               />
 
 

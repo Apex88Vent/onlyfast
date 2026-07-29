@@ -30,6 +30,7 @@ export interface OnlyLapsTimingSessionRow {
   user_id: string;
   track_map_id: string | null;
   name: string;
+  session_name?: string | null;
   vehicle_name: string | null;
   session_type: string;
   started_at: string | null;
@@ -192,6 +193,7 @@ export type OnlyLapsSetupContext =
       };
       session: {
         onlylaps_session_id: string;
+        display_name: string;
         track_map_id: string | null;
         track_name: string | null;
         track_type: string | null;
@@ -926,6 +928,11 @@ export async function getOnlyLapsSetupContext({
     },
     session: {
       onlylaps_session_id: onlylapsSession.id,
+      display_name:
+        nonemptyString(onlylapsSession.session_name) ??
+        (onlylapsSession.started_at
+          ? `Session — ${onlylapsSession.started_at.slice(11, 16)}`
+          : 'Timing Session'),
       track_map_id: onlylapsSession.track_map_id,
       track_name: trackName,
       track_type: nonemptyString(track?.track_type),

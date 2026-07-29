@@ -43,6 +43,7 @@ const onlylapsSession: OnlyLapsTimingSessionRow = {
   user_id: userA,
   track_map_id: trackMapId,
   name: 'Fallback Session Name',
+  session_name: 'Heat Race',
   vehicle_name: 'Dwarf Car 88',
   session_type: 'race',
   started_at: '2026-07-28T18:00:00.000Z',
@@ -327,6 +328,7 @@ test('fully populated link returns compact lap, sector, corner, and analysis con
 
   assert.deepEqual(context.session, {
     onlylaps_session_id: onlylapsSessionId,
+    display_name: 'Heat Race',
     track_map_id: trackMapId,
     track_name: 'Barona Speedway',
     track_type: 'dirt_oval',
@@ -632,12 +634,23 @@ test('edge reader verifies JWT ownership and never queries raw telemetry samples
     ),
     'utf8',
   );
+  const store = readFileSync(
+    new URL(
+      '../supabase/functions/_shared/onlylaps-setup-context-store.ts',
+      import.meta.url,
+    ),
+    'utf8',
+  );
   assert.match(edgeFunction, /authClient\.auth\.getUser\(token\)/);
+  assert.match(
+    edgeFunction,
+    /hasBetaFeatureForUser\([\s\S]*test_account_full_access[\s\S]*experimental/,
+  );
   assert.ok(
-    (edgeFunction.match(/\.eq\('user_id', userId\)/g) ?? []).length >= 6,
+    (store.match(/\.eq\('user_id', userId\)/g) ?? []).length >= 6,
   );
   assert.doesNotMatch(
-    edgeFunction,
+    `${edgeFunction}\n${store}`,
     /\.from\('onlylaps_telemetry_samples'\)/,
   );
   assert.doesNotMatch(edgeFunction, /OPENAI_API_KEY|api\.openai\.com/);
