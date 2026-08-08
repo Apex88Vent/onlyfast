@@ -56,6 +56,20 @@ const actionCards: {
   { action: 'library', label: 'Setup Library', icon: Library },
 ];
 
+const classIconWhitePaths: Record<string, string> = {
+  'Dwarf Cars': '/onlyfast-class-icons/dwarf/dwarf-white.png',
+  'Late Model': '/onlyfast-class-icons/dirt-late-model/dirt-late-model-white.png',
+  'Lightning Sprints': '/onlyfast-class-icons/lightning-sprint/lightning-sprint-white.png',
+  'Midgets': '/onlyfast-class-icons/midget/midget-white.png',
+  'Modified': '/onlyfast-class-icons/modified/modified-white.png',
+  'Non-Wing Sprint Cars': '/onlyfast-class-icons/non-wing-sprint/non-wing-sprint-white.png',
+  'Pro Stock': '/onlyfast-class-icons/pure-stock/pure-stock-white.png',
+  'Pure Stock': '/onlyfast-class-icons/pure-stock/pure-stock-white.png',
+  'Sport Compact': '/onlyfast-class-icons/sport-compact/sport-compact-white.png',
+  'Sport Mod': '/onlyfast-class-icons/modified/modified-white.png',
+  'Winged Sprint Cars': '/onlyfast-class-icons/winged-sprint/winged-sprint-white.png',
+};
+
 const formatDate = (date?: string) => {
   if (!date) return '';
   const parsed = new Date(`${date}T00:00:00`);
@@ -211,6 +225,7 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
   const displayedWeekendTitle = currentWeekendTitle || 'Current Race Weekend';
   const topInfoCount = (selectedCar ? 1 : 0) + (showNextEvent ? 1 : 0);
   const formattedCarNumber = formatCarNumber(carNumber);
+  const selectedCarIcon = classIconWhitePaths[selectedCar];
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -245,14 +260,16 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
                 className="flex items-center justify-center gap-2 sm:gap-3 px-1 sm:px-2 rounded-lg hover:bg-[#F9FAFB] focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
                 aria-label={`Change current class from ${selectedCar}`}
               >
-                <span className="text-[#00A8E8]" aria-hidden="true">
-                  <svg className="h-6 w-6 sm:h-8 sm:w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M6 17h12l1.5-5.5A2 2 0 0 0 17.6 9H6.4a2 2 0 0 0-1.9 2.5L6 17Z" />
-                    <circle cx="7.5" cy="17.5" r="1.5" />
-                    <circle cx="16.5" cy="17.5" r="1.5" />
-                    <path d="M8 9V6h8v3" />
-                  </svg>
-                </span>
+                {selectedCarIcon && (
+                  <img
+                    src={selectedCarIcon}
+                    alt=""
+                    width={32}
+                    height={32}
+                    className="h-6 w-6 sm:h-8 sm:w-8 object-contain flex-shrink-0"
+                    aria-hidden="true"
+                  />
+                )}
                 <div className="text-left min-w-0">
                   <div className="text-[#00A8E8] text-[12px] sm:text-sm font-semibold tracking-[0.08em] uppercase leading-tight">Current Car</div>
                   <div className="text-[#1A1B23] text-sm sm:text-lg font-medium truncate">{selectedCar}</div>

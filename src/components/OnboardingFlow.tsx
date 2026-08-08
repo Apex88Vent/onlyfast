@@ -16,99 +16,51 @@ const ENABLED_CLASSES = AVAILABLE_CAR_CLASSES;
 
 
 
-const carIcons: Record<string, React.ReactNode> = {
-  'Dwarf Cars': (
-    <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
-      <rect x="6" y="16" width="28" height="10" rx="3" stroke="#00A8E8" strokeWidth="2" />
-      <rect x="10" y="12" width="16" height="8" rx="2" stroke="#00A8E8" strokeWidth="2" />
-      <circle cx="12" cy="28" r="3" stroke="#00A8E8" strokeWidth="2" />
-      <circle cx="28" cy="28" r="3" stroke="#00A8E8" strokeWidth="2" />
-    </svg>
-  ),
-  'Late Model': (
-    <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
-      <rect x="4" y="17" width="32" height="9" rx="2" stroke="#00A8E8" strokeWidth="2" />
-      <path d="M10 17V12C10 11 11 10 12 10H28C29 10 30 11 30 12V17" stroke="#00A8E8" strokeWidth="2" />
-      <circle cx="11" cy="28" r="3.5" stroke="#00A8E8" strokeWidth="2" />
-      <circle cx="29" cy="28" r="3.5" stroke="#00A8E8" strokeWidth="2" />
-      <path d="M30 14H36L34 17" stroke="#00A8E8" strokeWidth="1.5" opacity="0.6" />
-    </svg>
-  ),
-  'Lightning Sprints': (
-    <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
-      <rect x="8" y="18" width="24" height="8" rx="2" stroke="#00A8E8" strokeWidth="2" />
-      <path d="M14 18V12L26 12V18" stroke="#00A8E8" strokeWidth="2" />
-      <path d="M20 8V12" stroke="#00A8E8" strokeWidth="2" />
-      <path d="M16 6H24" stroke="#00A8E8" strokeWidth="2" strokeLinecap="round" />
-      <circle cx="12" cy="28" r="3" stroke="#00A8E8" strokeWidth="2" />
-      <circle cx="28" cy="28" r="3" stroke="#00A8E8" strokeWidth="2" />
-    </svg>
-  ),
-  'Midgets': (
-    <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
-      <rect x="9" y="18" width="22" height="7" rx="2" stroke="#00A8E8" strokeWidth="2" />
-      <path d="M14 18V14L26 14V18" stroke="#00A8E8" strokeWidth="2" />
-      <circle cx="13" cy="27" r="3" stroke="#00A8E8" strokeWidth="2" />
-      <circle cx="27" cy="27" r="3" stroke="#00A8E8" strokeWidth="2" />
-      <path d="M7 22H9" stroke="#00A8E8" strokeWidth="2" strokeLinecap="round" />
-      <path d="M31 22H33" stroke="#00A8E8" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  ),
-  'Modified': (
-    <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
-      <rect x="5" y="17" width="30" height="9" rx="2" stroke="#00A8E8" strokeWidth="2" />
-      <path d="M12 17V13L28 13V17" stroke="#00A8E8" strokeWidth="2" />
-      <circle cx="11" cy="28" r="3" stroke="#00A8E8" strokeWidth="2" />
-      <circle cx="29" cy="28" r="3" stroke="#00A8E8" strokeWidth="2" />
-      <line x1="5" y1="17" x2="3" y2="20" stroke="#00A8E8" strokeWidth="1.5" opacity="0.5" />
-      <line x1="35" y1="17" x2="37" y2="20" stroke="#00A8E8" strokeWidth="1.5" opacity="0.5" />
-    </svg>
-  ),
-  'Non-Wing Sprint Cars': (
-    <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
-      <rect x="8" y="18" width="24" height="8" rx="2" stroke="#00A8E8" strokeWidth="2" />
-      <path d="M14 18V13L26 13V18" stroke="#00A8E8" strokeWidth="2" />
-      <circle cx="12" cy="28" r="3" stroke="#00A8E8" strokeWidth="2" />
-      <circle cx="28" cy="28" r="3" stroke="#00A8E8" strokeWidth="2" />
-      <path d="M6 22H8" stroke="#00A8E8" strokeWidth="2" strokeLinecap="round" />
-      <path d="M32 22H34" stroke="#00A8E8" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  ),
-  'Pro Stock': (
-    <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
-      <rect x="4" y="17" width="32" height="9" rx="2" stroke="#00A8E8" strokeWidth="2" />
-      <path d="M9 17V13C9 12 10 11 11 11H29C30 11 31 12 31 13V17" stroke="#00A8E8" strokeWidth="2" />
-      <circle cx="11" cy="28" r="3" stroke="#00A8E8" strokeWidth="2" />
-      <circle cx="29" cy="28" r="3" stroke="#00A8E8" strokeWidth="2" />
-      <line x1="15" y1="13" x2="15" y2="17" stroke="#00A8E8" strokeWidth="1" opacity="0.4" />
-      <line x1="25" y1="13" x2="25" y2="17" stroke="#00A8E8" strokeWidth="1" opacity="0.4" />
-    </svg>
-  ),
-  'Pure Stock': (
-    <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
-      <rect x="5" y="17" width="30" height="9" rx="2" stroke="#00A8E8" strokeWidth="2" />
-      <path d="M10 17V14C10 13 11 12 12 12H28C29 12 30 13 30 14V17" stroke="#00A8E8" strokeWidth="2" />
-      <circle cx="12" cy="28" r="3" stroke="#00A8E8" strokeWidth="2" />
-      <circle cx="28" cy="28" r="3" stroke="#00A8E8" strokeWidth="2" />
-    </svg>
-  ),
-  'Sport Compact': (
-    <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
-      <rect x="7" y="18" width="26" height="8" rx="2" stroke="#00A8E8" strokeWidth="2" />
-      <path d="M12 18V14C12 13 13 12 14 12H26C27 12 28 13 28 14V18" stroke="#00A8E8" strokeWidth="2" />
-      <circle cx="13" cy="28" r="2.5" stroke="#00A8E8" strokeWidth="2" />
-      <circle cx="27" cy="28" r="2.5" stroke="#00A8E8" strokeWidth="2" />
-    </svg>
-  ),
-  'Sport Mod': (
-    <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
-      <rect x="5" y="17" width="30" height="9" rx="2" stroke="#00A8E8" strokeWidth="2" />
-      <path d="M11 17V13L29 13V17" stroke="#00A8E8" strokeWidth="2" />
-      <circle cx="11" cy="28" r="3" stroke="#00A8E8" strokeWidth="2" />
-      <circle cx="29" cy="28" r="3" stroke="#00A8E8" strokeWidth="2" />
-      <line x1="5" y1="18" x2="3" y2="21" stroke="#00A8E8" strokeWidth="1.5" opacity="0.4" />
-    </svg>
-  ),
+const carIcons: Record<string, { blue: string; white: string }> = {
+  'Dwarf Cars': {
+    blue: '/onlyfast-class-icons/dwarf/dwarf-blue.png',
+    white: '/onlyfast-class-icons/dwarf/dwarf-white.png',
+  },
+  'Late Model': {
+    blue: '/onlyfast-class-icons/dirt-late-model/dirt-late-model-blue.png',
+    white: '/onlyfast-class-icons/dirt-late-model/dirt-late-model-white.png',
+  },
+  'Lightning Sprints': {
+    blue: '/onlyfast-class-icons/lightning-sprint/lightning-sprint-blue.png',
+    white: '/onlyfast-class-icons/lightning-sprint/lightning-sprint-white.png',
+  },
+  'Midgets': {
+    blue: '/onlyfast-class-icons/midget/midget-blue.png',
+    white: '/onlyfast-class-icons/midget/midget-white.png',
+  },
+  'Modified': {
+    blue: '/onlyfast-class-icons/modified/modified-blue.png',
+    white: '/onlyfast-class-icons/modified/modified-white.png',
+  },
+  'Non-Wing Sprint Cars': {
+    blue: '/onlyfast-class-icons/non-wing-sprint/non-wing-sprint-blue.png',
+    white: '/onlyfast-class-icons/non-wing-sprint/non-wing-sprint-white.png',
+  },
+  'Pro Stock': {
+    blue: '/onlyfast-class-icons/pure-stock/pure-stock-blue.png',
+    white: '/onlyfast-class-icons/pure-stock/pure-stock-white.png',
+  },
+  'Pure Stock': {
+    blue: '/onlyfast-class-icons/pure-stock/pure-stock-blue.png',
+    white: '/onlyfast-class-icons/pure-stock/pure-stock-white.png',
+  },
+  'Sport Compact': {
+    blue: '/onlyfast-class-icons/sport-compact/sport-compact-blue.png',
+    white: '/onlyfast-class-icons/sport-compact/sport-compact-white.png',
+  },
+  'Sport Mod': {
+    blue: '/onlyfast-class-icons/modified/modified-blue.png',
+    white: '/onlyfast-class-icons/modified/modified-white.png',
+  },
+  'Winged Sprint Cars': {
+    blue: '/onlyfast-class-icons/winged-sprint/winged-sprint-blue.png',
+    white: '/onlyfast-class-icons/winged-sprint/winged-sprint-white.png',
+  },
 };
 
 // Discipline definitions
@@ -351,8 +303,14 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
                       className="bg-white rounded-2xl border-2 border-[#E5E7EB] hover:border-[#00A8E8] p-6 transition-all group shadow-sm hover:shadow-lg hover:shadow-[#00A8E8]/10 text-left focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
                       aria-label={`${className} - ${config?.description || ''}`}
                     >
-                      <div className="w-16 h-16 bg-[#00A8E8]/10 rounded-xl flex items-center justify-center mb-4 group-hover:bg-[#00A8E8]/20 transition-colors" aria-hidden="true">
-                        {carIcons[className] || carIcons['Dwarf Cars']}
+                      <div className="w-16 h-16 bg-[#00A8E8]/10 rounded-xl overflow-hidden flex items-center justify-center mb-4 group-hover:bg-[#00A8E8]/20 transition-colors" aria-hidden="true">
+                        <img
+                          src={(carIcons[className] || carIcons['Dwarf Cars']).blue}
+                          alt=""
+                          width={40}
+                          height={40}
+                          className="h-10 w-10 rounded-xl object-contain"
+                        />
                       </div>
                       <h3 className="text-lg font-bold text-[#1A1B23] group-hover:text-[#00A8E8] transition-colors">
                         {className}
@@ -382,7 +340,13 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
                       </div>
                     </div>
                     <div className="w-16 h-16 bg-gray-200 rounded-xl flex items-center justify-center mb-4 text-gray-400" aria-hidden="true">
-                      {carIcons[className] || carIcons['Dwarf Cars']}
+                      <img
+                        src={(carIcons[className] || carIcons['Dwarf Cars']).white}
+                        alt=""
+                        width={40}
+                        height={40}
+                        className="h-10 w-10 object-contain"
+                      />
                     </div>
                     <h3 className="text-lg font-bold text-gray-400">
                       {className}
