@@ -6,6 +6,7 @@ import {
   recordSafeBackRoute,
   safeBack,
 } from '@/lib/safeBack';
+import { isOnlyFastFilePickerOpen } from '@/lib/filePickerState';
 
 const SafeBackHandler: React.FC = () => {
   const location = useLocation();
@@ -26,6 +27,10 @@ const SafeBackHandler: React.FC = () => {
     };
 
     const handlePopState = () => {
+      if (isOnlyFastFilePickerOpen()) {
+        armSafeBackGuard();
+        return;
+      }
       window.setTimeout(() => {
         armSafeBackGuard();
         safeBack(navigate);
@@ -34,6 +39,7 @@ const SafeBackHandler: React.FC = () => {
 
     const handleNativeBack = (event: Event) => {
       event.preventDefault();
+      if (isOnlyFastFilePickerOpen()) return;
       safeBack(navigate);
     };
 

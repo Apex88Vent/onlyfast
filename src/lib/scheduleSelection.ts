@@ -106,6 +106,20 @@ export const getScheduleRaceKey = (race?: ScheduleRaceEntry | null): string => {
     .join('|');
 };
 
+export const raceIdentityMatchesScheduleRace = (
+  raceDate: string | null | undefined,
+  trackName: string | null | undefined,
+  race: ScheduleRaceEntry,
+): boolean => {
+  const scheduledTrack = String(race.track || '').trim().toLowerCase();
+  return Boolean(
+    raceDate &&
+    scheduledTrack &&
+    raceDate === race.race_date &&
+    String(trackName || '').trim().toLowerCase() === scheduledTrack,
+  );
+};
+
 export const getRaceFinalScheduledDate = (race: ScheduleRaceEntry): Date | null => {
   const start = parseLocalRaceDate(race.race_date);
   const end = parseLocalRaceDate(race.race_end_date);

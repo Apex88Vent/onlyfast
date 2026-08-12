@@ -116,7 +116,13 @@ const mergeRepeatedRow = (
 ): TimingRecord => {
   const preferred = completenessScore(second) > completenessScore(first) ? second : first;
   const fallback = preferred === first ? second : first;
-  return { ...fallback, ...preferred, session_id: sessionId };
+  const merged = { ...fallback };
+  Object.entries(preferred).forEach(([key, value]) => {
+    if (value !== null && value !== undefined && String(value).trim() !== '') {
+      merged[key] = value;
+    }
+  });
+  return { ...merged, session_id: sessionId };
 };
 
 export const mergeTimingRows = (

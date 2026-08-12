@@ -74,7 +74,7 @@ test('three overlapping screenshots merge laps 1 through 25 exactly once', () =>
 test('duplicate rows keep the more complete OCR result and equal lap times alone are not deduplicated', () => {
   const rows = mergeTimingRows([
     { lap: 8, time: '14,500', car_number: '88' },
-    { lap: 8, time: '14.500', car_number: '88', position: 2, driver_name: 'Alex' },
+    { lap: 8, time: '14.500', car_number: null, position: 2, driver_name: 'Alex' },
     { lap: 9, time: '14.500', car_number: '88', position: 2, driver_name: 'Alex' },
   ], 'session-heat');
 
@@ -82,5 +82,6 @@ test('duplicate rows keep the more complete OCR result and equal lap times alone
   assert.equal(rows[0].lap, 8);
   assert.equal(rows[0].position, 2);
   assert.equal(rows[0].driver_name, 'Alex');
+  assert.equal(rows[0].car_number, '88');
   assert.equal(rows[1].lap, 9);
 });

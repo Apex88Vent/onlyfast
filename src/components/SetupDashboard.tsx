@@ -27,10 +27,12 @@ import {
   getRaceRolloverSelection,
   getScheduleRaceKey,
   getUpcomingScheduleEntries,
+  raceIdentityMatchesScheduleRace,
   sortScheduleEntriesByDate,
   type ScheduleRaceEntry,
 } from '@/lib/scheduleSelection';
 import { SAFE_BACK_DASHBOARD_EVENT, consumePendingSafeBackDashboardView } from '@/lib/safeBack';
+import { isOnlyFastFilePickerOpen } from '@/lib/filePickerState';
 import { useBetaFeatures } from '@/hooks/useBetaFeatures';
 import { BETA_FEATURES } from '@/lib/betaFeatures';
 
@@ -106,38 +108,8 @@ const TAB_LABELS: Record<SetupType, { full: string; short: string }> = {
 const ALL_SLOTS: SetupType[] = [...RACE_SESSION_TYPES];
 const DEFAULT_SESSION_SLOTS: SetupType[] = [...DEFAULT_RACE_SESSION_TYPES];
 const MAX_SESSIONS = 6;
-const FILE_PICKER_ACTIVE_KEY = 'onlyfast_file_picker_active';
-const FILE_PICKER_STARTED_AT_KEY = 'onlyfast_file_picker_started_at';
-const FILE_PICKER_ACTIVE_MS = 2 * 60 * 1000;
-
 const devLog = (...args: unknown[]) => {
   if (import.meta.env.DEV) console.log(...args);
-};
-
-const isOnlyFastFilePickerOpen = (): boolean => {
-  try {
-    const globalActive = Boolean((window as any).__onlyfastFilePickerOpen);
-    const storedActive = localStorage.getItem(FILE_PICKER_ACTIVE_KEY) === 'true';
-    const startedAtRaw =
-      localStorage.getItem(FILE_PICKER_STARTED_AT_KEY) ||
-      String((window as any).__onlyfastFilePickerStartedAt || '');
-    const startedAt = Number(startedAtRaw);
-
-    if (!globalActive && !storedActive) return false;
-    if (!Number.isFinite(startedAt) || Date.now() - startedAt >= FILE_PICKER_ACTIVE_MS) {
-      try {
-        localStorage.removeItem(FILE_PICKER_ACTIVE_KEY);
-        localStorage.removeItem(FILE_PICKER_STARTED_AT_KEY);
-        (window as any).__onlyfastFilePickerOpen = false;
-        (window as any).__onlyfastFilePickerStartedAt = null;
-      } catch {/* ignore */}
-      return false;
-    }
-
-    return true;
-  } catch {
-    return false;
-  }
 };
 
 // Default session_order for the built-in slots (Hot Laps=1, Heat=2, Main=3).
@@ -2192,14 +2164,19 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
           .select('*')
           .eq('user_id', user.id)
           .eq('race_date', centerRaceDate)
-          .eq('track_name', centerRaceTrack)
           .order('session_order', { ascending: true })
           .order('created_at', { ascending: true });
         if (error) throw error;
         if (!cancelled) {
           setQueriedWeekendSessions({
             raceKey: centerRaceQueryKey,
-            rows: (data || []) as RaceWeekendSessionRow[],
+            rows: ((data || []) as RaceWeekendSessionRow[]).filter(row =>
+              raceIdentityMatchesScheduleRace(
+                String(row.race_date || ''),
+                String(row.track_name || ''),
+                { race_date: centerRaceDate, track: centerRaceTrack },
+              )
+            ),
           });
         }
       } catch {
@@ -2321,12 +2298,6 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     setActiveView('saved');
   };
 
-  const setupMatchesScheduleRace = (setup: SetupState | undefined, race: ScheduleRaceEntry) => {
-    const track = (race.track || '').trim().toLowerCase();
-    if (!setup || !track || !race.race_date) return false;
-    return setup.raceDate === race.race_date && setup.trackName.trim().toLowerCase() === track;
-  };
-
   const openScheduledRaceWeekend = async (race?: ScheduleRaceEntry | null) => {
     const track = (race?.track || '').trim();
     const raceDate = race?.race_date || '';
@@ -2335,7 +2306,9 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       return;
     }
 
-    const currentMatch = ALL_SLOTS.find(t => isDisplayableSession(t) && setupMatchesScheduleRace(setups[t], race));
+    const currentMatch = ALL_SLOTS.find(t =>
+      isDisplayableSession(t) && raceIdentityMatchesScheduleRace(setups[t]?.raceDate, setups[t]?.trackName, race)
+    );
     if (currentMatch) {
       setActiveTab(currentMatch);
       setActiveView('setup');
@@ -2349,11 +2322,16 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
           .select('*')
           .eq('user_id', user.id)
           .eq('race_date', raceDate)
-          .eq('track_name', track)
           .order('updated_at', { ascending: false })
-          .order('created_at', { ascending: false })
-          .limit(20);
-        const resolvedSessions = resolveSavedRaceWeekendSessions((data || []) as RaceWeekendSessionRow[]);
+          .order('created_at', { ascending: false });
+        const matchingRows = ((data || []) as RaceWeekendSessionRow[]).filter(row =>
+          raceIdentityMatchesScheduleRace(
+            String(row.race_date || ''),
+            String(row.track_name || ''),
+            race,
+          )
+        );
+        const resolvedSessions = resolveSavedRaceWeekendSessions(matchingRows);
         const existing = resolvedSessions[0]?.row;
         if (existing) {
           await handleLoadSetup({

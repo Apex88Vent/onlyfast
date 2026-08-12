@@ -19,30 +19,10 @@ import { getActiveClassState, initializeActiveClass } from '@/lib/activeClass';
 import { resetTestAccountData } from '@/lib/testAccount';
 import { useBetaFeatures } from '@/hooks/useBetaFeatures';
 import { BETA_FEATURES } from '@/lib/betaFeatures';
+import { isOnlyFastFilePickerOpen } from '@/lib/filePickerState';
 
-const FILE_PICKER_ACTIVE_KEY = 'onlyfast_file_picker_active';
-const FILE_PICKER_STARTED_AT_KEY = 'onlyfast_file_picker_started_at';
-const FILE_PICKER_ACTIVE_MS = 2 * 60 * 1000;
 const devLog = (...args: unknown[]) => {
   if (import.meta.env.DEV) console.log(...args);
-};
-
-const isOnlyFastFilePickerOpen = (): boolean => {
-  try {
-    const globalActive = Boolean((window as any).__onlyfastFilePickerOpen);
-    const storedActive = localStorage.getItem(FILE_PICKER_ACTIVE_KEY) === 'true';
-    const startedAtRaw =
-      localStorage.getItem(FILE_PICKER_STARTED_AT_KEY) ||
-      String((window as any).__onlyfastFilePickerStartedAt || '');
-    const startedAt = Number(startedAtRaw);
-
-    if (!globalActive && !storedActive) return false;
-    if (!Number.isFinite(startedAt) || Date.now() - startedAt >= FILE_PICKER_ACTIVE_MS) return false;
-
-    return true;
-  } catch {
-    return false;
-  }
 };
 
 const AppLayout: React.FC = () => {

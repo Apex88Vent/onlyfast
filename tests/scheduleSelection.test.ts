@@ -6,6 +6,7 @@ import {
   getScheduleRaceKey,
   getRaceScheduleNavigation,
   getUpcomingScheduleEntries,
+  raceIdentityMatchesScheduleRace,
 } from '../src/lib/scheduleSelection.ts';
 
 const schedule = [
@@ -28,6 +29,17 @@ test('race navigation safely disables missing first and last neighbors', () => {
   assert.equal(first.next?.id, 'race-2');
   assert.equal(last.previous?.id, 'race-2');
   assert.equal(last.next, null);
+});
+
+test('saved race weekends match schedule entries despite track name case or surrounding spaces', () => {
+  assert.equal(
+    raceIdentityMatchesScheduleRace('2026-07-08', '  BRAVO RACEWAY ', schedule[1]),
+    true,
+  );
+  assert.equal(
+    raceIdentityMatchesScheduleRace('2026-07-08', 'Different Raceway', schedule[1]),
+    false,
+  );
 });
 
 test('race center advances on the second local calendar day after the prior race ends', () => {
