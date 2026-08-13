@@ -40,5 +40,5 @@ test('native back and history events are ignored only while the picker is active
     'utf8',
   );
   assert.match(source, /handlePopState[\s\S]*if \(isOnlyFastFilePickerOpen\(\)\)/);
-  assert.match(source, /handleNativeBack[\s\S]*if \(isOnlyFastFilePickerOpen\(\)\) return/);
+  assert.match(source, /handleNativeBack[\s\S]*const blocked = isOnlyFastFilePickerOpen\(\)[\s\S]*if \(blocked\) return/);
 });

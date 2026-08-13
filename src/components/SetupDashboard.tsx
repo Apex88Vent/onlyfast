@@ -33,6 +33,7 @@ import {
 } from '@/lib/scheduleSelection';
 import { SAFE_BACK_DASHBOARD_EVENT, consumePendingSafeBackDashboardView } from '@/lib/safeBack';
 import { isOnlyFastFilePickerOpen } from '@/lib/filePickerState';
+import { appendMedianPickerTrace, updateMedianPickerTraceContext } from '@/lib/medianPickerTrace';
 import { useBetaFeatures } from '@/hooks/useBetaFeatures';
 import { BETA_FEATURES } from '@/lib/betaFeatures';
 
@@ -201,17 +202,32 @@ const isDashboardView = (value: unknown): value is DashboardView =>
 const readSavedDashboardRoute = (): SavedDashboardRoute | null => {
   try {
     const raw = localStorage.getItem(LAST_ROUTE_STORAGE_KEY);
-    if (!raw) return null;
+    if (!raw) {
+      appendMedianPickerTrace('saved_route_read', { hasSavedRoute: false });
+      return null;
+    }
     const parsed = JSON.parse(raw);
-    if (!parsed || !isDashboardView(parsed.view) || typeof parsed.timestamp !== 'number') return null;
+    if (!parsed || !isDashboardView(parsed.view) || typeof parsed.timestamp !== 'number') {
+      appendMedianPickerTrace('saved_route_read', { hasSavedRoute: false, reason: 'invalid' });
+      return null;
+    }
     const activeTab = ALL_SLOTS.includes(parsed.activeTab as SetupType) ? (parsed.activeTab as SetupType) : undefined;
-    return {
+    const route = {
       view: parsed.view,
       activeTab,
       setupId: typeof parsed.setupId === 'string' ? parsed.setupId : undefined,
       timestamp: parsed.timestamp,
     };
+    appendMedianPickerTrace('saved_route_read', {
+      hasSavedRoute: true,
+      savedRouteView: route.view,
+      hasSetup: Boolean(route.setupId),
+      hasSession: Boolean(route.setupId),
+      activeSessionSlot: route.activeTab || '',
+    });
+    return route;
   } catch {
+    appendMedianPickerTrace('saved_route_read', { hasSavedRoute: false, reason: 'read_failed' });
     return null;
   }
 };
@@ -219,6 +235,12 @@ const readSavedDashboardRoute = (): SavedDashboardRoute | null => {
 const writeSavedDashboardRoute = (route: SavedDashboardRoute): void => {
   try {
     localStorage.setItem(LAST_ROUTE_STORAGE_KEY, JSON.stringify(route));
+    appendMedianPickerTrace('saved_route_written', {
+      savedRouteView: route.view,
+      hasSetup: Boolean(route.setupId),
+      hasSession: Boolean(route.setupId),
+      activeSessionSlot: route.activeTab || '',
+    });
   } catch {}
 };
 
@@ -371,6 +393,18 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   const lastActivityRef = useRef(Date.now());
   const previousSelectedCarRef = useRef(selectedCar);
 
+  useEffect(() => {
+    updateMedianPickerTraceContext({ setupDashboardMounted: true });
+    appendMedianPickerTrace('setup_dashboard_mount', { scrollY: window.scrollY });
+    return () => {
+      updateMedianPickerTraceContext({
+        setupDashboardMounted: false,
+        scanTimingMounted: false,
+      });
+      appendMedianPickerTrace('setup_dashboard_unmount', { scrollY: window.scrollY });
+    };
+  }, []);
+
   const prefix = useId();
   const currentSetup = setups[activeTab];
   const carNumber = readCarNumber(user, carNumberOverride);
@@ -405,9 +439,20 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   }, [activeView, activeTab, deletedSessionSlots, savedMeta.ids]);
 
   const saveCurrentRoute = useCallback(() => {
-    if (!stateLoaded || !resumeAttempted) return;
+    if (!stateLoaded || !resumeAttempted) {
+      appendMedianPickerTrace('saved_route_write_skipped', {
+        reason: 'dashboard_not_restored',
+        stateLoaded,
+        resumeAttempted,
+      });
+      return;
+    }
     if (isOnlyFastFilePickerOpen()) {
       devLog('route reset blocked', { source: 'saveCurrentRoute' });
+      appendMedianPickerTrace('saved_route_write_skipped', {
+        reason: 'picker_active',
+        blocked: true,
+      });
       return;
     }
     writeSavedDashboardRoute(buildCurrentRoute());
@@ -415,6 +460,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
 
   // Load persisted state on mount
   useEffect(() => {
+    appendMedianPickerTrace('setup_state_load_start');
     try {
       const raw = localStorage.getItem(STATE_STORAGE_KEY);
       if (raw) {
@@ -453,6 +499,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       }
     } catch {}
     setStateLoaded(true);
+    appendMedianPickerTrace('setup_state_load_finish', { success: true });
   }, []);
 
   // Persist state on any change (only after initial load)
@@ -649,16 +696,25 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
         return;
       }
       if (a === 'home' || a === 'setup' || a === 'saved' || a === 'compare' || a === 'create-base' || a === 'todo' || a === 'parts' || a === 'schedule') {
+        appendMedianPickerTrace('dashboard_view_requested', {
+          source: 'app_menu',
+          previousView: activeView,
+          destinationView: a,
+        });
         setActiveView(a);
       }
     };
     window.addEventListener('onlyfast-menu', handler);
     return () => window.removeEventListener('onlyfast-menu', handler);
-  }, []);
+  }, [activeView]);
 
   useEffect(() => {
     const applySafeBackView = (view: unknown) => {
       if (isDashboardView(view)) {
+        appendMedianPickerTrace('dashboard_view_requested', {
+          source: 'safe_back',
+          destinationView: view,
+        });
         setActiveView(view);
       }
     };
@@ -690,7 +746,14 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     };
 
     const sendHome = () => {
-      if (blockForFilePicker('sendHome')) return;
+      if (blockForFilePicker('sendHome')) {
+        appendMedianPickerTrace('dashboard_home_blocked', { source: 'idle_timeout', blocked: true });
+        return;
+      }
+      appendMedianPickerTrace('dashboard_view_requested', {
+        source: 'idle_timeout',
+        destinationView: 'home',
+      });
       setActiveView('home');
     };
 
@@ -751,8 +814,24 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
 
   // Broadcast view changes so Header's menu highlights the right item
   useEffect(() => {
+    updateMedianPickerTraceContext({
+      view: activeView,
+      stateLoaded,
+      resumeAttempted,
+      hasSetup: Boolean(savedMeta.name || Object.keys(savedMeta.ids).length),
+      hasSession: Boolean(savedMeta.ids[activeTab]),
+      activeSessionSlot: activeTab,
+    });
+    appendMedianPickerTrace('dashboard_view_changed', {
+      view: activeView,
+      stateLoaded,
+      resumeAttempted,
+      hasSetup: Boolean(savedMeta.name || Object.keys(savedMeta.ids).length),
+      hasSession: Boolean(savedMeta.ids[activeTab]),
+      activeSessionSlot: activeTab,
+    });
     window.dispatchEvent(new CustomEvent('onlyfast-view-changed', { detail: { view: activeView } }));
-  }, [activeView]);
+  }, [activeTab, activeView, resumeAttempted, savedMeta.ids, savedMeta.name, stateLoaded]);
 
   useEffect(() => {
     saveCurrentRoute();
@@ -1457,6 +1536,12 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
 
   // Load the whole "file" — all rows sharing the same setup_name
   const handleLoadSetup = async (setup: any) => {
+    appendMedianPickerTrace('setup_load_start', {
+      source: 'handleLoadSetup',
+      hasSetup: Boolean(setup?.id),
+      hasSession: Boolean(setup?.id),
+      activeSessionSlot: ALL_SLOTS.includes(setup?.setup_type as SetupType) ? setup.setup_type : '',
+    });
     if (
       classLocksEnabled &&
       String(setup?.race_class || '').trim().toLowerCase() !== selectedCar.trim().toLowerCase()
@@ -1553,6 +1638,14 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       .sort((a, b) => (newOrders[a] ?? DEFAULT_ORDER[a]) - (newOrders[b] ?? DEFAULT_ORDER[b]));
     setActiveTab(displayable.includes(clickedType) ? clickedType : (displayable[0] || clickedType));
     setActiveView('setup');
+    appendMedianPickerTrace('setup_load_finish', {
+      source: 'handleLoadSetup',
+      success: true,
+      destinationView: 'setup',
+      hasSetup: Object.keys(newIds).length > 0,
+      hasSession: Boolean(newIds[clickedType]),
+      activeSessionSlot: displayable.includes(clickedType) ? clickedType : (displayable[0] || clickedType),
+    });
   };
 
 
@@ -2004,22 +2097,38 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     if (!stateLoaded || resumeAttempted) return;
     let cancelled = false;
 
-    const finish = (view: DashboardView, tab?: SetupType) => {
+    appendMedianPickerTrace('saved_route_restoration_start', {
+      stateLoaded,
+      resumeAttempted,
+      hasSetup: Boolean(savedMeta.name || Object.keys(savedMeta.ids).length),
+      hasSession: Boolean(savedMeta.ids[activeTab]),
+      activeSessionSlot: activeTab,
+    });
+
+    const finish = (view: DashboardView, tab: SetupType | undefined, reason: string) => {
       if (cancelled) return;
       if (tab) setActiveTab(tab);
       setActiveView(view);
       setResumeAttempted(true);
+      appendMedianPickerTrace('saved_route_restoration_finish', {
+        destinationView: view,
+        activeSessionSlot: tab || activeTab,
+        hasSetup: Boolean(savedMeta.name || Object.keys(savedMeta.ids).length),
+        hasSession: Boolean(savedMeta.ids[tab || activeTab]),
+        reason,
+        success: true,
+      });
     };
 
     const restoreSavedRoute = async () => {
       const savedRoute = readSavedDashboardRoute();
       if (!savedRoute || Date.now() - savedRoute.timestamp >= IDLE_HOME_TIMEOUT_MS) {
-        finish('home');
+        finish('home', undefined, savedRoute ? 'saved_route_expired' : 'no_saved_route');
         return;
       }
 
       if (savedRoute.view !== 'setup') {
-        finish(savedRoute.view);
+        finish(savedRoute.view, undefined, 'restore_non_setup_view');
         return;
       }
 
@@ -2028,13 +2137,13 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
         : activeTab;
 
       if (deletedSessionSlots[targetTab]) {
-        finish('home');
+        finish('home', undefined, 'saved_session_deleted');
         return;
       }
 
       if (savedRoute.setupId) {
         if (!user) {
-          finish('home');
+          finish('home', undefined, 'saved_setup_requires_auth');
           return;
         }
 
@@ -2047,21 +2156,25 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
             .maybeSingle();
 
           if (!data) {
-            finish('home');
+            finish('home', undefined, 'saved_setup_not_found');
             return;
           }
 
           const dbTab = ALL_SLOTS.includes(data.setup_type as SetupType)
             ? (data.setup_type as SetupType)
             : targetTab;
-          finish('setup', dbTab);
+          finish('setup', dbTab, 'saved_setup_verified');
           return;
         } catch {
           const localFallbackIsValid =
             savedMeta.ids[targetTab] === savedRoute.setupId ||
             orderedSessions.includes(targetTab) ||
             tabHasData(setups[targetTab]);
-          finish(localFallbackIsValid ? 'setup' : 'home', localFallbackIsValid ? targetTab : undefined);
+          finish(
+            localFallbackIsValid ? 'setup' : 'home',
+            localFallbackIsValid ? targetTab : undefined,
+            localFallbackIsValid ? 'local_setup_fallback' : 'local_setup_invalid',
+          );
           return;
         }
       }
@@ -2071,7 +2184,11 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
         orderedSessions.includes(targetTab) ||
         tabHasData(setups[targetTab]);
 
-      finish(localSetupRouteIsValid ? 'setup' : 'home', localSetupRouteIsValid ? targetTab : undefined);
+      finish(
+        localSetupRouteIsValid ? 'setup' : 'home',
+        localSetupRouteIsValid ? targetTab : undefined,
+        localSetupRouteIsValid ? 'local_setup_route' : 'local_setup_route_invalid',
+      );
     };
 
     restoreSavedRoute();

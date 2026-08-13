@@ -1,4 +1,5 @@
 import type { NavigateFunction } from 'react-router-dom';
+import { appendMedianPickerTrace } from '@/lib/medianPickerTrace';
 
 export const SAFE_BACK_DASHBOARD_EVENT = 'onlyfast-safe-navigate';
 
@@ -39,13 +40,18 @@ const isHomeTarget = (target: SafeBackTarget) =>
   normalizePath(target.path) === HOME_PATH && (!target.dashboardView || target.dashboardView === HOME_VIEW);
 
 const dispatchDashboardView = (view: string) => {
+  appendMedianPickerTrace('safe_back_dashboard_dispatch', { destinationView: view });
   window.dispatchEvent(new CustomEvent(SAFE_BACK_DASHBOARD_EVENT, { detail: { view } }));
 };
 
 export const armSafeBackGuard = () => {
   try {
     const state = window.history.state || {};
-    if (state[GUARD_STATE_KEY]) return;
+    if (state[GUARD_STATE_KEY]) {
+      appendMedianPickerTrace('safe_back_guard_already_armed');
+      return;
+    }
+    appendMedianPickerTrace('safe_back_guard_arm');
     window.history.replaceState({ ...state, [GUARD_STATE_KEY]: false }, '', window.location.href);
     window.history.pushState({ ...state, [GUARD_STATE_KEY]: true }, '', window.location.href);
   } catch {
@@ -55,6 +61,7 @@ export const armSafeBackGuard = () => {
 
 export const recordSafeBackRoute = (path: string) => {
   currentPath = normalizePath(path);
+  appendMedianPickerTrace('safe_back_route_recorded', { destinationPathname: currentPath });
   const target: SafeBackTarget = currentPath === HOME_PATH
     ? { path: HOME_PATH, dashboardView: currentDashboardView }
     : { path: currentPath };
@@ -62,7 +69,12 @@ export const recordSafeBackRoute = (path: string) => {
 };
 
 export const recordSafeBackDashboardView = (view: string) => {
+  const previousView = currentDashboardView;
   currentDashboardView = view || HOME_VIEW;
+  appendMedianPickerTrace('safe_back_view_recorded', {
+    previousView,
+    destinationView: currentDashboardView,
+  });
   if (currentPath !== HOME_PATH) return;
   recordSafeBackTarget({ path: HOME_PATH, dashboardView: currentDashboardView });
 };
@@ -91,8 +103,13 @@ export const recordSafeBackTarget = (target: SafeBackTarget) => {
 
 export const safeBack = (navigate: NavigateFunction) => {
   const current = currentTarget();
+  appendMedianPickerTrace('safe_back_invoked', {
+    view: current.dashboardView || '',
+    destinationPathname: current.path,
+  });
 
   if (isHomeTarget(current)) {
+    appendMedianPickerTrace('safe_back_stayed_home');
     armSafeBackGuard();
     return;
   }
@@ -108,6 +125,10 @@ export const safeBack = (navigate: NavigateFunction) => {
 
   const target = previous || (!isHomeTarget(current) ? homeTarget() : null);
   if (!target) return;
+  appendMedianPickerTrace('safe_back_target_selected', {
+    destinationPathname: target.path,
+    destinationView: target.dashboardView || '',
+  });
 
   isApplyingSafeBack = true;
   currentPath = normalizePath(target.path);

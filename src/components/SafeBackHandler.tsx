@@ -7,6 +7,7 @@ import {
   safeBack,
 } from '@/lib/safeBack';
 import { isOnlyFastFilePickerOpen } from '@/lib/filePickerState';
+import { appendMedianPickerTrace } from '@/lib/medianPickerTrace';
 
 const SafeBackHandler: React.FC = () => {
   const location = useLocation();
@@ -22,11 +23,15 @@ const SafeBackHandler: React.FC = () => {
     const handleDashboardView = (event: Event) => {
       const view = (event as CustomEvent).detail?.view;
       if (typeof view === 'string') {
+        appendMedianPickerTrace('safe_back_dashboard_event_received', { destinationView: view });
         recordSafeBackDashboardView(view);
       }
     };
 
     const handlePopState = () => {
+      appendMedianPickerTrace('safe_back_popstate_received', {
+        blocked: isOnlyFastFilePickerOpen(),
+      });
       if (isOnlyFastFilePickerOpen()) {
         armSafeBackGuard();
         return;
@@ -39,7 +44,9 @@ const SafeBackHandler: React.FC = () => {
 
     const handleNativeBack = (event: Event) => {
       event.preventDefault();
-      if (isOnlyFastFilePickerOpen()) return;
+      const blocked = isOnlyFastFilePickerOpen();
+      appendMedianPickerTrace('safe_back_native_event_received', { blocked });
+      if (blocked) return;
       safeBack(navigate);
     };
 
