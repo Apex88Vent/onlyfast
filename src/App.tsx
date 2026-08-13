@@ -13,6 +13,7 @@ import Upgrade from "./pages/Upgrade";
 import SubscriptionSuccess from "./pages/SubscriptionSuccess";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import DeleteAccount from "./pages/DeleteAccount";
+import Support from "./pages/Support";
 import SafeBackHandler from "./components/SafeBackHandler";
 import BetaRoute from "./components/BetaRoute";
 import { BetaFeaturesProvider } from "./contexts/BetaFeaturesContext";
@@ -40,6 +41,7 @@ const App = () => (
               <Route path="/subscription/success" element={<SubscriptionSuccess />} />
               <Route path="/privacy-policy" element={<PrivacyPolicy />} />
               <Route path="/delete-account" element={<DeleteAccount />} />
+              <Route path="/support" element={<Support />} />
               <Route
                 path="/onboarding-preview"
                 element={
