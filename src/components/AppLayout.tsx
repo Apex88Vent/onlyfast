@@ -20,6 +20,7 @@ import { resetTestAccountData } from '@/lib/testAccount';
 import { useBetaFeatures } from '@/hooks/useBetaFeatures';
 import { BETA_FEATURES } from '@/lib/betaFeatures';
 import { isOnlyFastFilePickerOpen } from '@/lib/filePickerState';
+import { resolveAuthUiTransition } from '@/lib/authUiTransition';
 
 const devLog = (...args: unknown[]) => {
   if (import.meta.env.DEV) console.log(...args);
@@ -43,6 +44,7 @@ const AppLayout: React.FC = () => {
   const [showSplash, setShowSplash] = useState(() => !isOnlyFastFilePickerOpen());
   const [authChecked, setAuthChecked] = useState(false);
   const onboardingLoginEscapeRef = useRef(false);
+  const authUserIdRef = useRef<string | null>(null);
 
   const howOnlyFastWorksStorageKey = (userId?: string | null) =>
     userId ? `onlyfast_onboarding_completed_${userId}` : 'onlyfast_onboarding_completed_guest';
@@ -176,10 +178,22 @@ const AppLayout: React.FC = () => {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const isOnboardingLoginEscape = event === 'SIGNED_IN' && onboardingLoginEscapeRef.current;
+      const authTransition = resolveAuthUiTransition({
+        previousUserId: authUserIdRef.current,
+        nextUserId: session?.user?.id ?? null,
+        event,
+        onboardingLoginEscape: isOnboardingLoginEscape,
+      });
+
+      authUserIdRef.current = authTransition.nextUserId;
 
       setUser(session?.user ?? null);
       setAuthChecked(true);
-      setHasCheckedHowOnlyFastWorks(isOnboardingLoginEscape);
+      if (authTransition.shouldMarkOnboardingChecked) {
+        setHasCheckedHowOnlyFastWorks(true);
+      } else if (authTransition.shouldRecheckOnboarding) {
+        setHasCheckedHowOnlyFastWorks(false);
+      }
 
       if (!session?.user) {
         setSkipHowOnlyFastWorksAfterLogin(false);
@@ -207,10 +221,12 @@ const AppLayout: React.FC = () => {
 
     // Initial check
     supabase.auth.getSession().then(({ data: { session } }) => {
+      authUserIdRef.current = session?.user?.id ?? null;
       setUser(session?.user ?? null);
       setAuthChecked(true);
       setHasCheckedHowOnlyFastWorks(false);
     }).catch(() => {
+      authUserIdRef.current = null;
       setAuthChecked(true);
       setHasCheckedHowOnlyFastWorks(false);
     });
