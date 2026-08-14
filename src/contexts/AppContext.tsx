@@ -44,7 +44,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         source: 'AppContext',
         eventType: event,
       });
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+      // USER_UPDATED can be emitted by saveMembership itself. Re-running the
+      // subscription bridge for that event feeds its own metadata write back
+      // into the bridge even though the Stripe-backed row did not change.
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         sync();
       }
     });

@@ -9,6 +9,12 @@ interface ScanTimingState {
   pickerOpen: boolean;
   selectedFile: { name: string } | null;
   processingStarted: boolean;
+  processingStep: 'idle' | 'scanning';
+  currentSetupId: string;
+  currentSessionId: string;
+  scrollY: number;
+  authLoading: boolean;
+  savedCarLoads: number;
   remounts: number;
 }
 
@@ -31,6 +37,13 @@ const simulateAuthNotification = (
     state.remounts += 1;
   }
 
+  // AppLayout's saved-car bootstrap is keyed by the durable user ID. A fresh
+  // User object for the same ID must not re-enter its loading branch.
+  if (decision.identityChanged && nextUserId) {
+    state.authLoading = true;
+    state.savedCarLoads += 1;
+  }
+
   return decision;
 };
 
@@ -49,6 +62,12 @@ test('Median picker resume keeps Scan Timing mounted through same-user auth even
     pickerOpen: true,
     selectedFile: null,
     processingStarted: false,
+    processingStep: 'idle',
+    currentSetupId: 'setup-42',
+    currentSessionId: 'heat-7',
+    scrollY: 384,
+    authLoading: false,
+    savedCarLoads: 0,
     remounts: 0,
   };
 
@@ -60,15 +79,24 @@ test('Median picker resume keeps Scan Timing mounted through same-user auth even
 
   state.selectedFile = selectedFile;
   state.processingStarted = true;
+  state.processingStep = 'scanning';
 
-  for (const event of ['SIGNED_IN', 'TOKEN_REFRESHED', 'USER_UPDATED']) {
+  // Exact sequence captured on the physical Median Android device after the
+  // picker returned: one same-user SIGNED_IN followed by two USER_UPDATEDs.
+  for (const event of ['SIGNED_IN', 'USER_UPDATED', 'USER_UPDATED']) {
     const decision = simulateAuthNotification(state, 'driver-1', 'driver-1', event);
     assert.equal(decision.identityChanged, false, `${event} is not a login transition`);
     assert.equal(decision.shouldRecheckOnboarding, false, `${event} keeps the entry gate settled`);
     assert.equal(decision.preservesMountedApp, true, `${event} preserves the mounted app`);
     assert.equal(state.dashboardView, 'setup');
     assert.equal(state.scanTimingMounted, true);
+    assert.equal(state.authLoading, false, `${event} cannot re-enter initial auth loading`);
+    assert.equal(state.savedCarLoads, 0, `${event} cannot reload the saved car/class`);
     assert.equal(state.remounts, 0);
+    assert.equal(state.processingStep, 'scanning');
+    assert.equal(state.currentSetupId, 'setup-42');
+    assert.equal(state.currentSessionId, 'heat-7');
+    assert.equal(state.scrollY, 384);
     assert.strictEqual(state.selectedFile, selectedFile, 'the exact File object remains attached');
   }
 
@@ -84,6 +112,12 @@ test('picker cancellation preserves Scan Timing without starting processing', ()
     pickerOpen: true,
     selectedFile: null,
     processingStarted: false,
+    processingStep: 'idle',
+    currentSetupId: 'setup-42',
+    currentSessionId: 'heat-7',
+    scrollY: 0,
+    authLoading: false,
+    savedCarLoads: 0,
     remounts: 0,
   };
 
@@ -106,6 +140,12 @@ test('normal web file selection keeps its existing direct processing flow', () =
     pickerOpen: true,
     selectedFile,
     processingStarted: true,
+    processingStep: 'scanning',
+    currentSetupId: 'setup-42',
+    currentSessionId: 'heat-7',
+    scrollY: 128,
+    authLoading: false,
+    savedCarLoads: 0,
     remounts: 0,
   };
 
@@ -116,11 +156,41 @@ test('normal web file selection keeps its existing direct processing flow', () =
   assert.equal(state.processingStarted, true);
 });
 
+test('TOKEN_REFRESHED for the same user keeps active Scan Timing processing in place', () => {
+  const selectedFile = { name: 'median-token-refresh.jpg' };
+  const state: ScanTimingState = {
+    dashboardView: 'setup',
+    scanTimingMounted: true,
+    pickerOpen: false,
+    selectedFile,
+    processingStarted: true,
+    processingStep: 'scanning',
+    currentSetupId: 'setup-42',
+    currentSessionId: 'main-9',
+    scrollY: 256,
+    authLoading: false,
+    savedCarLoads: 0,
+    remounts: 0,
+  };
+
+  const decision = simulateAuthNotification(state, 'driver-1', 'driver-1', 'TOKEN_REFRESHED');
+
+  assert.equal(decision.identityChanged, false);
+  assert.equal(decision.preservesMountedApp, true);
+  assert.equal(state.scanTimingMounted, true);
+  assert.equal(state.processingStep, 'scanning');
+  assert.equal(state.authLoading, false);
+  assert.equal(state.savedCarLoads, 0);
+  assert.equal(state.remounts, 0);
+  assert.strictEqual(state.selectedFile, selectedFile);
+});
+
 test('a real sign-in, sign-out, or account switch still rechecks the entry gate', () => {
   for (const [previousUserId, nextUserId, event] of [
     [null, 'driver-1', 'SIGNED_IN'],
     ['driver-1', null, 'SIGNED_OUT'],
     ['driver-1', 'driver-2', 'SIGNED_IN'],
+    ['driver-1', null, 'SESSION_INVALID'],
   ] as const) {
     const decision = resolveAuthUiTransition({
       previousUserId,
@@ -132,6 +202,56 @@ test('a real sign-in, sign-out, or account switch still rechecks the entry gate'
     assert.equal(decision.shouldRecheckOnboarding, true);
     assert.equal(decision.preservesMountedApp, false);
   }
+
+  const initialUnauthenticated = resolveAuthUiTransition({
+    previousUserId: null,
+    nextUserId: null,
+    event: 'INITIAL_SESSION',
+    onboardingLoginEscape: false,
+  });
+  assert.equal(initialUnauthenticated.identityChanged, false);
+  assert.equal(initialUnauthenticated.shouldRecheckOnboarding, false);
+});
+
+test('AppLayout saved-car loading is keyed by user ID, not Supabase User object identity', () => {
+  const source = readFileSync(
+    new URL('../src/components/AppLayout.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(source, /const authenticatedUserId = user\?\.id \?\? null/);
+  assert.match(source, /\.eq\('user_id', authenticatedUserId\)/);
+  assert.match(
+    source,
+    /\}, \[authChecked, authenticatedUserId, selectedCar, applySelectedCar\]\)/,
+  );
+  assert.doesNotMatch(
+    source,
+    /\}, \[authChecked, user, selectedCar, applySelectedCar\]\)/,
+  );
+});
+
+test('membership synchronization does not feed USER_UPDATED back into updateUser', () => {
+  const source = readFileSync(
+    new URL('../src/contexts/AppContext.tsx', import.meta.url),
+    'utf8',
+  );
+  const authSyncCondition = source.match(/if \(event === 'SIGNED_IN'[\s\S]*?\) \{\s*sync\(\)/)?.[0] ?? '';
+
+  assert.match(authSyncCondition, /SIGNED_IN/);
+  assert.match(authSyncCondition, /TOKEN_REFRESHED/);
+  assert.doesNotMatch(authSyncCondition, /USER_UPDATED/);
+});
+
+test('BetaFeaturesProvider still revalidates auth data without owning global auth loading', () => {
+  const source = readFileSync(
+    new URL('../src/contexts/BetaFeaturesContext.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(source, /setCurrentUserId\(userId\)/);
+  assert.match(source, /void loadForUser\(userId\)/);
+  assert.doesNotMatch(source, /setAuthLoading|setIsLoadingSavedCar/);
 });
 
 test('the intentional onboarding login escape still bypasses the entry gate', () => {

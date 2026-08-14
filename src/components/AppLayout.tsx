@@ -60,6 +60,7 @@ const AppLayout: React.FC = () => {
   const [legalModal, setLegalModal] = useState<'privacy' | 'terms' | null>(null);
   const [showSplash, setShowSplash] = useState(() => !isOnlyFastFilePickerOpen());
   const [authChecked, setAuthChecked] = useState(false);
+  const authenticatedUserId = user?.id ?? null;
   const onboardingLoginEscapeRef = useRef(false);
   const authUserIdRef = useRef<string | null>(null);
   const previousEntryGateOpenRef = useRef<boolean | null>(null);
@@ -195,7 +196,7 @@ const AppLayout: React.FC = () => {
 
   useEffect(() => {
     if (!authChecked) return;
-    if (!user) {
+    if (!authenticatedUserId) {
       setIsLoadingSavedCar(false);
       return;
     }
@@ -219,7 +220,7 @@ const AppLayout: React.FC = () => {
           const { data } = await supabase
             .from('race_setups')
             .select('race_class')
-            .eq('user_id', user.id)
+            .eq('user_id', authenticatedUserId)
             .not('race_class', 'is', null)
             .order('created_at', { ascending: false })
             .limit(1);
@@ -234,7 +235,7 @@ const AppLayout: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [authChecked, user, selectedCar, applySelectedCar]);
+  }, [authChecked, authenticatedUserId, selectedCar, applySelectedCar]);
 
   // Auth state listener
   useEffect(() => {
