@@ -1,10 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { syncMembershipFromSubscription } from '@/lib/subscription';
-import {
-  appendMedianPickerTrace,
-  registerMedianPickerAuthSubscription,
-} from '@/lib/medianPickerTrace';
 
 interface AppContextType {
   sidebarOpen: boolean;
@@ -32,7 +28,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // is no longer active/trialing). Admin override and active promos are
   // preserved inside syncMembershipFromSubscription.
   useEffect(() => {
-    const unregisterTraceSubscription = registerMedianPickerAuthSubscription('AppContext');
     const sync = () => {
       syncMembershipFromSubscription().catch(() => {/* non-fatal */});
     };
@@ -40,10 +35,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     sync();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      appendMedianPickerTrace('auth_event', {
-        source: 'AppContext',
-        eventType: event,
-      });
       // USER_UPDATED can be emitted by saveMembership itself. Re-running the
       // subscription bridge for that event feeds its own metadata write back
       // into the bridge even though the Stripe-backed row did not change.
@@ -56,7 +47,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     window.addEventListener('subscription-updated', onSubUpdated);
 
     return () => {
-      unregisterTraceSubscription();
       subscription.unsubscribe();
       window.removeEventListener('subscription-updated', onSubUpdated);
     };

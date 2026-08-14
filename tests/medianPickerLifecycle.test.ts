@@ -254,6 +254,19 @@ test('BetaFeaturesProvider still revalidates auth data without owning global aut
   assert.doesNotMatch(source, /setAuthLoading|setIsLoadingSavedCar/);
 });
 
+test('the three auth listeners keep separate responsibilities and clean up subscriptions', () => {
+  const sources = [
+    '../src/components/AppLayout.tsx',
+    '../src/contexts/AppContext.tsx',
+    '../src/contexts/BetaFeaturesContext.tsx',
+  ].map(path => readFileSync(new URL(path, import.meta.url), 'utf8'));
+
+  for (const source of sources) {
+    assert.equal((source.match(/supabase\.auth\.onAuthStateChange/g) || []).length, 1);
+    assert.match(source, /subscription\.unsubscribe\(\)/);
+  }
+});
+
 test('the intentional onboarding login escape still bypasses the entry gate', () => {
   const decision = resolveAuthUiTransition({
     previousUserId: null,
@@ -276,6 +289,17 @@ test('Scan Timing picker controls cannot submit a form and selection awaits proc
   assert.match(source, /type="button"[\s\S]*onClick=\{openUploadPicker\}/);
   assert.match(source, /type="button"[\s\S]*onClick=\{openCameraPicker\}/);
   assert.match(source, /const handleFileInputSelection[\s\S]*await handleFiles\(files\)/);
+});
+
+test('duplicate native file events cannot start the same batch twice', () => {
+  const source = readFileSync(
+    new URL('../src/components/ScanTimingScreen.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(source, /const processingFileSignatureRef = useRef<string \| null>\(null\)/);
+  assert.match(source, /if \(processingFileSignatureRef\.current === signature\) return/);
+  assert.match(source, /await handleFiles\(files\)[\s\S]*processingFileSignatureRef\.current = null/);
 });
 
 test('existing resume, visibility, page lifecycle, and safe-back handlers remain picker-aware', () => {

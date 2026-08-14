@@ -19,10 +19,6 @@ import {
   BetaFeaturesContext,
   type BetaFeaturesContextValue,
 } from '@/contexts/betaFeaturesContextValue';
-import {
-  appendMedianPickerTrace,
-  registerMedianPickerAuthSubscription,
-} from '@/lib/medianPickerTrace';
 
 export const BetaFeaturesProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
@@ -31,7 +27,6 @@ export const BetaFeaturesProvider: React.FC<{ children: React.ReactNode }> = ({
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const requestNumber = useRef(0);
-  const tracedUserId = useRef<string | null>(null);
 
   const closeBetaAccess = useCallback((nextLoading = false) => {
     clearCachedBetaAccess();
@@ -92,49 +87,27 @@ export const BetaFeaturesProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     let active = true;
-    const unregisterTraceSubscription = registerMedianPickerAuthSubscription('BetaFeaturesProvider');
 
-    appendMedianPickerTrace('auth_initial_session_start', { source: 'BetaFeaturesProvider' });
     supabase.auth
       .getSession()
       .then(({ data }) => {
         if (!active) return;
         const userId = data.session?.user?.id ?? null;
-        tracedUserId.current = userId;
-        appendMedianPickerTrace('auth_initial_session_finish', {
-          source: 'BetaFeaturesProvider',
-          authenticated: Boolean(userId),
-          success: true,
-        });
         setCurrentUserId(userId);
         void loadForUser(userId);
       })
       .catch((error) => {
         if (!active) return;
         setCurrentUserId(null);
-        tracedUserId.current = null;
-        appendMedianPickerTrace('auth_initial_session_finish', {
-          source: 'BetaFeaturesProvider',
-          authenticated: false,
-          success: false,
-        });
         closeBetaAccess(false);
         console.error('[beta-features] Failed to read the authenticated session; using production defaults.', error);
       });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!active) return;
       const userId = session?.user?.id ?? null;
-      appendMedianPickerTrace('auth_event', {
-        source: 'BetaFeaturesProvider',
-        eventType: event,
-        authenticated: Boolean(userId),
-        sameAuthenticatedUser: Boolean(userId) && tracedUserId.current === userId,
-        identityChanged: tracedUserId.current !== userId,
-      });
-      tracedUserId.current = userId;
       setCurrentUserId(userId);
       void loadForUser(userId);
     });
@@ -142,7 +115,6 @@ export const BetaFeaturesProvider: React.FC<{ children: React.ReactNode }> = ({
     return () => {
       active = false;
       requestNumber.current += 1;
-      unregisterTraceSubscription();
       subscription.unsubscribe();
       clearCachedBetaAccess();
     };

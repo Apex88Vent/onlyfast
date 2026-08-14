@@ -3,7 +3,6 @@ import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import { mergeTimingScanResults } from '@/lib/timingData';
 import { isOnlyFastFilePickerOpen, setOnlyFastFilePickerActive } from '@/lib/filePickerState';
-import { appendMedianPickerTrace, updateMedianPickerTraceContext } from '@/lib/medianPickerTrace';
 
 interface LapRow {
   lap: number;
@@ -70,10 +69,6 @@ const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
   '.webp': 'image/webp',
   '.heic': 'image/heic',
   '.heif': 'image/heif',
-};
-
-const devLog = (...args: unknown[]) => {
-  if (import.meta.env.DEV) console.log(...args);
 };
 
 const devWarn = (...args: unknown[]) => {
@@ -219,44 +214,13 @@ const ScanTimingScreen: React.FC<Props> = ({
   const pickerChangeReceivedRef = useRef(false);
   const processingFileSignatureRef = useRef<string | null>(null);
   const batchImagesRef = useRef<BatchImageItem[]>([]);
-  const traceMountContextRef = useRef({
-    hasSetup: Boolean(currentSetupName || currentSetupId),
-    hasSession: Boolean(currentSetupId),
-    activeSessionSlot: currentSetupType || '',
-  });
   const prefix = useId();
   const isSavingStep = step === 'saving';
-
-  useEffect(() => {
-    const mountContext = traceMountContextRef.current;
-    updateMedianPickerTraceContext({ scanTimingMounted: true, ...mountContext });
-    appendMedianPickerTrace('scan_timing_mount', { ...mountContext, scrollY: window.scrollY });
-    return () => {
-      updateMedianPickerTraceContext({ scanTimingMounted: false });
-      appendMedianPickerTrace('scan_timing_unmount', { ...mountContext, scrollY: window.scrollY });
-    };
-  }, []);
-
-  useEffect(() => {
-    appendMedianPickerTrace('scan_timing_step_changed', {
-      step,
-      hasSetup: Boolean(currentSetupName || currentSetupId),
-      hasSession: Boolean(currentSetupId),
-      activeSessionSlot: currentSetupType || '',
-    });
-  }, [currentSetupId, currentSetupName, currentSetupType, step]);
 
   const setFilePickingActive = useCallback((active: boolean) => {
     isPickingFileRef.current = active;
     setOnlyFastFilePickerActive(active);
-    appendMedianPickerTrace(active ? 'picker_active_set' : 'picker_active_cleared', {
-      source: 'ScanTimingScreen',
-      hasSetup: Boolean(currentSetupName || currentSetupId),
-      hasSession: Boolean(currentSetupId),
-      activeSessionSlot: currentSetupType || '',
-    });
-    if (active) devLog('file picker active set');
-  }, [currentSetupId, currentSetupName, currentSetupType]);
+  }, []);
 
   const replaceBatchImages = useCallback((next: BatchImageItem[]) => {
     batchImagesRef.current = next;
@@ -290,9 +254,6 @@ const ScanTimingScreen: React.FC<Props> = ({
   }, [replaceBatchImages, setFilePickingActive]);
 
   useEffect(() => () => {
-    appendMedianPickerTrace('scan_timing_batch_cleanup', {
-      fileCount: batchImagesRef.current.length,
-    });
     batchImagesRef.current.forEach(item => {
       try { URL.revokeObjectURL(item.previewUrl); } catch {/* ignore */}
     });
@@ -311,10 +272,6 @@ const ScanTimingScreen: React.FC<Props> = ({
 
     const handlePickerReturn = () => {
       if (!isPickingFileRef.current) return;
-      appendMedianPickerTrace('scan_picker_return_signal', {
-        source: document.visibilityState === 'visible' ? 'visible_or_focus' : 'focus_hidden',
-        fileCount: Number(uploadInputRef.current?.files?.length || cameraInputRef.current?.files?.length || 0),
-      });
       window.setTimeout(() => {
         if (!isPickingFileRef.current || pickerChangeReceivedRef.current) return;
         const hasPendingFile = Boolean(
@@ -322,10 +279,6 @@ const ScanTimingScreen: React.FC<Props> = ({
           cameraInputRef.current?.files?.length
         );
         if (hasPendingFile) return;
-        appendMedianPickerTrace('picker_cancellation_detected', {
-          cancelled: true,
-          fileCount: 0,
-        });
         setUploadStatus('No image selected');
         setError(null);
         setErrorDetail(null);
@@ -399,7 +352,6 @@ const ScanTimingScreen: React.FC<Props> = ({
     opts: { testMode?: boolean; applyToReview?: boolean } = {},
   ): Promise<ScanResult> => {
     const { data, error: fnErr } = result || {};
-    devLog('[ScanTimingScreen] invoke returned', { fnErr, data, sentTestMode: !!opts.testMode });
     setRawResponse(data ?? { _transport_error: fnErr?.message || null });
 
     if (fnErr) {
@@ -544,15 +496,6 @@ const ScanTimingScreen: React.FC<Props> = ({
       mapped.fastest_lap_on_lap, mapped.positions_gained_lost,
     ].filter(v => v !== null && v !== '' && v !== undefined).length;
 
-    devLog('[ScanTimingScreen] Mapped result', {
-      isTestMode,
-      function_version: mapped.function_version,
-      populated_fields: populated,
-      lap_count: mapped.lap_times.length,
-      confidence: mapped.confidence,
-      fields_missing: mapped.fields_missing,
-    });
-
     // NEVER show no-data-extracted for test mode (it's canned, by definition has data)
     if (!isTestMode && populated === 0 && mapped.lap_times.length === 0) {
       setErrorStage('no-data-extracted');
@@ -577,11 +520,6 @@ const ScanTimingScreen: React.FC<Props> = ({
 
   const processBatchImage = async (item: BatchImageItem): Promise<ScanResult | null> => {
     const { file } = item;
-    appendMedianPickerTrace('scan_processing_start', {
-      fileCount: 1,
-      hasSession: Boolean(item.sessionId),
-      processingStarted: true,
-    });
     try {
       if (!fileHasSupportedImageType(file)) {
         throw new Error('Unsupported file type. Choose a PNG, JPG, WEBP, HEIC, or HEIF image.');
@@ -594,16 +532,6 @@ const ScanTimingScreen: React.FC<Props> = ({
       setUploadStatus(`Uploading ${file.name || 'screenshot'}`);
       const compressed = await compressImage(file, MAX_IMAGE_WIDTH, JPEG_QUALITY);
       setPreviewUrl(compressed.dataUrl);
-      devLog('[ScanTimingScreen] Compressed & invoking scan-timing-screen', {
-        sessionId: item.sessionId,
-        mimeType: compressed.mimeType,
-        base64_length: compressed.base64.length,
-        compressed_bytes: compressed.bytes,
-        width: compressed.width,
-        height: compressed.height,
-        original_file_size: file.size,
-        file_name: file.name,
-      });
 
       updateBatchImage(item.id, { status: 'processing' });
       setUploadStatus(`Processing timing data from ${file.name || 'screenshot'}`);
@@ -619,11 +547,6 @@ const ScanTimingScreen: React.FC<Props> = ({
         lap_times: mapped.lap_times.map(lap => ({ ...lap, session_id: item.sessionId })),
       };
       updateBatchImage(item.id, { status: 'success', result: sessionResult, error: undefined });
-      appendMedianPickerTrace('scan_processing_finish', {
-        fileCount: 1,
-        hasSession: Boolean(item.sessionId),
-        success: true,
-      });
       return sessionResult;
     } catch (err: any) {
       devError('[ScanTimingScreen] Screenshot processing failed:', err);
@@ -631,11 +554,6 @@ const ScanTimingScreen: React.FC<Props> = ({
         ? 'Scan timed out. Try a smaller or clearer screenshot.'
         : (err?.message || 'Upload or processing failed.');
       updateBatchImage(item.id, { status: 'failed', error: message, result: undefined });
-      appendMedianPickerTrace('scan_processing_finish', {
-        fileCount: 1,
-        hasSession: Boolean(item.sessionId),
-        success: false,
-      });
       return null;
     }
   };
@@ -667,11 +585,6 @@ const ScanTimingScreen: React.FC<Props> = ({
   };
 
   const handleFiles = async (files: File[]) => {
-    appendMedianPickerTrace('scan_files_received', {
-      fileCount: files.length,
-      hasSetup: Boolean(currentSetupName || currentSetupId),
-      hasSession: Boolean(currentSetupId),
-    });
     if (!currentSetupId) {
       setError('Save this session before uploading timing screenshots.');
       setErrorStage('no-setup-row');
@@ -715,15 +628,6 @@ const ScanTimingScreen: React.FC<Props> = ({
       setErrorStage('batch-failed');
       setUploadStatus(message);
       setStep('idle');
-      appendMedianPickerTrace('scan_batch_finish', {
-        fileCount: newItems.length,
-        success: false,
-      });
-    } else {
-      appendMedianPickerTrace('scan_batch_finish', {
-        fileCount: newItems.length,
-        success: true,
-      });
     }
   };
 
@@ -737,7 +641,6 @@ const ScanTimingScreen: React.FC<Props> = ({
     setStep('scanning');
     try {
       const payload = { testMode: true };
-      devLog('TEST MODE PAYLOAD', payload);
       const result = await invokeWithTimeout(payload, 15_000);
       await handleInvokeResult(result, { testMode: true });
     } catch (err: any) {
@@ -755,13 +658,6 @@ const ScanTimingScreen: React.FC<Props> = ({
 
 
   const openUploadPicker = () => {
-    devLog('upload button clicked');
-    appendMedianPickerTrace('scan_file_button_clicked', {
-      source: 'upload',
-      hasSetup: Boolean(currentSetupName || currentSetupId),
-      hasSession: Boolean(currentSetupId),
-      activeSessionSlot: currentSetupType || '',
-    });
     if (!currentSetupId) {
       setError('Save this session before uploading timing screenshots.');
       setErrorStage('no-setup-row');
@@ -775,13 +671,10 @@ const ScanTimingScreen: React.FC<Props> = ({
     setUploadStatus('Opening photo picker');
     pickerChangeReceivedRef.current = false;
     onPickerOpening?.();
-    appendMedianPickerTrace('scan_picker_opening', { source: 'upload' });
     setFilePickingActive(true);
     if (uploadInputRef.current) {
       uploadInputRef.current.value = '';
       uploadInputRef.current.click();
-      appendMedianPickerTrace('scan_file_input_clicked', { source: 'upload' });
-      devLog('file picker opened');
     } else {
       setFilePickingActive(false);
       setError('Upload is not ready. Please try again.');
@@ -791,13 +684,6 @@ const ScanTimingScreen: React.FC<Props> = ({
   };
 
   const openCameraPicker = () => {
-    devLog('upload button clicked');
-    appendMedianPickerTrace('scan_file_button_clicked', {
-      source: 'camera',
-      hasSetup: Boolean(currentSetupName || currentSetupId),
-      hasSession: Boolean(currentSetupId),
-      activeSessionSlot: currentSetupType || '',
-    });
     if (!currentSetupId) {
       setError('Save this session before taking a timing photo.');
       setErrorStage('no-setup-row');
@@ -811,13 +697,10 @@ const ScanTimingScreen: React.FC<Props> = ({
     setUploadStatus('Opening photo picker');
     pickerChangeReceivedRef.current = false;
     onPickerOpening?.();
-    appendMedianPickerTrace('scan_picker_opening', { source: 'camera' });
     setFilePickingActive(true);
     if (cameraInputRef.current) {
       cameraInputRef.current.value = '';
       cameraInputRef.current.click();
-      appendMedianPickerTrace('scan_file_input_clicked', { source: 'camera' });
-      devLog('file picker opened');
     } else {
       setFilePickingActive(false);
       setError('Camera upload is not ready. Please try again.');
@@ -827,19 +710,10 @@ const ScanTimingScreen: React.FC<Props> = ({
   };
 
   const handleFileInputSelection = async (input: HTMLInputElement) => {
-    devLog('file input selection fired');
     setUploadStatus('Returned from photo picker');
     pickerChangeReceivedRef.current = true;
     const files = Array.from(input.files || []);
-    appendMedianPickerTrace('scan_file_input_event', {
-      fileCount: files.length,
-      hasSession: Boolean(currentSetupId),
-    });
     if (files.length === 0) {
-      appendMedianPickerTrace('scan_file_input_cancelled', {
-        fileCount: 0,
-        cancelled: true,
-      });
       setUploadStatus('No image selected');
       setError(null);
       setErrorDetail(null);
@@ -850,19 +724,11 @@ const ScanTimingScreen: React.FC<Props> = ({
       return;
     }
     const signature = files.map(fileSignature).join('||');
-    if (processingFileSignatureRef.current === signature) {
-      appendMedianPickerTrace('scan_duplicate_file_event_ignored', { fileCount: files.length });
-      return;
-    }
+    if (processingFileSignatureRef.current === signature) return;
     processingFileSignatureRef.current = signature;
-    devLog('selected file received');
     try {
       await handleFiles(files);
     } finally {
-      appendMedianPickerTrace('scan_file_handler_finish', {
-        fileCount: files.length,
-        processingStarted: true,
-      });
       processingFileSignatureRef.current = null;
       setFilePickingActive(false);
       input.value = '';
@@ -994,14 +860,6 @@ const ScanTimingScreen: React.FC<Props> = ({
         function_version: scan.function_version || null,
       };
 
-      devLog('[ScanTimingScreen] Saving timing_data to race_setups', {
-        setupId: currentSetupId,
-        setupName: currentSetupName,
-        setupType: currentSetupType,
-        timingData,
-      });
-      devLog('upload started');
-
       const { data: updated, error: updErr } = await supabase
         .from('race_setups')
         .update({ timing_data: timingData })
@@ -1011,7 +869,6 @@ const ScanTimingScreen: React.FC<Props> = ({
         .single();
 
       if (updErr) throw updErr;
-      devLog('upload complete');
 
       setStep('saved');
       setSavedMessage(

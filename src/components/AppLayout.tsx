@@ -21,27 +21,6 @@ import { useBetaFeatures } from '@/hooks/useBetaFeatures';
 import { BETA_FEATURES } from '@/lib/betaFeatures';
 import { isOnlyFastFilePickerOpen } from '@/lib/filePickerState';
 import { resolveAuthUiTransition } from '@/lib/authUiTransition';
-import {
-  appendMedianPickerTrace,
-  registerMedianPickerAuthSubscription,
-  updateMedianPickerTraceContext,
-} from '@/lib/medianPickerTrace';
-
-const devLog = (...args: unknown[]) => {
-  if (import.meta.env.DEV) console.log(...args);
-};
-
-const AuthenticatedAppTrace: React.FC = () => {
-  useEffect(() => {
-    updateMedianPickerTraceContext({ authenticatedAppVisible: true });
-    appendMedianPickerTrace('authenticated_app_mount');
-    return () => {
-      updateMedianPickerTraceContext({ authenticatedAppVisible: false });
-      appendMedianPickerTrace('authenticated_app_unmount');
-    };
-  }, []);
-  return null;
-};
 
 const AppLayout: React.FC = () => {
   const navigate = useNavigate();
@@ -63,51 +42,6 @@ const AppLayout: React.FC = () => {
   const authenticatedUserId = user?.id ?? null;
   const onboardingLoginEscapeRef = useRef(false);
   const authUserIdRef = useRef<string | null>(null);
-  const previousEntryGateOpenRef = useRef<boolean | null>(null);
-
-  useEffect(() => {
-    updateMedianPickerTraceContext({ appLayoutMounted: true });
-    appendMedianPickerTrace('app_layout_mount', { scrollY: window.scrollY });
-    return () => {
-      updateMedianPickerTraceContext({
-        appLayoutMounted: false,
-        authenticatedAppVisible: false,
-      });
-      appendMedianPickerTrace('app_layout_unmount', { scrollY: window.scrollY });
-    };
-  }, []);
-
-  useEffect(() => {
-    const entryGateOpen = !hasCheckedHowOnlyFastWorks || showHowOnlyFastWorks;
-    updateMedianPickerTraceContext({
-      authChecked,
-      authLoading: !authChecked || isLoadingSavedCar,
-      authenticated: Boolean(user),
-      entryGateOpen,
-      entryGateChecked: hasCheckedHowOnlyFastWorks,
-      splashVisible: showSplash,
-      authenticatedAppVisible:
-        !showSplash && !entryGateOpen && authChecked && !isLoadingSavedCar && isOnboarded,
-    });
-    appendMedianPickerTrace('app_layout_state', {
-      authChecked,
-      authLoading: !authChecked || isLoadingSavedCar,
-      authenticated: Boolean(user),
-      entryGateOpen,
-      entryGateChecked: hasCheckedHowOnlyFastWorks,
-      splashVisible: showSplash,
-      authenticatedAppVisible:
-        !showSplash && !entryGateOpen && authChecked && !isLoadingSavedCar && isOnboarded,
-    });
-    if (previousEntryGateOpenRef.current !== entryGateOpen) {
-      appendMedianPickerTrace(entryGateOpen ? 'entry_gate_open' : 'entry_gate_close', {
-        entryGateOpen,
-        entryGateChecked: hasCheckedHowOnlyFastWorks,
-        authenticated: Boolean(user),
-      });
-      previousEntryGateOpenRef.current = entryGateOpen;
-    }
-  }, [authChecked, hasCheckedHowOnlyFastWorks, isLoadingSavedCar, isOnboarded, showHowOnlyFastWorks, showSplash, user]);
 
   const howOnlyFastWorksStorageKey = (userId?: string | null) =>
     userId ? `onlyfast_onboarding_completed_${userId}` : 'onlyfast_onboarding_completed_guest';
@@ -172,7 +106,6 @@ const AppLayout: React.FC = () => {
 
   useEffect(() => {
     if (!showSplash || !isOnlyFastFilePickerOpen()) return;
-    devLog('route reset blocked', { source: 'splash' });
     setShowSplash(false);
   }, [showSplash]);
 
@@ -239,7 +172,6 @@ const AppLayout: React.FC = () => {
 
   // Auth state listener
   useEffect(() => {
-    const unregisterTraceSubscription = registerMedianPickerAuthSubscription('AppLayout');
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const isOnboardingLoginEscape = event === 'SIGNED_IN' && onboardingLoginEscapeRef.current;
       const authTransition = resolveAuthUiTransition({
@@ -250,13 +182,6 @@ const AppLayout: React.FC = () => {
       });
 
       authUserIdRef.current = authTransition.nextUserId;
-      appendMedianPickerTrace('auth_event', {
-        source: 'AppLayout',
-        eventType: event,
-        authenticated: Boolean(session?.user),
-        sameAuthenticatedUser: !authTransition.identityChanged && Boolean(session?.user),
-        identityChanged: authTransition.identityChanged,
-      });
 
       setUser(session?.user ?? null);
       setAuthChecked(true);
@@ -291,31 +216,17 @@ const AppLayout: React.FC = () => {
     });
 
     // Initial check
-    appendMedianPickerTrace('auth_initial_session_start', { source: 'AppLayout' });
     supabase.auth.getSession().then(({ data: { session } }) => {
       authUserIdRef.current = session?.user?.id ?? null;
       setUser(session?.user ?? null);
       setAuthChecked(true);
       setHasCheckedHowOnlyFastWorks(false);
-      appendMedianPickerTrace('auth_initial_session_finish', {
-        source: 'AppLayout',
-        authenticated: Boolean(session?.user),
-        success: true,
-      });
     }).catch(() => {
       authUserIdRef.current = null;
       setAuthChecked(true);
       setHasCheckedHowOnlyFastWorks(false);
-      appendMedianPickerTrace('auth_initial_session_finish', {
-        source: 'AppLayout',
-        authenticated: false,
-        success: false,
-      });
     });
-    return () => {
-      unregisterTraceSubscription();
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
   // Reset-on-login fallback for the disposable experimental account. Waiting
@@ -343,7 +254,6 @@ const AppLayout: React.FC = () => {
     if (!authChecked) return;
 
     if (isOnlyFastFilePickerOpen()) {
-      devLog('route reset blocked', { source: 'howOnlyFastWorksGate' });
       setShowHowOnlyFastWorks(false);
       setHasCheckedHowOnlyFastWorks(true);
       return;
@@ -442,7 +352,6 @@ const AppLayout: React.FC = () => {
 
   return (
     <AnnouncerProvider>
-      <AuthenticatedAppTrace />
       <div className="min-h-screen bg-[#F5F5F7] flex flex-col">
         <SkipLink />
         <Header

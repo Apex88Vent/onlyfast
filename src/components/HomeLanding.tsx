@@ -1,6 +1,5 @@
 import React from 'react';
 import { ArrowLeft, ArrowRight, BarChart3, CalendarDays, CheckCircle2, CircleDashed, Library, Plus, Save, Trophy, Wrench, type LucideIcon } from 'lucide-react';
-import { appendMedianPickerTrace } from '@/lib/medianPickerTrace';
 
 export type HomeAction = 'new-setup' | 'saved' | 'schedule' | 'todo' | 'parts' | 'library' | 'previous-race' | 'current-race' | 'next-race';
 
@@ -215,11 +214,6 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
   onChangeClass,
   onAction,
 }) => {
-  React.useEffect(() => {
-    appendMedianPickerTrace('home_landing_mount', { scrollY: window.scrollY });
-    return () => appendMedianPickerTrace('home_landing_unmount', { scrollY: window.scrollY });
-  }, []);
-
   const displayedWeekend = currentWeekend;
   const nextEventCountdown = getEventCountdown(nextEvent?.date);
   const nextEventDate = formatEventDate(nextEvent);

@@ -1,5 +1,4 @@
 import { createClient } from '@supabase/supabase-js';
-import { appendMedianPickerTrace } from '@/lib/medianPickerTrace';
 
 /* ──────────────────────────────────────────────────────────────────────────
  * SWITCHING TO A DIFFERENT SUPABASE / DATABASE PROJECT
@@ -107,9 +106,5 @@ if (typeof window !== 'undefined') {
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey);
-appendMedianPickerTrace('supabase_client_created', {
-  source: 'primary_client',
-  clientInstances: 1,
-});
 
 export { supabase, supabaseUrl, supabaseKey };

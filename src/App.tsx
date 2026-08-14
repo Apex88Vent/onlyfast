@@ -18,7 +18,6 @@ import SafeBackHandler from "./components/SafeBackHandler";
 import BetaRoute from "./components/BetaRoute";
 import { BetaFeaturesProvider } from "./contexts/BetaFeaturesContext";
 import { BETA_FEATURES } from "./lib/betaFeatures";
-import MedianPickerTracePanel from "./components/MedianPickerTracePanel";
 
 const queryClient = new QueryClient();
 const OnboardingPreview = lazy(() => import("./pages/OnboardingPreview"));
@@ -66,7 +65,6 @@ const App = () => (
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
-            <MedianPickerTracePanel />
           </BetaFeaturesProvider>
         </BrowserRouter>
       </TooltipProvider>
