@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect, useId } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import { mergeTimingScanResults } from '@/lib/timingData';
+import { parsePerformancePosition } from '@/lib/performanceSummary';
 import { isOnlyFastFilePickerOpen, setOnlyFastFilePickerActive } from '@/lib/filePickerState';
 
 interface LapRow {
@@ -46,6 +47,20 @@ export interface ScanResult {
 
 const EXPECTED_FUNCTION_VERSION = 'scan-v3-testmode';
 
+const formatOrdinalPosition = (position: number): string => {
+  const mod100 = position % 100;
+  const suffix = mod100 >= 11 && mod100 <= 13
+    ? 'th'
+    : position % 10 === 1
+      ? 'st'
+      : position % 10 === 2
+        ? 'nd'
+        : position % 10 === 3
+          ? 'rd'
+          : 'th';
+  return `${position}${suffix}`;
+};
+
 
 const SESSION_TYPES = [
   { value: '', label: '—' },
@@ -86,7 +101,11 @@ interface Props {
   currentSetupType?: 'base' | 'heat' | 'main' | 'extra1' | 'extra2' | 'extra3';
   onSignInClick: () => void;
   onPickerOpening?: () => void;
-  onSaved?: (setupId: string, timingData: any) => void;
+  onSaved?: (
+    setupId: string,
+    timingData: any,
+    session: { setupType?: string | null; raceScheduleId?: string | null },
+  ) => void;
 }
 
 // Toggle to show the dev-only Test Mode button. Leave false in production —
@@ -838,7 +857,7 @@ const ScanTimingScreen: React.FC<Props> = ({
           status: item.status,
           error: item.error || null,
         })),
-        // The five "kept" fields the user asked for:
+        // Parsed timing values kept on this exact race_setups session row:
         fastest_lap_time: scan.best_lap_time || null,
         fastest_lap_on_lap: scan.fastest_lap_on_lap ?? null,
         finishing_position: scan.finishing_position ?? null,
@@ -865,7 +884,7 @@ const ScanTimingScreen: React.FC<Props> = ({
         .update({ timing_data: timingData })
         .eq('id', currentSetupId)
         .eq('user_id', user.id)
-        .select('id, timing_data')
+        .select('id, setup_type, race_schedule_id, timing_data')
         .single();
 
       if (updErr) throw updErr;
@@ -878,7 +897,10 @@ const ScanTimingScreen: React.FC<Props> = ({
       );
 
       if (onSaved && updated?.id) {
-        onSaved(updated.id, updated.timing_data);
+        onSaved(updated.id, updated.timing_data, {
+          setupType: updated.setup_type,
+          raceScheduleId: updated.race_schedule_id,
+        });
       }
 
       setTimeout(() => { reset(); }, 1600);
@@ -1084,8 +1106,7 @@ const ScanTimingScreen: React.FC<Props> = ({
               </div>
             )}
 
-            {/* The ONLY five fields the user cares about, per spec.
-                Each gets its own colored card for visual differentiation. */}
+            {/* Each parsed timing value gets its own review tile. */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <ColorTextField
                 id={`${prefix}-best`}
@@ -1133,6 +1154,15 @@ const ScanTimingScreen: React.FC<Props> = ({
                 placeholder="+ gained, − lost"
                 color="purple"
                 icon="trending"
+              />
+              <ColorTextField
+                id={`${prefix}-finish`}
+                label="Finishing Position"
+                value={scan.finishing_position ? formatOrdinalPosition(scan.finishing_position) : ''}
+                onChange={(v) => updateScan({ finishing_position: parsePerformancePosition(v) })}
+                placeholder="e.g. 3rd"
+                color="amber"
+                icon="trophy"
               />
             </div>
 
@@ -1402,7 +1432,7 @@ const SelectField: React.FC<{
 };
 
 
-// ---------- Color-coded text field (for the 5 review stats) ----------
+// ---------- Color-coded text field for review stats ----------
 const COLOR_PALETTES: Record<string, { bg: string; border: string; ring: string; label: string; icon: string }> = {
   green: {
     bg: 'bg-green-50',
@@ -1439,6 +1469,13 @@ const COLOR_PALETTES: Record<string, { bg: string; border: string; ring: string;
     label: 'text-purple-800',
     icon: 'text-purple-600',
   },
+  amber: {
+    bg: 'bg-amber-50',
+    border: 'border-amber-200',
+    ring: 'focus:ring-amber-400 focus:border-amber-400',
+    label: 'text-amber-800',
+    icon: 'text-amber-600',
+  },
 };
 
 const FieldIcon: React.FC<{ icon: string; className?: string }> = ({ icon, className }) => {
@@ -1466,6 +1503,8 @@ const FieldIcon: React.FC<{ icon: string; className?: string }> = ({ icon, class
       return <svg {...common}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>;
     case 'trending':
       return <svg {...common}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>;
+    case 'trophy':
+      return <svg {...common}><path d="M8 21h8" /><path d="M12 17v4" /><path d="M7 4h10v5a5 5 0 0 1-10 0V4Z" /><path d="M7 6H4v2a4 4 0 0 0 4 4" /><path d="M17 6h3v2a4 4 0 0 1-4 4" /></svg>;
     default:
       return null;
   }

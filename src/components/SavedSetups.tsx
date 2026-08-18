@@ -13,6 +13,8 @@ import {
 interface SavedSetupsProps {
   user: User | null;
   onLoad: (setup: any) => void;
+  onLoadBaseSetup: (setup: any) => void;
+  onDataChanged?: () => void;
   refreshTrigger: number;
   activeClass: string;
   classLocksEnabled: boolean;
@@ -51,6 +53,8 @@ const cleanBaseTitle = (name: string) => name.replace(/^\[BASE TEMPLATE\]\s*/i, 
 const canGroup = (s: any) => norm(s.setup_name) !== '' || (norm(s.track_name) !== '' && norm(s.race_date) !== '');
 
 const buildGroupKey = (s: any) => {
+  const raceScheduleId = norm(s.race_schedule_id);
+  if (raceScheduleId) return `schedule|${raceScheduleId}`;
   const trackName = norm(s.track_name).toLowerCase();
   const raceDate = norm(s.race_date).toLowerCase();
   if (trackName && raceDate) return `race|${trackName}|${raceDate}`;
@@ -142,6 +146,8 @@ const getSetupTypeBadge = (type: string) => {
 const SavedSetups: React.FC<SavedSetupsProps> = ({
   user,
   onLoad,
+  onLoadBaseSetup,
+  onDataChanged,
   refreshTrigger,
   activeClass,
   classLocksEnabled,
@@ -207,6 +213,10 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
       return;
     }
     const clicked = data.find(row => row.id === setup.id) || data[0];
+    if (isBaseSetupRow(clicked)) {
+      onLoadBaseSetup(clicked);
+      return;
+    }
     onLoad({ ...clicked, __groupSetups: data });
   };
 
@@ -261,6 +271,7 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
       track_name: group.trackName,
       race_date: group.raceDate || null,
       race_class: group.raceClass || 'Open',
+      race_schedule_id: group.setups.find(s => norm(s.race_schedule_id))?.race_schedule_id || null,
     };
     const { data, error } = await supabase
       .from('race_setups')
@@ -273,6 +284,7 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
       return;
     }
     if (data) setSetups(prev => [data, ...prev]);
+    onDataChanged?.();
     closeAdd();
   };
 
@@ -310,6 +322,7 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
       // Remove every session in this event from local state after success.
       const idSet = new Set(ids);
       setSetups(prev => prev.filter(s => !idSet.has(s.id)));
+      onDataChanged?.();
       setDeleteBusy(false);
       closeDelete();
     } catch (err: any) {

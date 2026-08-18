@@ -19,16 +19,21 @@ import TimingDataDisplay from './TimingDataDisplay';
 import ActiveOnlyLapsSessionLinkSlot from './ActiveOnlyLapsSessionLinkSlot';
 import { attachTimingDataToSession, type TimingData } from '@/lib/timingData';
 import { buildPerformanceSummary, parsePerformancePosition } from '@/lib/performanceSummary';
+import {
+  buildScheduleFinishSyncDecision,
+  isBlankScheduleFinishingPosition,
+} from '@/lib/scheduleFinishingPosition';
 import PartsReference from './PartsReference';
 import RaceSchedule from './RaceSchedule';
 import HomeLanding, { HomeAction } from './HomeLanding';
 import {
-  getRaceCenterLabel,
   getRaceRolloverSelection,
+  getRaceFinalScheduledDate,
+  getRaceScheduleNavigation,
   getScheduleRaceKey,
   getUpcomingScheduleEntries,
-  raceIdentityMatchesScheduleRace,
   sortScheduleEntriesByDate,
+  toLocalDateOnly,
   type ScheduleRaceEntry,
 } from '@/lib/scheduleSelection';
 import { SAFE_BACK_DASHBOARD_EVENT, consumePendingSafeBackDashboardView } from '@/lib/safeBack';
@@ -64,6 +69,15 @@ import {
   type RaceSessionType,
   type RaceWeekendSessionRow,
 } from '@/lib/raceWeekendSessions';
+import {
+  buildRaceSetupChoices,
+  normalizeRaceDate,
+  normalizeRaceTrack,
+  raceTrackSearchToken,
+  resolveRaceSetupForEvent,
+  type RaceSetupChoice,
+  type RaceSetupResolutionSource,
+} from '@/lib/raceSetupResolution';
 
 
 
@@ -179,7 +193,6 @@ const IDLE_HOME_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 const STATE_STORAGE_KEY = 'onlyfast_setup_state_v2';
 const LAST_ROUTE_STORAGE_KEY = 'onlyfast_last_route_v1';
 const LAST_OPENED_SETUP_PREFIX = 'onlyfast_last_opened_setup_';
-const ACTIVE_RACE_SELECTION_PREFIX = 'onlyfast_active_race_';
 
 type DashboardView = 'home' | 'setup' | 'saved' | 'compare' | 'create-base' | 'todo' | 'parts' | 'schedule';
 
@@ -223,6 +236,7 @@ const writeSavedDashboardRoute = (route: SavedDashboardRoute): void => {
 interface UnifiedSavedMeta {
   name?: string;
   ids: Partial<Record<SetupType, string>>;
+  raceScheduleId?: string;
 }
 
 type WeekendSessionStatus = 'complete' | 'in-progress' | 'not-started';
@@ -233,13 +247,26 @@ interface WeekendPreview {
     id?: string;
     label: string;
     status: WeekendSessionStatus;
+    result?: string;
   }[];
 }
 
 interface QueriedWeekendSessions {
   raceKey: string;
+  choice: RaceSetupChoice | null;
   rows: RaceWeekendSessionRow[];
+  choices: RaceSetupChoice[];
+  source: RaceSetupResolutionSource;
+  canLinkToSchedule: boolean;
   queryFailed?: boolean;
+}
+
+interface RaceSetupPickerState {
+  race: ScheduleRaceEntry;
+  label: string;
+  choices: RaceSetupChoice[];
+  linkChoiceToRace: boolean;
+  error?: string;
 }
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
@@ -270,6 +297,34 @@ const cleanPayload = (payload: Record<string, unknown>) =>
   }, {});
 
 const lastOpenedSetupKey = (userId: string) => `${LAST_OPENED_SETUP_PREFIX}${userId}`;
+
+const normalizedText = (value: unknown) => String(value ?? '').trim();
+const RACE_SETUP_RESOLUTION_COLUMNS = [
+  'id',
+  'race_schedule_id',
+  'setup_name',
+  'setup_type',
+  'session_label',
+  'session_order',
+  'track_name',
+  'race_date',
+  'timing_data',
+  'created_at',
+  'updated_at',
+].join(',');
+
+const isBaseTemplateSetup = (setup: any): boolean =>
+  normalizedText(setup?.setup_type) === 'base_template' ||
+  normalizedText(setup?.setup_name).toUpperCase().startsWith('[BASE TEMPLATE]');
+
+const formatOrdinalPosition = (position: number): string => {
+  const mod100 = position % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${position}th`;
+  if (position % 10 === 1) return `${position}st`;
+  if (position % 10 === 2) return `${position}nd`;
+  if (position % 10 === 3) return `${position}rd`;
+  return `${position}th`;
+};
 
 const SetupDashboard: React.FC<SetupDashboardProps> = ({
   user,
@@ -306,9 +361,14 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
 
   const [savedSetupsList, setSavedSetupsList] = useState<any[]>([]);
   const [scheduleRows, setScheduleRows] = useState<any[]>([]);
-  const [activatedRaceKey, setActivatedRaceKey] = useState('');
   const [scheduleToday, setScheduleToday] = useState(() => new Date());
+  const [displayedRaceKey, setDisplayedRaceKey] = useState('');
   const [queriedWeekendSessions, setQueriedWeekendSessions] = useState<QueriedWeekendSessions | null>(null);
+  const [raceSetupPicker, setRaceSetupPicker] = useState<RaceSetupPickerState | null>(null);
+  const [racePickerBusy, setRacePickerBusy] = useState(false);
+  const [raceSlideDirection, setRaceSlideDirection] = useState<'left' | 'right' | null>(null);
+  const [raceIsAnimating, setRaceIsAnimating] = useState(false);
+  const [baseTemplateToEdit, setBaseTemplateToEdit] = useState<any | null>(null);
   const [showCopyFromPast, setShowCopyFromPast] = useState(false);
   const [shareModalSetup, setShareModalSetup] = useState<any>(null);
   // "View Shared Setup" modal (enter a share code to view a read-only setup).
@@ -367,6 +427,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastActivityRef = useRef(Date.now());
   const previousSelectedCarRef = useRef(selectedCar);
+  const previousAutomaticRaceKeyRef = useRef('');
 
   const prefix = useId();
   const currentSetup = setups[activeTab];
@@ -577,18 +638,6 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     };
   }, []);
 
-  useEffect(() => {
-    if (!user) {
-      setActivatedRaceKey('');
-      return;
-    }
-    try {
-      setActivatedRaceKey(localStorage.getItem(`${ACTIVE_RACE_SELECTION_PREFIX}${user.id}`) || '');
-    } catch {
-      setActivatedRaceKey('');
-    }
-  }, [user]);
-
   const selectedSessionId = savedMeta.ids[activeTab];
 
   useEffect(() => {
@@ -645,6 +694,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
         return;
       }
       if (a === 'home' || a === 'setup' || a === 'saved' || a === 'compare' || a === 'create-base' || a === 'todo' || a === 'parts' || a === 'schedule') {
+        if (a === 'create-base') setBaseTemplateToEdit(null);
         setActiveView(a);
       }
     };
@@ -902,6 +952,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       setup_name: name || s.setup_name || null,
       session_label: sessionLabels[tabKey] || (isDefaultRaceSessionType(tabKey) ? TAB_LABELS[tabKey].short : null),
       session_order: sessionOrders[tabKey] ?? DEFAULT_ORDER[tabKey],
+      race_schedule_id: savedMeta.raceScheduleId || null,
 
       track_name: s.trackName || '',
       race_date: s.raceDate || new Date().toISOString().split('T')[0],
@@ -1060,6 +1111,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
             setSavedMeta(prev => ({
               name: prev.name,
               ids: { ...prev.ids, [item.setupType]: result.id },
+              raceScheduleId: prev.raceScheduleId,
             }));
           }
           removePending(item.id);
@@ -1140,7 +1192,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
 
 
         // A "new" race weekend = a file name we haven't stored before.
-        const fileExists = raceWeekendNames.has(name.trim());
+        const fileExists = Boolean(Object.values(savedMeta.ids).find(Boolean)) || raceWeekendNames.has(name.trim());
         const newCarType = currentSetup.raceClass || selectedCar || '';
 
         const perm = checkSavePermission({
@@ -1242,7 +1294,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
         }
       }
 
-      setSavedMeta({ name, ids: { ...savedMeta.ids, ...newIds } });
+      setSavedMeta({ name, ids: { ...savedMeta.ids, ...newIds }, raceScheduleId: savedMeta.raceScheduleId });
       const rememberedId = newIds[activeTab] || savedMeta.ids[activeTab] || Object.values(newIds)[0] || Object.values(savedMeta.ids)[0];
       if (rememberedId) {
         try { localStorage.setItem(lastOpenedSetupKey(user.id), String(rememberedId)); } catch {}
@@ -1254,8 +1306,6 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       });
 
       setRefreshTrigger(prev => prev + 1);
-      const mainSessionId = newIds.main || savedMeta.ids.main;
-      await syncMainEventResultToSchedule(mainSessionId ? timingDataBySessionId[mainSessionId] : null);
       setPendingCount(readPendingQueue().length);
       if (!silent) {
         if (queuedAny) {
@@ -1448,6 +1498,11 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
 
   // Load the whole "file" — all rows sharing the same setup_name
   const handleLoadSetup = async (setup: any) => {
+    if (isBaseTemplateSetup(setup)) {
+      setBaseTemplateToEdit(setup);
+      setActiveView('create-base');
+      return;
+    }
     if (
       classLocksEnabled &&
       String(setup?.race_class || '').trim().toLowerCase() !== selectedCar.trim().toLowerCase()
@@ -1459,6 +1514,11 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       try { localStorage.setItem(lastOpenedSetupKey(user.id), String(setup.id)); } catch {}
     }
     const name = setup.setup_name || setup.track_name || '';
+    const raceScheduleId = normalizedText(
+      setup.race_schedule_id ||
+      setup.__raceScheduleId ||
+      setup.__groupSetups?.find((row: any) => row?.race_schedule_id)?.race_schedule_id,
+    ) || undefined;
     // Fully-keyed (6-slot) so extra slots are present but blank.
     const newSetups: Record<SetupType, SetupState> = emptyAllSetups();
     const newIds: Partial<Record<SetupType, string>> = {};
@@ -1482,7 +1542,8 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     const clickedType = ALL_SLOTS.includes(setup.setup_type as SetupType) ? (setup.setup_type as SetupType) : 'base';
     loadSiblingRow(setup);
 
-    if (Array.isArray(setup.__groupSetups)) {
+    const hasExplicitGroup = Array.isArray(setup.__groupSetups);
+    if (hasExplicitGroup) {
       [...setup.__groupSetups]
         .sort((a, b) => {
           const aType = ALL_SLOTS.includes(a.setup_type as SetupType) ? (a.setup_type as SetupType) : 'base';
@@ -1493,13 +1554,15 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     }
 
     // Fetch the exact race weekend so the page and landing card resolve the same rows.
-    if (user && name) {
+    if (user && name && !hasExplicitGroup) {
       try {
         let siblingQuery = supabase
           .from('race_setups')
           .select('*')
           .eq('user_id', user.id);
-        if (setup.race_date && setup.track_name) {
+        if (raceScheduleId) {
+          siblingQuery = siblingQuery.eq('race_schedule_id', raceScheduleId);
+        } else if (setup.race_date && setup.track_name) {
           siblingQuery = siblingQuery
             .eq('race_date', setup.race_date)
             .eq('track_name', setup.track_name);
@@ -1526,7 +1589,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     }
 
     setSetups(newSetups);
-    setSavedMeta({ name, ids: newIds });
+    setSavedMeta({ name, ids: newIds, raceScheduleId });
     setTimingDataBySessionId({});
     setSessionLabels(newLabels);
     setSessionOrders(newOrders);
@@ -1551,43 +1614,74 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   // Called by ScanTimingScreen after it successfully writes timing_data
   // back to race_setups. Refreshes the visible TimingDataDisplay card for the
   // tab whose setup row was just updated.
-  const syncMainEventResultToSchedule = useCallback(async (timingData?: TimingData | null) => {
-    if (!user || !timingData) return;
-    const finish = parsePerformancePosition(timingData.finishing_position);
-    if (finish === null) return;
+  const syncMainEventResultToSchedule = useCallback(async (
+    setupType: unknown,
+    timingData?: TimingData | null,
+    raceScheduleId?: unknown,
+    options: { onlyIfMissing?: boolean } = {},
+  ) => {
+    if (!user) return 'no-user' as const;
+    const decision = buildScheduleFinishSyncDecision(setupType, timingData, raceScheduleId);
+    if (decision.status !== 'ready') {
+      if (decision.status === 'missing-schedule-id' && import.meta.env.DEV) {
+        console.warn('[OnlyFast] Main timing was saved without a race_schedule_id; Schedule was not changed.');
+      }
+      return decision.status;
+    }
 
-    const raceDate = setups.main?.raceDate;
-    const trackName = setups.main?.trackName?.trim();
-    if (!raceDate || !trackName) return;
-
-    const finishText = String(finish);
     try {
+      if (options.onlyIfMissing) {
+        const { data: current, error: currentError } = await supabase
+          .from('race_schedule')
+          .select('id,finishing_position')
+          .eq('user_id', user.id)
+          .eq('id', decision.raceScheduleId)
+          .maybeSingle();
+        if (currentError) throw currentError;
+        if (!current) throw new Error('The linked schedule event no longer exists.');
+        if (!isBlankScheduleFinishingPosition(current.finishing_position)) return 'already-populated' as const;
+      }
+
       const { data, error } = await supabase
         .from('race_schedule')
-        .update({ finishing_position: finishText, updated_at: new Date().toISOString() })
+        .update({
+          finishing_position: decision.finishingPosition,
+          updated_at: new Date().toISOString(),
+        })
         .eq('user_id', user.id)
-        .eq('race_date', raceDate)
-        .ilike('track', trackName)
+        .eq('id', decision.raceScheduleId)
         .select('id,race_date,track,finishing_position');
 
-      if (error || !data || data.length === 0) return;
+      if (error) throw error;
+      if (!data || data.length === 0) throw new Error('The linked schedule event could not be updated.');
 
       const updatedById = new Map((data as { id: string; race_date: string; track: string; finishing_position: string | null }[]).map(row => [row.id, row]));
       setScheduleRows(prev => prev.map(row => updatedById.has(row.id) ? { ...row, ...updatedById.get(row.id) } : row));
-    } catch {
-      // Schedule sync is best-effort; never block saving setup/timing data.
+      return 'updated' as const;
+    } catch (error) {
+      if (import.meta.env.DEV) console.warn('[OnlyFast] Schedule finishing-position sync failed.', error);
+      setSaveMessage('Timing data was saved, but the Schedule finishing position could not be updated.');
+      setTimeout(() => setSaveMessage(''), 6000);
+      return 'error' as const;
     }
-  }, [user, setups.main?.raceDate, setups.main?.trackName]);
+  }, [user]);
 
-  const handleTimingDataSaved = useCallback((setupId: string, timingData: any) => {
+  const handleTimingDataSaved = useCallback((
+    setupId: string,
+    timingData: any,
+    session: { setupType?: string | null; raceScheduleId?: string | null },
+  ) => {
     const sessionTiming = attachTimingDataToSession(timingData, setupId);
     setTimingDataBySessionId(prev => ({ ...prev, [setupId]: sessionTiming }));
     const tab = (Object.keys(savedMeta.ids) as SetupType[])
       .find(t => savedMeta.ids[t] === setupId);
-    if (!tab) return;
-    if (tab === 'main') {
-      void syncMainEventResultToSchedule(sessionTiming);
-    }
+    const stableSetupType = normalizedText(session.setupType || tab);
+    if (stableSetupType !== 'main') return;
+    void syncMainEventResultToSchedule(
+      stableSetupType,
+      sessionTiming,
+      session.raceScheduleId,
+    );
   }, [savedMeta.ids, syncMainEventResultToSchedule]);
 
 
@@ -1685,7 +1779,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       cleared[t] = { ...cleared[t], raceClass: selectedCar, raceDate: today };
     });
     setSetups(cleared);
-    setSavedMeta({ name: undefined, ids: {} });
+    setSavedMeta({ name: undefined, ids: {}, raceScheduleId: undefined });
     setTimingDataBySessionId({});
     setSessionLabels({});
     setSessionOrders({});
@@ -1803,7 +1897,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     setSavedMeta(prev => {
       const ids = { ...prev.ids };
       delete ids[tab];
-      return { name: prev.name, ids };
+      return { name: prev.name, ids, raceScheduleId: prev.raceScheduleId };
     });
     setSessionLabels(prev => {
       const next = { ...prev };
@@ -1885,7 +1979,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
         cleared[t] = { ...cleared[t], raceClass: selectedCar };
       });
       setSetups(cleared);
-      setSavedMeta({ name: undefined, ids: {} });
+      setSavedMeta({ name: undefined, ids: {}, raceScheduleId: undefined });
       setTimingDataBySessionId({});
       setSessionLabels({});
       setSessionOrders({});
@@ -2123,6 +2217,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     if (!hasCurrentWeekend) return null;
 
     return {
+      raceScheduleId: savedMeta.raceScheduleId,
       trackName: source.trackName || savedMeta.name,
       date: source.raceDate,
       sessions: currentWeekendSessions.map(t => ({
@@ -2132,94 +2227,188 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       })),
     };
   })();
-  const raceNavigation = getRaceRolloverSelection(scheduleRows, scheduleToday);
-  const centerRaceDate = raceNavigation.center?.race_date || '';
-  const centerRaceTrack = String(raceNavigation.center?.track || '').trim();
-  const centerRaceQueryKey = raceNavigation.center
-    ? `${centerRaceDate}|${centerRaceTrack.toLowerCase()}`
-    : '';
+
+  const sortedScheduleRows = sortScheduleEntriesByDate(scheduleRows)
+    .filter(row => Boolean(normalizedText(row.track)));
+  const automaticRaceNavigation = getRaceRolloverSelection(sortedScheduleRows, scheduleToday);
+  const automaticRaceKey = getScheduleRaceKey(automaticRaceNavigation.center);
+  const displayedRace = sortedScheduleRows.find(row => getScheduleRaceKey(row) === displayedRaceKey)
+    || automaticRaceNavigation.center;
+  const displayedRaceNavigation = getRaceScheduleNavigation(sortedScheduleRows, displayedRace);
+  const displayedRaceQueryKey = getScheduleRaceKey(displayedRace);
+  const displayedRaceDate = displayedRace?.race_date || '';
+  const displayedRaceTrack = normalizedText(displayedRace?.track);
+  const automaticRaceIndex = sortedScheduleRows.findIndex(row => getScheduleRaceKey(row) === automaticRaceKey);
+  const displayedRaceIndex = sortedScheduleRows.findIndex(row => getScheduleRaceKey(row) === displayedRaceQueryKey);
+  const canCreateDisplayedRace = displayedRaceIndex >= 0 && (
+    automaticRaceIndex < 0 || displayedRaceIndex >= automaticRaceIndex
+  );
 
   useEffect(() => {
-    if (!user || !centerRaceQueryKey || !centerRaceDate || !centerRaceTrack) {
+    const priorAutomaticKey = previousAutomaticRaceKeyRef.current;
+    const displayedStillExists = sortedScheduleRows.some(row => getScheduleRaceKey(row) === displayedRaceKey);
+    if (!automaticRaceKey) {
+      setDisplayedRaceKey('');
+    } else if (!displayedRaceKey || !displayedStillExists || displayedRaceKey === priorAutomaticKey) {
+      setDisplayedRaceKey(automaticRaceKey);
+    }
+    previousAutomaticRaceKeyRef.current = automaticRaceKey;
+  }, [automaticRaceKey, displayedRaceKey, sortedScheduleRows]);
+
+  const fetchScheduledRaceSetupGroups = async (race: ScheduleRaceEntry) => {
+    if (!user) {
+      return {
+        choice: null,
+        rows: [] as RaceWeekendSessionRow[],
+        choices: [] as RaceSetupChoice[],
+        source: 'none' as const,
+        canLinkToSchedule: false,
+      };
+    }
+
+    // Fetch the immutable group directly plus a bounded venue candidate set.
+    // The broad venue token leaves punctuation, suffix, and ±3-day decisions
+    // to the one deterministic JavaScript resolver shared by the card/View Data.
+    const linkedRequest = race.id
+      ? supabase
+          .from('race_setups')
+          .select(RACE_SETUP_RESOLUTION_COLUMNS)
+          .eq('user_id', user.id)
+          .eq('race_schedule_id', race.id)
+          .limit(20)
+      : Promise.resolve({ data: [], error: null });
+    const trackToken = raceTrackSearchToken(race.track);
+    let trackRequest = supabase
+      .from('race_setups')
+      .select(RACE_SETUP_RESOLUTION_COLUMNS)
+      .eq('user_id', user.id)
+      .order('race_date', { ascending: false })
+      .order('updated_at', { ascending: false })
+      .limit(250);
+    if (trackToken) trackRequest = trackRequest.ilike('track_name', `%${trackToken}%`);
+
+    const [linkedResult, trackResult] = await Promise.all([linkedRequest, trackRequest]);
+    if (linkedResult.error) throw linkedResult.error;
+    if (trackResult.error) throw trackResult.error;
+    const candidateRows = [...(linkedResult.data || []), ...(trackResult.data || [])]
+      .reduce<RaceWeekendSessionRow[]>((rows, row) => {
+        const id = normalizedText(row.id);
+        return id && rows.some(existing => normalizedText(existing.id) === id) ? rows : [...rows, row];
+      }, []);
+    const resolution = resolveRaceSetupForEvent(race, candidateRows);
+    return {
+      ...resolution,
+      rows: resolution.choice?.rows || [],
+    };
+  };
+
+  useEffect(() => {
+    if (!user || !displayedRace || !displayedRaceQueryKey || !displayedRaceDate || !displayedRaceTrack) {
       setQueriedWeekendSessions(null);
       return;
     }
 
     let cancelled = false;
-    setQueriedWeekendSessions(prev => prev?.raceKey === centerRaceQueryKey ? prev : null);
+    setQueriedWeekendSessions(prev => prev?.raceKey === displayedRaceQueryKey ? prev : null);
     (async () => {
       try {
-        const { data, error } = await supabase
-          .from('race_setups')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('race_date', centerRaceDate)
-          .order('session_order', { ascending: true })
-          .order('created_at', { ascending: true });
-        if (error) throw error;
+        const result = await fetchScheduledRaceSetupGroups(displayedRace);
         if (!cancelled) {
           setQueriedWeekendSessions({
-            raceKey: centerRaceQueryKey,
-            rows: ((data || []) as RaceWeekendSessionRow[]).filter(row =>
-              raceIdentityMatchesScheduleRace(
-                String(row.race_date || ''),
-                String(row.track_name || ''),
-                { race_date: centerRaceDate, track: centerRaceTrack },
-              )
-            ),
+            raceKey: displayedRaceQueryKey,
+            ...result,
           });
         }
       } catch {
-        if (!cancelled) setQueriedWeekendSessions({ raceKey: centerRaceQueryKey, rows: [], queryFailed: true });
+        if (!cancelled) setQueriedWeekendSessions({
+          raceKey: displayedRaceQueryKey,
+          choice: null,
+          rows: [],
+          choices: [],
+          source: 'none',
+          canLinkToSchedule: false,
+          queryFailed: true,
+        });
       }
     })();
 
     return () => { cancelled = true; };
-  }, [centerRaceDate, centerRaceQueryKey, centerRaceTrack, refreshTrigger, user]);
+    // Re-query whenever the home view is re-entered so session changes from
+    // Saved Setups, another tab, or a completed save cannot leave stale labels.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeView, displayedRaceDate, displayedRaceQueryKey, displayedRaceTrack, refreshTrigger, user]);
 
-  const exactSavedWeekendSessions = queriedWeekendSessions?.raceKey === centerRaceQueryKey && !queriedWeekendSessions.queryFailed
-    ? (
-        queriedWeekendSessions.rows.length === 0
-          ? createNewRaceWeekendSessions()
-          : resolveSavedRaceWeekendSessions(queriedWeekendSessions.rows)
-      )
-    : null;
-  const withholdGeneratedDefaults = Boolean(
-    user && centerRaceQueryKey && (
-      queriedWeekendSessions?.raceKey !== centerRaceQueryKey ||
-      queriedWeekendSessions.queryFailed
-    )
-  );
   const defaultWeekendSessions = createNewRaceWeekendSessions()
     .map(session => ({ label: session.label, status: session.status }));
-  const activeWeekendMatchesCenter = Boolean(
-    raceNavigation.center &&
+  const activeWeekendMatchesDisplayed = Boolean(
+    displayedRace &&
     activeWeekend &&
-    activeWeekend.date === raceNavigation.center.race_date &&
-    String(activeWeekend.trackName || '').trim().toLowerCase() === String(raceNavigation.center.track || '').trim().toLowerCase()
+    (
+      (savedMeta.raceScheduleId && savedMeta.raceScheduleId === displayedRace.id) ||
+      (
+        normalizeRaceDate(activeWeekend.date) === normalizeRaceDate(displayedRace.race_date) &&
+        normalizeRaceTrack(activeWeekend.trackName) === normalizeRaceTrack(displayedRace.track)
+      )
+    )
   );
   const activeStatusBySessionId = new Map(
-    (activeWeekendMatchesCenter ? activeWeekend?.sessions : [])
+    (activeWeekendMatchesDisplayed ? activeWeekend?.sessions : [])
       ?.filter(session => Boolean(session.id))
       .map(session => [session.id as string, session.status]) || []
   );
-  const exactWeekendPreviewSessions = exactSavedWeekendSessions?.map(session => ({
-    id: session.id || undefined,
-    label: session.label,
-    status: (session.id && activeStatusBySessionId.get(session.id)) || session.status,
-  }));
-  const currentWeekend = raceNavigation.center
+  const queriedRaceIsReady = queriedWeekendSessions?.raceKey === displayedRaceQueryKey && !queriedWeekendSessions.queryFailed;
+  const persistedWeekendSessions = queriedRaceIsReady && queriedWeekendSessions.rows.length > 0
+    ? resolveSavedRaceWeekendSessions(queriedWeekendSessions.rows)
+    : [];
+  const displayedRaceFinalDate = displayedRace ? getRaceFinalScheduledDate(displayedRace) : null;
+  const displayedRaceIsPast = Boolean(
+    displayedRaceFinalDate && displayedRaceFinalDate.getTime() < toLocalDateOnly(scheduleToday).getTime()
+  );
+  const exactWeekendPreviewSessions = persistedWeekendSessions.map(session => {
+    const timingData = session.id
+      ? attachTimingDataToSession(session.row?.timing_data, session.id)
+      : null;
+    const finishingPosition = parsePerformancePosition(timingData?.finishing_position);
+    // A valid stored finishing position is authoritative evidence that this
+    // exact session completed. Never derive a result from lap times.
+    const sessionIsComplete = displayedRaceIsPast || session.status === 'complete' || finishingPosition !== null;
+    const result = sessionIsComplete && finishingPosition !== null
+      ? formatOrdinalPosition(finishingPosition)
+      : undefined;
+    return {
+      id: session.id || undefined,
+      label: session.label,
+      status: result
+        ? 'complete' as const
+        : (session.id && activeStatusBySessionId.get(session.id)) || session.status,
+      result,
+    };
+  });
+  const displayedPreviewSessions = exactWeekendPreviewSessions.length > 0
+    ? exactWeekendPreviewSessions
+    : activeWeekendMatchesDisplayed
+      ? activeWeekend?.sessions || []
+      : queriedRaceIsReady && canCreateDisplayedRace
+        ? defaultWeekendSessions
+        : [];
+  const currentWeekend = displayedRace
     ? {
-        trackName: raceNavigation.center.track || '',
-        date: raceNavigation.center.race_date || '',
-        sessions:
-          exactWeekendPreviewSessions ||
-          (activeWeekendMatchesCenter ? activeWeekend?.sessions : undefined) ||
-          (withholdGeneratedDefaults ? [] : defaultWeekendSessions),
+        trackName: displayedRace.track || '',
+        date: displayedRace.race_date || '',
+        sessions: displayedPreviewSessions,
       }
     : activeWeekend;
-  const currentWeekendTitle = 'Current Race Weekend' as const;
-  const centerRaceLabel = getRaceCenterLabel(raceNavigation, activatedRaceKey);
+  const currentWeekendTitle: 'Previous Race Weekend' | 'Current Race Weekend' | 'Next Race Weekend' =
+    displayedRaceIndex < automaticRaceIndex
+      ? 'Previous Race Weekend'
+      : displayedRaceIndex > automaticRaceIndex
+        ? 'Next Race Weekend'
+        : 'Current Race Weekend';
+  const weekendTransitionClass = prefersReducedMotion || !raceSlideDirection
+    ? 'translate-x-0 opacity-100'
+    : raceSlideDirection === 'left'
+      ? '-translate-x-6 opacity-0'
+      : 'translate-x-6 opacity-0';
   const upcomingEvents = getUpcomingScheduleEntries(scheduleRows, scheduleToday)
     .slice(0, 3)
     .map(r => ({
@@ -2288,53 +2477,147 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     setActiveView('saved');
   };
 
-  const openScheduledRaceWeekend = async (race?: ScheduleRaceEntry | null) => {
+  const hydrateRaceSetupChoice = async (choice: RaceSetupChoice): Promise<RaceSetupChoice> => {
+    if (!user) return choice;
+    const ids = choice.rows.map(row => normalizedText(row.id)).filter(Boolean);
+    if (ids.length === 0) return choice;
+    const { data, error } = await supabase
+      .from('race_setups')
+      .select('*')
+      .eq('user_id', user.id)
+      .in('id', ids);
+    if (error) throw error;
+    const rowById = new Map((data || []).map(row => [normalizedText(row.id), row]));
+    return {
+      ...choice,
+      rows: choice.rows.map(row => rowById.get(normalizedText(row.id)) || row),
+    };
+  };
+
+  const linkRaceSetupChoiceToSchedule = async (
+    choice: RaceSetupChoice,
+    race: ScheduleRaceEntry,
+    allowVerifiedRelink = false,
+  ) => {
+    if (!user || !race.id) return choice;
+    const belongsToAnotherSchedule = choice.rows.some(row => {
+      const linkedScheduleId = normalizedText(row.race_schedule_id);
+      return linkedScheduleId && linkedScheduleId !== race.id;
+    });
+    if (belongsToAnotherSchedule && !allowVerifiedRelink) {
+      throw new Error('This setup is already linked to a different scheduled race.');
+    }
+    const ids = choice.rows.map(row => normalizedText(row.id)).filter(Boolean);
+    if (ids.length === 0) return choice;
+    const { data, error } = await supabase
+      .from('race_setups')
+      .update({ race_schedule_id: race.id })
+      .eq('user_id', user.id)
+      .in('id', ids)
+      .select('*');
+    if (error) throw error;
+    return {
+      ...choice,
+      scheduleId: race.id,
+      rows: ((data || choice.rows) as RaceWeekendSessionRow[]).map(row => ({
+        ...row,
+        race_schedule_id: race.id,
+      })),
+    };
+  };
+
+  const loadRaceSetupChoice = async (
+    choice: RaceSetupChoice,
+    race?: ScheduleRaceEntry,
+    linkChoiceToRace = false,
+    preferredSessionId?: string,
+    verifiedPickerSelection = false,
+  ) => {
+    setRacePickerBusy(true);
+    try {
+      let selectedChoice = choice;
+      if (linkChoiceToRace && race) {
+        selectedChoice = await linkRaceSetupChoiceToSchedule(choice, race, verifiedPickerSelection);
+      } else {
+        selectedChoice = await hydrateRaceSetupChoice(choice);
+      }
+      const primary = selectedChoice.rows.find(row => normalizedText(row.id) === normalizedText(preferredSessionId))
+        || selectedChoice.rows[0];
+      if (!primary) throw new Error('This saved setup no longer contains any sessions.');
+      if (race && linkChoiceToRace) {
+        setQueriedWeekendSessions({
+          raceKey: getScheduleRaceKey(race),
+          choice: selectedChoice,
+          rows: selectedChoice.rows,
+          choices: [selectedChoice],
+          source: 'linked',
+          canLinkToSchedule: false,
+        });
+        const mainRow = selectedChoice.rows.find(row => normalizedText(row.setup_type) === 'main');
+        const mainId = normalizedText(mainRow?.id);
+        const mainTiming = mainRow && mainId
+          ? attachTimingDataToSession(mainRow.timing_data, mainId)
+          : null;
+        if (mainTiming) {
+          await syncMainEventResultToSchedule(
+            mainRow?.setup_type,
+            mainTiming,
+            mainRow?.race_schedule_id || race.id,
+            {
+            onlyIfMissing: true,
+            },
+          );
+        }
+      }
+      setRaceSetupPicker(null);
+      await handleLoadSetup({
+        ...primary,
+        __groupSetups: selectedChoice.rows,
+        __raceScheduleId: selectedChoice.scheduleId || (linkChoiceToRace ? race?.id : primary.race_schedule_id),
+      });
+      setRefreshTrigger(prev => prev + 1);
+    } catch (error: any) {
+      const message = error?.message || 'Unable to load this setup.';
+      setRaceSetupPicker(prev => prev ? {
+        ...prev,
+        error: message,
+      } : prev);
+      setSaveMessage(`Unable to associate this race setup: ${message}`);
+      setTimeout(() => setSaveMessage(''), 6000);
+    } finally {
+      setRacePickerBusy(false);
+    }
+  };
+
+  const openFallbackSetupPicker = async (race: ScheduleRaceEntry) => {
+    if (!user) {
+      setRaceSetupPicker({
+        race,
+        label: 'no saved data for this race, choose setup to load',
+        choices: [],
+        linkChoiceToRace: true,
+      });
+      return;
+    }
+    const { data, error } = await supabase
+      .from('race_setups')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('race_date', { ascending: false })
+      .order('updated_at', { ascending: false })
+      .limit(250);
+    if (error) throw error;
+    setRaceSetupPicker({
+      race,
+      label: 'no saved data for this race, choose setup to load',
+      choices: buildRaceSetupChoices((data || []) as RaceWeekendSessionRow[]),
+      linkChoiceToRace: true,
+    });
+  };
+
+  const initializeScheduledRaceWeekend = (race: ScheduleRaceEntry) => {
     const track = (race?.track || '').trim();
     const raceDate = race?.race_date || '';
-    if (!race || !track || !raceDate) {
-      setActiveView('schedule');
-      return;
-    }
-
-    const currentMatch = ALL_SLOTS.find(t =>
-      isDisplayableSession(t) && raceIdentityMatchesScheduleRace(setups[t]?.raceDate, setups[t]?.trackName, race)
-    );
-    if (currentMatch) {
-      setActiveTab(currentMatch);
-      setActiveView('setup');
-      return;
-    }
-
-    if (user) {
-      try {
-        const { data } = await supabase
-          .from('race_setups')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('race_date', raceDate)
-          .order('updated_at', { ascending: false })
-          .order('created_at', { ascending: false });
-        const matchingRows = ((data || []) as RaceWeekendSessionRow[]).filter(row =>
-          raceIdentityMatchesScheduleRace(
-            String(row.race_date || ''),
-            String(row.track_name || ''),
-            race,
-          )
-        );
-        const resolvedSessions = resolveSavedRaceWeekendSessions(matchingRows);
-        const existing = resolvedSessions[0]?.row;
-        if (existing) {
-          await handleLoadSetup({
-            ...existing,
-            __groupSetups: resolvedSessions.map(session => session.row).filter(Boolean),
-          });
-          return;
-        }
-      } catch {
-        // Fall through to a local prefilled setup if lookup fails.
-      }
-    }
-
     const prefilled = emptyAllSetups();
     DEFAULT_SESSION_SLOTS.forEach(t => {
       prefilled[t] = {
@@ -2345,7 +2628,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       };
     });
     setSetups(prefilled);
-    setSavedMeta({ name: undefined, ids: {} });
+    setSavedMeta({ name: undefined, ids: {}, raceScheduleId: normalizedText(race.id) || undefined });
     setTimingDataBySessionId({});
     setSessionLabels({});
     setSessionOrders({});
@@ -2355,12 +2638,79 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     setActiveView('setup');
   };
 
-  const activateScheduledRace = (race?: ScheduleRaceEntry | null) => {
-    if (!race || !user) return;
+  const openScheduledRaceWeekend = async (
+    race?: ScheduleRaceEntry | null,
+    allowCreate = false,
+  ) => {
+    const track = normalizedText(race?.track);
+    const raceDate = normalizedText(race?.race_date);
+    if (!race || !track || !raceDate) {
+      setActiveView('schedule');
+      return;
+    }
+
+    try {
+      if (user) {
+        const raceKey = getScheduleRaceKey(race);
+        const cachedResult = queriedWeekendSessions?.raceKey === raceKey && !queriedWeekendSessions.queryFailed
+          ? queriedWeekendSessions
+          : null;
+        const result = cachedResult || await fetchScheduledRaceSetupGroups(race);
+        if (result.choice) {
+          const preferredSessionId = savedMeta.ids[activeTab];
+          await loadRaceSetupChoice(
+            result.choice,
+            race,
+            result.canLinkToSchedule,
+            preferredSessionId,
+          );
+          return;
+        }
+      }
+
+      const activeSession = ALL_SLOTS.find(t =>
+        isDisplayableSession(t) &&
+        savedMeta.raceScheduleId === race.id &&
+        normalizeRaceDate(setups[t]?.raceDate) === normalizeRaceDate(race.race_date) &&
+        normalizeRaceTrack(setups[t]?.trackName) === normalizeRaceTrack(race.track)
+      );
+      if (activeSession) {
+        setActiveTab(activeSession);
+        setActiveView('setup');
+        return;
+      }
+
+      if (allowCreate) {
+        initializeScheduledRaceWeekend(race);
+        return;
+      }
+
+      await openFallbackSetupPicker(race);
+    } catch (error: any) {
+      setSaveMessage('Unable to check saved data for this race: ' + (error?.message || 'Please try again.'));
+      setTimeout(() => setSaveMessage(''), 6000);
+    }
+  };
+
+  const browseToRace = (race: ScheduleRaceEntry | null, direction: 'backward' | 'forward') => {
+    if (!race || raceIsAnimating) return;
     const key = getScheduleRaceKey(race);
     if (!key) return;
-    setActivatedRaceKey(key);
-    try { localStorage.setItem(`${ACTIVE_RACE_SELECTION_PREFIX}${user.id}`, key); } catch {/* ignore */}
+    if (prefersReducedMotion) {
+      setDisplayedRaceKey(key);
+      return;
+    }
+    const exitDirection = direction === 'forward' ? 'left' : 'right';
+    setRaceSlideDirection(exitDirection);
+    setRaceIsAnimating(true);
+    setTimeout(() => {
+      setDisplayedRaceKey(key);
+      setRaceSlideDirection(exitDirection === 'left' ? 'right' : 'left');
+      requestAnimationFrame(() => {
+        setRaceSlideDirection(null);
+        setTimeout(() => setRaceIsAnimating(false), 200);
+      });
+    }, 160);
   };
 
   const handleHomeAction = async (action: HomeAction) => {
@@ -2370,14 +2720,13 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     }
 
     if (action === 'previous-race') {
-      await openScheduledRaceWeekend(raceNavigation.previous);
+      browseToRace(displayedRaceNavigation.previous, 'backward');
       return;
     }
 
-    if (action === 'current-race') {
-      if (raceNavigation.center) {
-        activateScheduledRace(raceNavigation.center);
-        await openScheduledRaceWeekend(raceNavigation.center);
+    if (action === 'view-race-data') {
+      if (displayedRace) {
+        await openScheduledRaceWeekend(displayedRace, canCreateDisplayedRace);
       } else {
         await openLastSavedSetup();
       }
@@ -2385,7 +2734,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     }
 
     if (action === 'next-race') {
-      await openScheduledRaceWeekend(raceNavigation.next);
+      browseToRace(displayedRaceNavigation.next, 'forward');
       return;
     }
 
@@ -2510,9 +2859,9 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
             nextEvent={nextEvent}
             currentWeekend={currentWeekend}
             currentWeekendTitle={currentWeekendTitle}
-            hasPreviousRace={Boolean(raceNavigation.previous)}
-            hasNextRace={Boolean(raceNavigation.next)}
-            centerRaceLabel={centerRaceLabel}
+            hasPreviousRace={Boolean(displayedRaceNavigation.previous)}
+            hasNextRace={Boolean(displayedRaceNavigation.next)}
+            weekendTransitionClass={weekendTransitionClass}
             performanceStats={performanceStats}
             upcomingEvents={upcomingEvents}
             middleSlot={<RookieAdSlot placement="home_middle" user={user} />}
@@ -2527,6 +2876,11 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
             <SavedSetups
               user={user}
               onLoad={handleLoadSetup}
+              onLoadBaseSetup={(setup) => {
+                setBaseTemplateToEdit(setup);
+                setActiveView('create-base');
+              }}
+              onDataChanged={() => setRefreshTrigger(prev => prev + 1)}
               refreshTrigger={refreshTrigger}
               activeClass={selectedCar}
               classLocksEnabled={classLocksEnabled}
@@ -2548,6 +2902,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
             customFields={customFields}
             onCustomFieldsChange={setCustomFields}
             onTemplatesChange={() => setBaseTemplateRefresh(prev => prev + 1)}
+            initialTemplate={baseTemplateToEdit}
           />
         ) : (
 
@@ -3064,6 +3419,68 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
             <div className="flex justify-end gap-2 mt-5">
               <button onClick={() => setAddSessionOpen(false)} className="px-4 py-2 rounded-lg text-sm font-medium text-[#6B7280] hover:bg-[#F5F5F7] transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8]">Cancel</button>
               <button onClick={submitAddSession} className="px-4 py-2 rounded-lg text-sm font-semibold bg-[#00A8E8] hover:bg-[#0090c7] text-white transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8]">Add</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {raceSetupPicker && (
+        <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/45 p-4" role="dialog" aria-modal="true" aria-labelledby="race-setup-picker-title">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+            <h3 id="race-setup-picker-title" className="text-lg font-bold text-[#1A1B23]">Choose Setup</h3>
+            <p className="mt-1 text-sm text-[#6B7280]">{raceSetupPicker.label}</p>
+            <p className="mt-1 text-xs font-semibold text-[#00A8E8]">
+              {normalizedText(raceSetupPicker.race.track)} · {normalizedText(raceSetupPicker.race.race_date)}
+            </p>
+            {raceSetupPicker.error && (
+              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700" role="alert">
+                {raceSetupPicker.error}
+              </div>
+            )}
+            {raceSetupPicker.choices.length > 0 ? (
+              <ul className="mt-4 max-h-[360px] space-y-2 overflow-y-auto" aria-label="Saved setup choices">
+                {raceSetupPicker.choices.map(choice => {
+                  const labels = resolveSavedRaceWeekendSessions(choice.rows).map(session => session.label);
+                  return (
+                    <li key={choice.key}>
+                      <button
+                        type="button"
+                        disabled={racePickerBusy}
+                        onClick={() => loadRaceSetupChoice(
+                          choice,
+                          raceSetupPicker.race,
+                          raceSetupPicker.linkChoiceToRace,
+                          undefined,
+                          true,
+                        )}
+                        className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-3 text-left transition-colors hover:border-[#00A8E8]/40 hover:bg-[#00A8E8]/5 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
+                      >
+                        <div className="font-semibold text-[#1A1B23]">{choice.title.replace(/^\[BASE TEMPLATE\]\s*/i, '')}</div>
+                        <div className="mt-0.5 text-xs text-[#6B7280]">
+                          {[choice.trackName, choice.raceDate].filter(Boolean).join(' · ') || 'Saved setup'}
+                        </div>
+                        {labels.length > 0 && (
+                          <div className="mt-1 text-xs font-medium text-[#00A8E8]">{labels.join(' · ')}</div>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <div className="mt-4 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-5 text-center text-sm text-[#6B7280]">
+                {user ? 'No saved setups are available to choose from.' : 'Sign in to view your saved setups.'}
+              </div>
+            )}
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                disabled={racePickerBusy}
+                onClick={() => setRaceSetupPicker(null)}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-[#6B7280] hover:bg-[#F5F5F7] disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>

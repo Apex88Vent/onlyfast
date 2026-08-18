@@ -32,6 +32,7 @@ create table if not exists public.race_setups (
   setup_name   text,
   session_label text,
   session_order integer,
+  race_schedule_id uuid,
   track_name   text,
   race_date    date,
   race_class   text,
@@ -116,6 +117,7 @@ alter table public.race_setups add column if not exists session_order integer;
 alter table public.race_setups add column if not exists track_shape text;
 alter table public.race_setups add column if not exists track_length text;
 alter table public.race_setups add column if not exists timing_data jsonb;
+alter table public.race_setups add column if not exists race_schedule_id uuid;
 
 -- Helpful indexes
 create index if not exists race_setups_user_id_idx     on public.race_setups (user_id);
@@ -168,6 +170,29 @@ create table if not exists public.race_schedule (
   constraint race_schedule_end_on_or_after_start
     check (race_end_date is null or race_end_date >= race_date)
 );
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'race_setups_race_schedule_id_fkey'
+      and conrelid = 'public.race_setups'::regclass
+  ) then
+    alter table public.race_setups
+      add constraint race_setups_race_schedule_id_fkey
+      foreign key (race_schedule_id)
+      references public.race_schedule(id)
+      on delete set null;
+  end if;
+end $$;
+
+create index if not exists race_setups_user_schedule_idx
+  on public.race_setups (user_id, race_schedule_id)
+  where race_schedule_id is not null;
+
+create unique index if not exists race_setups_schedule_session_uidx
+  on public.race_setups (user_id, race_schedule_id, setup_type)
+  where race_schedule_id is not null;
 
 alter table public.race_schedule add column if not exists race_end_date date;
 alter table public.race_schedule drop constraint if exists race_schedule_end_on_or_after_start;

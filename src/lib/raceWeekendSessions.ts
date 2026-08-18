@@ -27,6 +27,11 @@ export interface RaceWeekendSessionRow extends Record<string, unknown> {
   session_order?: unknown;
   session_started?: unknown;
   session_finished?: unknown;
+  setup_name?: unknown;
+  track_name?: unknown;
+  race_date?: unknown;
+  race_schedule_id?: unknown;
+  timing_data?: unknown;
   created_at?: unknown;
   updated_at?: unknown;
 }
@@ -128,4 +133,3 @@ export const createNewRaceWeekendSessions = (): ResolvedRaceWeekendSession[] =>
     status: 'not-started',
     row: null,
   }));
-

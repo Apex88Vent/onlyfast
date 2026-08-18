@@ -12,6 +12,7 @@ interface CreateBaseSetupViewProps {
   customFields: CustomField[];
   onCustomFieldsChange: (fields: CustomField[]) => void;
   onTemplatesChange?: () => void;
+  initialTemplate?: any | null;
 }
 
 interface BaseTemplateState {
@@ -50,7 +51,7 @@ const emptyTemplate = (): BaseTemplateState => ({
 const STORAGE_KEY = 'onlyfast_base_template_draft_v1';
 
 const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
-  user, selectedCar, onSignInClick, customFields, onCustomFieldsChange, onTemplatesChange,
+  user, selectedCar, onSignInClick, customFields, onCustomFieldsChange, onTemplatesChange, initialTemplate,
 }) => {
   const prefix = useId();
   const [template, setTemplate] = useState<BaseTemplateState>(emptyTemplate());
@@ -97,13 +98,21 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
   const fetchTemplates = useCallback(async () => {
     if (!user) return;
     try {
-      const { data } = await supabase
+      const { data: canonical } = await supabase
         .from('race_setups')
         .select('*')
         .eq('user_id', user.id)
         .eq('setup_type', 'base_template')
         .order('created_at', { ascending: false });
-      if (data) setTemplates(data);
+      const { data: legacy } = await supabase
+        .from('race_setups')
+        .select('*')
+        .eq('user_id', user.id)
+        .ilike('setup_name', '[BASE TEMPLATE]%')
+        .order('created_at', { ascending: false });
+      const byId = new Map<string, any>();
+      [...(canonical || []), ...(legacy || [])].forEach(row => byId.set(row.id, row));
+      setTemplates([...byId.values()]);
     } catch {}
   }, [user]);
 
@@ -323,6 +332,14 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
     setEditingId(t.id);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  useEffect(() => {
+    if (!initialTemplate?.id) return;
+    handleEdit(initialTemplate);
+    // Each Saved Setups click supplies a freshly fetched row object, so clicking
+    // the same record again intentionally rehydrates its persisted values.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialTemplate]);
 
   const handleCopySource = (id: string) => {
     setCopySourceId(id);

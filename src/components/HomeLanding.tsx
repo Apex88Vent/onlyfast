@@ -1,7 +1,7 @@
 import React from 'react';
 import { ArrowLeft, ArrowRight, BarChart3, CalendarDays, CheckCircle2, CircleDashed, Library, Plus, Save, Trophy, Wrench, type LucideIcon } from 'lucide-react';
 
-export type HomeAction = 'new-setup' | 'saved' | 'schedule' | 'todo' | 'parts' | 'library' | 'previous-race' | 'current-race' | 'next-race';
+export type HomeAction = 'new-setup' | 'saved' | 'schedule' | 'todo' | 'parts' | 'library' | 'previous-race' | 'view-race-data' | 'next-race';
 
 interface CurrentWeekend {
   trackName?: string;
@@ -10,6 +10,7 @@ interface CurrentWeekend {
     id?: string;
     label: string;
     status: 'complete' | 'in-progress' | 'not-started';
+    result?: string;
   }[];
 }
 
@@ -31,10 +32,10 @@ interface HomeLandingProps {
   carNumber?: string;
   nextEvent?: UpcomingEvent | null;
   currentWeekend?: CurrentWeekend | null;
-  currentWeekendTitle?: 'Current Race Weekend' | 'Next Race Weekend';
+  currentWeekendTitle?: 'Previous Race Weekend' | 'Current Race Weekend' | 'Next Race Weekend';
   hasPreviousRace?: boolean;
   hasNextRace?: boolean;
-  centerRaceLabel?: 'Current Race' | 'Upcoming Race';
+  weekendTransitionClass?: string;
   performanceStats?: PerformanceStat[];
   upcomingEvents?: UpcomingEvent[];
   middleSlot?: React.ReactNode;
@@ -130,6 +131,8 @@ const TrackLogoPanel: React.FC<{ trackName?: string }> = ({ trackName }) => {
   const [imageFailed, setImageFailed] = React.useState(false);
   const src = trackLogoSrc(trackName);
 
+  React.useEffect(() => setImageFailed(false), [src]);
+
   return (
     <div className="hidden sm:flex overflow-hidden rounded-l-2xl bg-[#1A1B23] min-h-full relative items-end p-4">
       {src && !imageFailed && (
@@ -163,6 +166,8 @@ const TrackLogoPanel: React.FC<{ trackName?: string }> = ({ trackName }) => {
 const TrackLogoBadge: React.FC<{ trackName?: string }> = ({ trackName }) => {
   const [imageFailed, setImageFailed] = React.useState(false);
   const src = trackLogoSrc(trackName);
+
+  React.useEffect(() => setImageFailed(false), [src]);
   const initials = (trackName || 'TR')
     .split(' ')
     .filter(Boolean)
@@ -206,7 +211,7 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
   currentWeekendTitle,
   hasPreviousRace = false,
   hasNextRace = false,
-  centerRaceLabel = 'Current Race',
+  weekendTransitionClass = 'translate-x-0 opacity-100',
   performanceStats = [],
   upcomingEvents = [],
   middleSlot,
@@ -315,7 +320,7 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
 
       {showCurrentRaceWeekendCard && displayedWeekend && (
         <section className="mb-2 sm:mb-4 bg-white rounded-2xl border border-[#E5E7EB] shadow-sm overflow-hidden">
-          <div className="grid sm:grid-cols-[34%_1fr]">
+          <div className={`grid sm:grid-cols-[34%_1fr] transition-all duration-200 ease-out ${weekendTransitionClass}`}>
             <TrackLogoPanel trackName={displayedWeekend.trackName} />
             <div className="p-2.5 sm:p-5">
               <div className="text-[#00A8E8] text-[11px] sm:text-sm font-semibold uppercase tracking-[0.08em]">
@@ -348,7 +353,10 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
                         <CircleDashed className="mt-0.5 h-4 w-4 sm:h-6 sm:w-6 text-[#00A8E8] flex-shrink-0" aria-hidden="true" />
                       )}
                       <div className="min-w-0">
-                        <div className="text-[12px] sm:text-sm font-semibold text-[#1A1B23] leading-tight">{session.label}</div>
+                        <div className="text-[12px] sm:text-sm font-semibold text-[#1A1B23] leading-tight">
+                          {session.label}
+                          {session.result && <span className="text-[#00A8E8]"> — {session.result}</span>}
+                        </div>
                         <div className="text-[10px] sm:text-[11px] text-[#00A8E8] font-bold uppercase mt-0.5 sm:mt-1">
                           {session.status === 'complete' ? 'Complete' : session.status === 'in-progress' ? 'In Progress' : 'Not Started'}
                         </div>
@@ -369,10 +377,10 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => onAction('current-race')}
+                  onClick={() => onAction('view-race-data')}
                   className="bg-[#00A8E8] hover:bg-[#0090c7] text-white px-1.5 sm:px-3 py-1.5 sm:py-3 rounded-xl text-[10px] sm:text-base font-bold transition-colors flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
                 >
-                  {centerRaceLabel}
+                  View Data
                 </button>
                 <button
                   type="button"

@@ -25,17 +25,15 @@ const BaseTemplatePicker: React.FC<BaseTemplatePickerProps> = ({ user, refreshKe
         .eq('setup_type', 'base_template')
         .order('created_at', { ascending: false });
 
-      let list = primary || [];
-      if (list.length === 0) {
-        const { data: fallback } = await supabase
-          .from('race_setups')
-          .select('*')
-          .eq('user_id', user.id)
-          .ilike('setup_name', '[BASE TEMPLATE]%')
-          .order('created_at', { ascending: false });
-        list = fallback || [];
-      }
-      setTemplates(list);
+      const { data: fallback } = await supabase
+        .from('race_setups')
+        .select('*')
+        .eq('user_id', user.id)
+        .ilike('setup_name', '[BASE TEMPLATE]%')
+        .order('created_at', { ascending: false });
+      const byId = new Map<string, any>();
+      [...(primary || []), ...(fallback || [])].forEach(row => byId.set(row.id, row));
+      setTemplates([...byId.values()]);
     } catch {}
     setLoading(false);
   }, [user]);

@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
 import type { TimingData } from '@/lib/timingData';
+import { parsePerformancePosition } from '@/lib/performanceSummary';
 
 export type { TimingData } from '@/lib/timingData';
 
 /**
  * Renders the timing_data jsonb (saved on a race_setups row) as a compact
- * read-only summary card. Only the five "kept" fields are surfaced in the UI
- * per the simplified spec:
+ * read-only summary card. The saved values surfaced in the UI are:
  *   - Fastest Lap Time
  *   - Fastest Lap On Lap #
  *   - Slowest Lap Time
  *   - Average Lap Time
  *   - Positions Gained / Lost
+ *   - Finishing Position
  *
  * lap_times[] is still in timing_data on the DB record and is now rendered
  * in a collapsible dropdown so the user can verify individual laps.
@@ -35,7 +36,23 @@ const fmtPosDelta = (v: number | null | undefined): { text: string; tone: 'good'
   return { text: '0', tone: 'neutral' };
 };
 
-// Color palettes for the five stat cards, matching the colors used in the
+const fmtFinish = (value: unknown): string => {
+  const position = parsePerformancePosition(value);
+  if (position === null) return '—';
+  const mod100 = position % 100;
+  const suffix = mod100 >= 11 && mod100 <= 13
+    ? 'th'
+    : position % 10 === 1
+      ? 'st'
+      : position % 10 === 2
+        ? 'nd'
+        : position % 10 === 3
+          ? 'rd'
+          : 'th';
+  return `${position}${suffix}`;
+};
+
+// Color palettes for the stat cards, matching the colors used in the
 // scan review screen so a user immediately recognizes them.
 const STAT_COLORS = {
   green: {
@@ -72,6 +89,13 @@ const STAT_COLORS = {
     label: 'text-purple-700',
     value: 'text-purple-800',
     icon: '#7c3aed',
+  },
+  amber: {
+    bg: 'bg-amber-50',
+    border: 'border-amber-200',
+    label: 'text-amber-700',
+    value: 'text-amber-800',
+    icon: '#d97706',
   },
   neutral: {
     bg: 'bg-[#F9FAFB]',
@@ -134,7 +158,7 @@ const TimingDataDisplay: React.FC<Props> = ({ timingData, setupType }) => {
         )}
       </div>
 
-      <dl className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <dl className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <Stat
           label="Fastest Lap"
           value={fmt(timingData.fastest_lap_time)}
@@ -164,6 +188,12 @@ const TimingDataDisplay: React.FC<Props> = ({ timingData, setupType }) => {
           value={pos.text}
           color={posColor}
           icon="trending"
+        />
+        <Stat
+          label="Finishing Position"
+          value={fmtFinish(timingData.finishing_position)}
+          color="amber"
+          icon="trophy"
         />
       </dl>
 
@@ -202,6 +232,8 @@ const StatIcon: React.FC<{ icon: string; color: string }> = ({ icon, color }) =>
       return <svg {...common}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>;
     case 'trending':
       return <svg {...common}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>;
+    case 'trophy':
+      return <svg {...common}><path d="M8 21h8" /><path d="M12 17v4" /><path d="M7 4h10v5a5 5 0 0 1-10 0V4Z" /><path d="M7 6H4v2a4 4 0 0 0 4 4" /><path d="M17 6h3v2a4 4 0 0 1-4 4" /></svg>;
     default:
       return null;
   }
