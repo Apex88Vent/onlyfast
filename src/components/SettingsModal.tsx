@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import NativeSubscriptionControls from '@/components/NativeSubscriptionControls';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import {
@@ -6,7 +7,7 @@ import {
   deriveAccountStatus,
   fetchUserSubscription,
 } from '@/lib/subscription';
-import { hideExternalPayments, nativeBillingMessage } from '@/lib/paymentVisibility';
+import { hideExternalPayments, isMedianIOSApp, nativeBillingMessage } from '@/lib/paymentVisibility';
 import { useBetaFeatures } from '@/hooks/useBetaFeatures';
 import { BETA_FEATURES } from '@/lib/betaFeatures';
 import { Link } from 'react-router-dom';
@@ -360,6 +361,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
                   <span className="h-4 w-4 rounded-full border-2 border-[#00A8E8]/30 border-t-[#00A8E8] animate-spin" aria-hidden="true" />
                   Loading subscription…
                 </div>
+              ) : isMedianIOSApp ? (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-[#6B7280]">Current Plan:</span>
+                  {planBadge}
+                </div>
               ) : (
                 <>
                   <div className="flex items-center justify-between">
@@ -403,7 +409,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
                   {account?.label !== 'Admin' && (
                     hideExternalPayments ? (
                       <div className="mt-4 rounded-lg border border-[#D7EEF8] bg-[#F3FBFE] px-3 py-2 text-xs font-semibold text-[#1A1B23]">
-                        {nativeBillingMessage}
+                        <NativeSubscriptionControls key={user.id} userId={user.id} />
                       </div>
                     ) : (
                     <>
@@ -415,6 +421,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
                         Upgrade Subscription
                       </a>
 
+                      {account?.row?.subscription_source === 'revenuecat' && (
+                        <p className="mt-2 text-xs text-[#6B7280]">
+                          Manage or cancel this subscription in the Apple App Store or Google Play account where you purchased it.
+                        </p>
+                      )}
+
                       {/* SECONDARY (smaller link): Cancel Subscription — shown for
                           ALL paid members (Pro AND Teams). Previously this was gated
                           on a Stripe customer id, which hid the link for Teams users
@@ -423,7 +435,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
                           the cancellation is processed. Once Stripe reports the
                           subscription inactive, the app falls back to Rookie
                           automatically (deriveAccountStatus). */}
-                      {(account?.label === 'Pro' || account?.label === 'Teams' || hasStripeCustomer) && (
+                      {(account?.row?.subscription_source !== 'revenuecat' && (hasStripeCustomer || account?.label === 'Pro' || account?.label === 'Teams')) && (
                         <button
                           onClick={() => { setSubError(''); setCancelConfirmOpen(true); }}
                           disabled={portalLoading}
@@ -450,7 +462,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
               Contact Support
             </Link>
             <p className="text-xs text-[#9CA3AF] mt-2">
-              For account, billing, privacy, or data requests.
+              {isMedianIOSApp
+                ? 'For technical support, privacy, or data requests.'
+                : 'For account, billing, privacy, or data requests.'}
             </p>
           </section>
 
@@ -458,8 +472,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
             <h3 className="text-sm font-bold text-[#1A1B23] mb-2">Account deletion</h3>
             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
               <p className="text-xs text-red-800">
-                Permanently delete your OnlyFast account and app data. This does not cancel any
-                active Stripe subscription, so manage billing first or contact support.
+                {isMedianIOSApp
+                  ? 'Permanently delete your OnlyFast account and app data.'
+                  : 'Permanently delete your OnlyFast account and app data. This does not cancel any active Stripe, Apple, or Google subscription, so manage billing first or contact support.'}
               </p>
               <button
                 type="button"
@@ -486,10 +501,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
               This permanently deletes your OnlyFast account, saved setups, schedule, parts,
               shared setup links, and usage records.
             </p>
-            <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              Deleting your account does not cancel an active Stripe subscription. Manage or
-              cancel billing first, or contact {SUPPORT_EMAIL}.
-            </p>
+            {!isMedianIOSApp && (
+              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Deleting your account does not cancel an active Stripe, Apple, or Google subscription. Manage or cancel billing first, or contact {SUPPORT_EMAIL}.
+              </p>
+            )}
             <label htmlFor="delete-account-confirm" className="mt-4 block text-xs font-semibold text-[#6B7280]">
               Type DELETE to confirm
             </label>

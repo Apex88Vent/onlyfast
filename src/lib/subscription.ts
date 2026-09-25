@@ -23,6 +23,7 @@ export interface UserSubscriptionRow {
   stripe_subscription_id: string | null;
   stripe_price_id: string | null;
   stripe_checkout_session_id: string | null;
+  subscription_source?: string | null;
 }
 
 export interface AccountStatus {
@@ -68,14 +69,14 @@ export async function fetchUserSubscription(
 
   const { data, error } = await supabase
     .from('user_subscriptions')
-    .select('user_id, plan, status, stripe_customer_id, stripe_subscription_id, stripe_price_id, stripe_checkout_session_id')
+    .select('user_id, plan, status, stripe_customer_id, stripe_subscription_id, stripe_price_id, stripe_checkout_session_id, subscription_source')
     .eq('user_id', uid)
     .maybeSingle();
 
   if (error) {
     // eslint-disable-next-line no-console
     console.warn('[subscription] fetch error:', error.message);
-    return null;
+    throw error;
   }
   return (data as UserSubscriptionRow) ?? null;
 }
@@ -144,6 +145,8 @@ export async function syncMembershipFromSubscription(): Promise<AccountStatus | 
   const current = readMembership(meta);
 
   const row = await fetchUserSubscription(user.id);
+  const { data: latestSession } = await supabase.auth.getSession();
+  if (latestSession.session?.user.id !== user.id) return null;
   const status = deriveAccountStatus(row, meta);
 
   // Never override admin access.
@@ -165,7 +168,7 @@ export async function syncMembershipFromSubscription(): Promise<AccountStatus | 
     await saveMembership({
       ...DEFAULT_MEMBERSHIP,
       membership_tier: desiredTier,
-    });
+    }, user.id);
   }
 
   return status;

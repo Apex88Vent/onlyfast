@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { isMedianIOSApp } from '@/lib/paymentVisibility';
 import { supabase } from '@/lib/supabase';
 import type { User } from '@supabase/supabase-js';
 import { getClassConfig, FieldDef } from '@/lib/classConfigs';
@@ -176,7 +177,7 @@ const ViewSharedSetupModal: React.FC<ViewSharedSetupModalProps> = ({ isOpen, onC
               aria-describedby={error ? 'share-code-error' : undefined}
             />
             {error && <p id="share-code-error" className="text-sm text-red-600 mt-2" role="alert">{error}</p>}
-            {classLocked && onUpgrade && (
+            {classLocked && onUpgrade && !isMedianIOSApp && (
               <button onClick={onUpgrade} className="mt-3 text-sm font-semibold text-[#00A8E8] underline-offset-4 hover:underline focus:outline-none focus:ring-2 focus:ring-[#00A8E8] rounded">
                 Upgrade to Teams
               </button>

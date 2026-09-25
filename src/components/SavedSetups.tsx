@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { isMedianIOSApp } from '@/lib/paymentVisibility';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import {
@@ -446,7 +447,7 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
                       </button>}
                     </div>
 
-                    {isLocked && (
+                    {isLocked && !isMedianIOSApp && (
                       <button
                         onClick={(event) => { event.stopPropagation(); onUpgrade(); }}
                         className="mb-3 text-xs font-semibold text-[#00A8E8] underline-offset-4 hover:underline focus:outline-none focus:ring-2 focus:ring-[#00A8E8] rounded"

@@ -113,7 +113,7 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack }) => 
                 </div>
               )}
 
-              {plan.tier === 'pro' && (
+              {plan.tier === 'pro' && !hideExternalPayments && (
                 <div className="flex justify-center mb-1 mt-1">
                   <span className="inline-flex items-center gap-1.5 bg-[#1A1B23] text-white text-xs font-bold uppercase tracking-wide px-3 py-1 rounded-full shadow">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
@@ -127,8 +127,8 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack }) => 
                   {plan.displayName}
                 </h3>
                 <p className="text-3xl font-extrabold text-[#1A1B23] mt-2">
-                  {plan.priceDisplay === 'Free' ? 'Free' : plan.priceDisplay.split('/')[0]}
-                  {plan.priceDisplay !== 'Free' && (
+                  {hideExternalPayments && plan.tier !== 'rookie' ? <span className="text-base">See price in store</span> : plan.priceDisplay === 'Free' ? 'Free' : plan.priceDisplay.split('/')[0]}
+                  {plan.priceDisplay !== 'Free' && !hideExternalPayments && (
                     <span className="text-base font-medium text-[#6B7280]">/mo</span>
                   )}
                 </p>
@@ -154,7 +154,7 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack }) => 
                     : 'bg-[#F5F5F7] hover:bg-[#E5E7EB] text-[#1A1B23] border border-[#E5E7EB]'
                 }`}
               >
-                {plan.buttonText}
+                {hideExternalPayments && plan.tier !== 'rookie' ? `View ${plan.displayName}` : plan.buttonText}
               </button>
 
             </div>

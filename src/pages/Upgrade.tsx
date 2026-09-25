@@ -10,10 +10,11 @@ import {
   DEFAULT_MEMBERSHIP,
   type CheckoutPlan,
 } from '@/lib/membership';
-import { hideExternalPayments, nativeUpgradeMessage } from '@/lib/paymentVisibility';
+import { hideExternalPayments, isMedianIOSApp, nativeUpgradeMessage } from '@/lib/paymentVisibility';
 import { deriveAccountStatus, fetchUserSubscription, type AccountStatus } from '@/lib/subscription';
 import StripeBuyButton from '@/components/StripeBuyButton';
 import AuthModal from '@/components/AuthModal';
+import NativeSubscriptionControls from '@/components/NativeSubscriptionControls';
 
 const FreeTrialBadge: React.FC = () => (
   <div className="inline-flex items-center gap-2 bg-[#00A8E8] text-white text-sm font-bold uppercase tracking-wide px-4 py-1.5 rounded-full shadow mb-3">
@@ -50,7 +51,7 @@ const FeatureList: React.FC<{ items: string[] }> = ({ items }) => (
 
 const NativePaymentNotice: React.FC = () => (
   <div className="w-full rounded-xl border border-[#D7EEF8] bg-[#F3FBFE] px-4 py-3 text-center">
-    <p className="text-sm font-semibold text-[#1A1B23]">{nativeUpgradeMessage}</p>
+    <p className="text-sm font-semibold text-[#1A1B23]">Choose this plan using “View Pro and Team subscriptions” above.</p>
   </div>
 );
 
@@ -88,12 +89,13 @@ const Upgrade: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!hideExternalPayments || !user) {
+    if (!user) {
       setAccount(null);
       return;
     }
 
     let cancelled = false;
+    setAccount(null);
     const meta = user.user_metadata || {};
     fetchUserSubscription(user.id)
       .then((row) => { if (!cancelled) setAccount(deriveAccountStatus(row, meta)); })
@@ -133,8 +135,8 @@ const Upgrade: React.FC = () => {
           alt="OnlyFast"
           className="h-12 mb-5"
         />
-        <h1 className="text-2xl font-bold text-[#1A1B23] mb-2">Sign in to choose your plan</h1>
-        <p className="text-[#6B7280] mb-5">You need an account to pick Rookie, Pro, or Team.</p>
+        <h1 className="text-2xl font-bold text-[#1A1B23] mb-2">{isMedianIOSApp ? 'Subscription' : 'Sign in to choose your plan'}</h1>
+        <p className="text-[#6B7280] mb-5">{isMedianIOSApp ? 'Sign in to view your current plan.' : 'You need an account to pick Rookie, Pro, or Team.'}</p>
         <button
           onClick={() => setAuthModalOpen(true)}
           className="bg-[#00A8E8] hover:bg-[#0090c7] text-white px-6 py-3 rounded-xl font-semibold transition-colors"
@@ -148,6 +150,20 @@ const Upgrade: React.FC = () => {
           Back to app
         </button>
         <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
+      </div>
+    );
+  }
+
+  if (isMedianIOSApp) {
+    return (
+      <div className="min-h-screen bg-[#F5F5F7] py-12 px-4 text-center">
+        <h1 className="text-2xl font-bold text-[#1A1B23] mb-2">Subscription</h1>
+        <p className="text-sm text-[#6B7280]">
+          {account ? `Current Plan: ${account.label}` : 'Loading subscription…'}
+        </p>
+        <button onClick={() => safeBack(navigate)} className="mt-4 text-sm text-[#00A8E8]">
+          Back to app
+        </button>
       </div>
     );
   }
@@ -168,11 +184,7 @@ const Upgrade: React.FC = () => {
           {hideExternalPayments && (
             <div className="mx-auto mt-4 max-w-xl rounded-xl border border-[#D7EEF8] bg-white px-4 py-3 text-sm text-[#374151] shadow-sm">
               <p className="font-semibold text-[#1A1B23]">{nativeUpgradeMessage}</p>
-              {account && (
-                <p className="mt-1 text-xs text-[#6B7280]">
-                  Current plan: {account.label === 'Teams' ? 'Team' : account.label}
-                </p>
-              )}
+              <NativeSubscriptionControls key={user.id} userId={user.id} />
             </div>
           )}
         </div>
@@ -211,10 +223,10 @@ const Upgrade: React.FC = () => {
             <div className="inline-flex items-center gap-2 bg-[#1A1B23] text-white text-xs font-bold uppercase tracking-wide px-4 py-1.5 rounded-full shadow mb-2">
               Recommended
             </div>
-            <FreeTrialBadge />
+            {!hideExternalPayments && <FreeTrialBadge />}
             <h3 className="text-2xl font-bold text-[#00A8E8]">Pro</h3>
             <p className="text-3xl font-extrabold text-[#1A1B23] mt-1 mb-1">
-              $5<span className="text-base font-medium text-[#6B7280]">/mo</span>
+              {hideExternalPayments ? <span className="text-base">See price in store</span> : <>$5<span className="text-base font-medium text-[#6B7280]">/mo</span></>}
             </p>
             <p className="text-xs text-[#6B7280] text-center mt-1">
               Best for most individual racers. Unlock the full individual racer workflow, more saves, exports, Ask OnlyFast, timing tools, and fewer limits.
@@ -230,6 +242,8 @@ const Upgrade: React.FC = () => {
             />
             {hideExternalPayments ? (
               <NativePaymentNotice />
+            ) : account?.isPaid && account.row?.subscription_source === 'revenuecat' ? (
+              <p className="text-sm text-[#6B7280]">Your subscription is active. Manage plan changes in the store where you purchased it.</p>
             ) : (
               <>
                 <StripeBuyButton plan="pro" clientReferenceId={user.id} />
@@ -244,7 +258,7 @@ const Upgrade: React.FC = () => {
           <div className="flex flex-col items-center rounded-2xl border-2 border-[#E5E7EB] p-6 bg-white shadow-sm">
             <h3 className="text-2xl font-bold text-[#1A1B23]">Team</h3>
             <p className="text-3xl font-extrabold text-[#1A1B23] mt-1 mb-1">
-              $8<span className="text-base font-medium text-[#6B7280]">/mo</span>
+              {hideExternalPayments ? <span className="text-base">See price in store</span> : <>$8<span className="text-base font-medium text-[#6B7280]">/mo</span></>}
             </p>
             <p className="text-xs font-semibold text-[#00A8E8] text-center">Everything in Pro, plus:</p>
             <p className="text-xs text-[#6B7280] text-center mt-1">
@@ -258,6 +272,8 @@ const Upgrade: React.FC = () => {
             />
             {hideExternalPayments ? (
               <NativePaymentNotice />
+            ) : account?.isPaid && account.row?.subscription_source === 'revenuecat' ? (
+              <p className="text-sm text-[#6B7280]">Your subscription is active. Manage plan changes in the store where you purchased it.</p>
             ) : (
               <>
                 <StripeBuyButton plan="teams" clientReferenceId={user.id} />
@@ -278,7 +294,7 @@ const Upgrade: React.FC = () => {
           </p>
         </div>
 
-        {pendingPlan && (
+        {pendingPlan && !hideExternalPayments && (
           <p className="text-center text-xs text-[#9CA3AF] mt-6">
             {pendingPlan === 'pro'
               ? 'Pro includes a 7 day free trial.'

@@ -9,7 +9,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { setPendingPlan } from '@/lib/membership';
-import { hideExternalPayments } from '@/lib/paymentVisibility';
+import { hideExternalPayments, isMedianIOSApp } from '@/lib/paymentVisibility';
 import type { RookieAdPlacement, RookieAdSlotProps } from './RookieAdSlot';
 
 interface RookieAdSlide {
@@ -837,6 +837,15 @@ const RookieHouseAdContent: React.FC<RookieAdSlotProps> = ({
     }
     setDismissed(true);
   };
+
+  if (isMedianIOSApp) {
+    // Keep the post-save dismissal available without rendering a subscription ad.
+    return isInterstitial ? (
+      <button type="button" onClick={handleContinue} className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-[#4B5563]">
+        Continue
+      </button>
+    ) : null;
+  }
 
   const inlineTone = !isInterstitial ? (slide.tone ?? 'red') : undefined;
   const activeTone = slide.tone ?? (isInterstitial ? 'blue' : 'red');

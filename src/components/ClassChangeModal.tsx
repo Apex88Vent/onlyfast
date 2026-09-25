@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { isMedianIOSApp } from '@/lib/paymentVisibility';
 import type { User } from '@supabase/supabase-js';
 import { AVAILABLE_CAR_CLASSES, CAR_CLASSES } from '@/lib/classConfigs';
 import { isCurrentUserTestAccount } from '@/lib/testAccount';
@@ -151,9 +152,9 @@ const ClassChangeModal: React.FC<ClassChangeModalProps> = ({
 
         {step === 'upgrade' && (
           <div className="mt-5 space-y-4">
-            <button onClick={onUpgrade} className="w-full rounded-xl bg-[#00A8E8] px-5 py-3 text-sm font-bold text-white hover:bg-[#0090c7] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2">
+            {!isMedianIOSApp && <button onClick={onUpgrade} className="w-full rounded-xl bg-[#00A8E8] px-5 py-3 text-sm font-bold text-white hover:bg-[#0090c7] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2">
               Upgrade to Teams for Unlimited Classes and Setups
-            </button>
+            </button>}
             <button onClick={() => setStep('selector')} className="w-full text-sm font-semibold text-[#00A8E8] underline-offset-4 hover:underline focus:outline-none focus:ring-2 focus:ring-[#00A8E8] rounded">
               Continue to Change Class
             </button>
@@ -192,9 +193,9 @@ const ClassChangeModal: React.FC<ClassChangeModalProps> = ({
             <p className="mt-3 text-sm leading-6 text-[#6B7280]">
               You can change classes again on <span className="font-semibold text-[#1A1B23]">{formatEligibleDate(nextEligibleAt)}</span>.
             </p>
-            <button onClick={onUpgrade} className="mt-5 w-full rounded-xl bg-[#00A8E8] px-5 py-3 text-sm font-bold text-white hover:bg-[#0090c7] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2">
+            {!isMedianIOSApp && <button onClick={onUpgrade} className="mt-5 w-full rounded-xl bg-[#00A8E8] px-5 py-3 text-sm font-bold text-white hover:bg-[#0090c7] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2">
               Upgrade to Teams for Unlimited Classes
-            </button>
+            </button>}
             <button ref={cancelRef} onClick={onClose} className="mt-4 w-full text-sm font-medium text-[#6B7280] hover:text-[#1A1B23] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] rounded">Close</button>
           </>
         )}

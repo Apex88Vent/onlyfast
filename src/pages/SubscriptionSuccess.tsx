@@ -34,7 +34,8 @@ const SubscriptionSuccess: React.FC = () => {
       // Retry the query a few times — the Stripe webhook may still be
       // upserting into user_subscriptions. We only trust that table.
       for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-        const row = await fetchUserSubscription(user.id);
+        // A transient database failure should retry, not abort confirmation.
+        const row = await fetchUserSubscription(user.id).catch(() => null);
         if (cancelled) return;
 
         if (isActivePaidRow(row)) {

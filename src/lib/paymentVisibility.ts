@@ -1,3 +1,9 @@
+import { isMedianIOS, isMedianUserAgent } from './nativeEnvironment';
+
+// Require Median evidence as well as iOS: Safari must keep the web UI.
+export const isMedianIOSApp = typeof navigator !== 'undefined' &&
+  isMedianIOS(navigator.userAgent, navigator.maxTouchPoints);
+
 const HIDE_EXTERNAL_PAYMENTS_STORAGE_KEY = 'onlyfast_hide_external_payments';
 
 const hideExternalPaymentsBuildFlag =
@@ -58,11 +64,12 @@ const readRuntimeHideExternalPayments = (): boolean => {
   }
 };
 
-export const hideExternalPayments =
-  hideExternalPaymentsBuildFlag || readRuntimeHideExternalPayments();
+const runtimeHideExternalPayments = readRuntimeHideExternalPayments();
+export const hideExternalPayments = hideExternalPaymentsBuildFlag || runtimeHideExternalPayments ||
+  (typeof navigator !== 'undefined' && isMedianUserAgent(navigator.userAgent));
 
 export const nativeUpgradeMessage =
-  'Subscription changes are not available in this mobile app version. Contact admin@onlyfast.app for account support.';
+  'View Pro and Team subscriptions in the app. Prices and available offers are shown before purchase.';
 
 export const nativeBillingMessage =
-  'Subscription changes are not available in this mobile app version. Contact admin@onlyfast.app for account support.';
+  'Manage your subscription through the store where you purchased it. Contact admin@onlyfast.app for account support.';

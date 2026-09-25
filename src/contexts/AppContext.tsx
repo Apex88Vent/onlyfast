@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { syncMembershipFromSubscription } from '@/lib/subscription';
+import { watchNativePurchases } from '@/lib/nativePurchases';
 
 interface AppContextType {
   sidebarOpen: boolean;
@@ -22,6 +23,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const toggleSidebar = () => {
     setSidebarOpen(prev => !prev);
   };
+
+  useEffect(() => watchNativePurchases(), []);
 
   // Keep the app's paid access in sync with public.user_subscriptions so the
   // account reflects Stripe (and removes Pro/Teams access once a subscription

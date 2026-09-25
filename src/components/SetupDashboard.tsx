@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useId, useRef } from 'react';
+import { isMedianIOSApp } from '@/lib/paymentVisibility';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import TrackInfoSection from './TrackInfoSection';
@@ -1230,7 +1231,9 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
           if (isRaceWeekendEditLocked(tier, earliest)) {
             if (!silent) {
               setSaveMessage(
-                'This race weekend is locked (over 48 hours old) and can no longer be edited on the Rookie plan. It stays viewable and can still be deleted. Upgrade to Pro to remove the 48-hour lock.'
+                isMedianIOSApp
+                  ? 'This race weekend is locked (over 48 hours old) and can no longer be edited on the Rookie plan. It stays viewable and can still be deleted.'
+                  : 'This race weekend is locked (over 48 hours old) and can no longer be edited on the Rookie plan. It stays viewable and can still be deleted. Upgrade to Pro to remove the 48-hour lock.'
               );
               setTimeout(() => setSaveMessage(''), 8000);
             }
@@ -3517,10 +3520,10 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="class-lock-title">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
             <h2 id="class-lock-title" className="text-lg font-bold text-[#1A1B23]">This setup belongs to another class</h2>
-            <p className="mt-2 text-sm leading-6 text-[#6B7280]">Switch back to that class to use this setup, or upgrade to Teams to unlock setups across all classes.</p>
+            <p className="mt-2 text-sm leading-6 text-[#6B7280]">{isMedianIOSApp ? 'Switch back to that class to use this setup.' : 'Switch back to that class to use this setup, or upgrade to Teams to unlock setups across all classes.'}</p>
             <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
               <button onClick={() => setClassLockNoticeOpen(false)} className="rounded-lg px-4 py-2 text-sm font-medium text-[#6B7280] hover:bg-[#F5F5F7] focus:outline-none focus:ring-2 focus:ring-[#00A8E8]">Close</button>
-              <button onClick={onUpgrade} className="rounded-lg bg-[#00A8E8] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0090c7] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2">Upgrade to Teams</button>
+              {!isMedianIOSApp && <button onClick={onUpgrade} className="rounded-lg bg-[#00A8E8] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0090c7] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2">Upgrade to Teams</button>}
             </div>
           </div>
         </div>

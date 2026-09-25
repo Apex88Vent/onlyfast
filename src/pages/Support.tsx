@@ -1,11 +1,18 @@
 import React, { FormEvent, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Mail, MessageCircleQuestion } from 'lucide-react';
+import { isMedianIOSApp } from '@/lib/paymentVisibility';
 
 const LOGO_URL = '/onlyfast-logo.png';
 const SUPPORT_EMAIL = 'admin@onlyfast.app';
 
-const SUPPORT_TOPICS = [
+const SUPPORT_TOPICS = isMedianIOSApp ? [
+  'Technical issue',
+  'Privacy or data request',
+  'Account deletion',
+  'Feature request',
+  'Other',
+] : [
   'Account help',
   'Billing or subscription',
   'Technical issue',

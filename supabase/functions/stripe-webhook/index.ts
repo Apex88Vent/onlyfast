@@ -138,7 +138,7 @@ async function handleCheckoutSessionCompleted(event: any, admin: any, stripeSecr
     throw new Error('checkout.session.completed did not include client_reference_id or user metadata.');
   }
 
-  await admin.from('user_subscriptions').upsert({
+  const { error } = await admin.from('user_subscriptions').upsert({
     user_id: finalUserId,
     plan,
     status: details.status || session.subscription_status || 'active',
@@ -149,6 +149,7 @@ async function handleCheckoutSessionCompleted(event: any, admin: any, stripeSecr
     stripe_checkout_session_id: session.id,
     updated_at: new Date().toISOString(),
   }, { onConflict: 'user_id' });
+  if (error) throw error;
 }
 
 async function upsertSubscriptionFromStripeSubscription(subscription: any, admin: any, statusOverride?: string | null) {
@@ -187,7 +188,7 @@ async function upsertSubscriptionFromStripeSubscription(subscription: any, admin
     throw new Error('Subscription event could not be matched to a Supabase user.');
   }
 
-  await admin.from('user_subscriptions').upsert({
+  const { error } = await admin.from('user_subscriptions').upsert({
     user_id: userId,
     plan,
     status: statusOverride || subscription.status || null,
@@ -197,6 +198,7 @@ async function upsertSubscriptionFromStripeSubscription(subscription: any, admin
     stripe_price_id: priceId,
     updated_at: new Date().toISOString(),
   }, { onConflict: 'user_id' });
+  if (error) throw error;
 }
 
 async function handleSubscriptionChanged(event: any, admin: any) {

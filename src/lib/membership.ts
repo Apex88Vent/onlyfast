@@ -1,7 +1,7 @@
 // Membership tier logic, limits, promo codes, and persistence helpers.
 // Single source of truth for OnlyFast membership/plan gating.
 
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseUrl, supabaseKey } from '@/lib/supabase';
 // The disposable experimental account can retain its legacy full-access mode
 // through an explicit account-level feature flag.
 import { isCurrentUserTestAccount } from '@/lib/testAccount';
@@ -208,7 +208,33 @@ export function readMembership(metadata?: Record<string, any> | null): Membershi
   return { ...DEFAULT_MEMBERSHIP };
 }
 
-export async function saveMembership(state: MembershipState): Promise<void> {
+export async function saveMembership(state: MembershipState, expectedUserId?: string): Promise<void> {
+  if (expectedUserId) {
+    let sameAccount = true;
+    const { data: watcher } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user.id !== expectedUserId) sameAccount = false;
+    });
+    try {
+      const { data } = await supabase.auth.getSession();
+      const session = data.session;
+      if (!sameAccount || session?.user.id !== expectedUserId) return;
+      // Bind delayed subscription writes to the captured account's JWT. Calling
+      // updateUser after an await could otherwise use a newly signed-in user's JWT.
+      const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+        method: 'PUT',
+        headers: { apikey: supabaseKey, Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: state }),
+      });
+      if (!response.ok) throw new Error('Could not synchronize membership');
+      const { data: current } = await supabase.auth.getSession();
+      if (!sameAccount || current.session?.user.id !== expectedUserId) return;
+      // Refresh only the currently signed-in session; never restore an old session.
+      const refreshed = await supabase.auth.refreshSession();
+      if (!sameAccount || refreshed.error || refreshed.data.session?.user.id !== expectedUserId) return;
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch { /* optional cache */ }
+      return;
+    } finally { watcher.subscription.unsubscribe(); }
+  }
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
@@ -217,7 +243,7 @@ export async function saveMembership(state: MembershipState): Promise<void> {
   // If signed in, persist to user_metadata so it survives logout/login & devices
   try {
     const { data } = await supabase.auth.getSession();
-    if (data?.session?.user) {
+    if (data?.session?.user && (!expectedUserId || data.session.user.id === expectedUserId)) {
       await supabase.auth.updateUser({
         data: {
           ...(data.session.user.user_metadata || {}),

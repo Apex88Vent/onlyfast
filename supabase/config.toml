@@ -421,3 +421,10 @@ verify_jwt = true
 
 [functions.get-suggestions]
 verify_jwt = true
+
+[functions.revenuecat-webhook]
+verify_jwt = false
+
+# Validate the bearer token with auth.getUser in the handler (supports current keys).
+[functions.sync-revenuecat-subscription]
+verify_jwt = false
