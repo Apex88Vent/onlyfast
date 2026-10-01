@@ -121,7 +121,7 @@ const slides = [
   {
     title: 'Ready to Build Speed?',
     text: 'Start with your first setup, save your race weekend, and let OnlyFast help you make better changes every time you hit the track.',
-    button: 'Pick My Plan',
+    button: 'Select My Discipline',
     icon: Rocket,
     accent: 'Ready to race',
     visual: 'ready',
@@ -554,7 +554,7 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
             className="onlyfast-pulse mt-6 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#00A8E8] px-5 py-4 text-base font-black text-white transition-all hover:-translate-y-0.5 hover:bg-[#0090c7] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
             style={{ animation: 'onlyfastPulse 2.2s ease-in-out infinite' }}
           >
-            {slide.button}
+            {isReplay && isFinal ? 'Finish' : slide.button}
             <ChevronRight className="h-5 w-5" aria-hidden="true" />
           </button>
 
@@ -576,7 +576,7 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
                 onClick={skip}
                 className="rounded-full text-xs font-semibold text-[#6B7280] hover:text-[#00A8E8] hover:underline focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
               >
-                Skip to plans
+                Skip to discipline selection
               </button>
               {canShowLogin && (
                 <button

@@ -8,6 +8,9 @@
 //  The user prints this window and chooses "Save as PDF" — no external deps.
 // ════════════════════════════════════════════════════════════════════════════
 import { getClassConfig, FieldDef } from '@/lib/classConfigs';
+import { isDevelopmentClass } from '@/lib/setupLibrary';
+import { canAccessSetupClass } from '@/lib/setupLibraryAccess';
+import { rowWithLibraryFields, SETUP_LIBRARY_KEY } from '@/lib/setupLibraryStorage';
 
 const ONLYFAST_LOGO = '/onlyfast-logo.png';
 
@@ -23,6 +26,7 @@ export type CarStyle = 'A' | 'stock' | 'sprint' | 'none';
 
 // Decide which chassis diagram to use for a given class.
 export function getCarStyle(raceClass?: string | null): CarStyle {
+  if (isDevelopmentClass(raceClass)) return 'none';
   const name = (raceClass || '').trim().toLowerCase();
   // Pro Stock / Pure Stock use the stock-car diagram.
   if (name === 'pro stock' || name === 'pure stock') return 'stock';
@@ -92,6 +96,7 @@ function customRows(setup: any): Array<[string, string]> {
   const cf = setup.custom_fields;
   if (!cf || typeof cf !== 'object') return [];
   return Object.entries(cf)
+    .filter(([k]) => k !== SETUP_LIBRARY_KEY)
     .map(([k, v]): [string, string] => [k, v == null ? '' : String(v)])
     .filter(([, v]) => has(v));
 }
@@ -102,6 +107,8 @@ export interface SetupPdfMeta {
 
 // Build the full print HTML for a setup row.
 export function buildSetupPdfHtml(setup: any, meta: SetupPdfMeta = {}): string {
+  if (!canAccessSetupClass(setup.race_class)) throw new Error('Development setup sheets are available only to the OnlyFast test account.');
+  setup = rowWithLibraryFields(setup);
   const config = getClassConfig(setup.race_class || '');
   const style = getCarStyle(setup.race_class);
 
@@ -145,7 +152,7 @@ export function buildSetupPdfHtml(setup: any, meta: SetupPdfMeta = {}): string {
 
   // Four-corner block — LF / RF across the top (front/nose), LR / RR across the
   // bottom (rear), with the nose-up car diagram in the middle column.
-  const cornersBlock = `
+  const cornersBlock = config.developmentOnly ? '' : `
     <section class="card">
       <h2>Four Corners</h2>
       <div class="corners">

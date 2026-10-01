@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
+import { EXPANDED_CLASS_CONFIGS, areSetupSheetsCompatible, isDevelopmentClass } from '@/lib/setupLibrary';
+import { canAccessSetupClass } from '@/lib/setupLibraryAccess';
+import { rowWithLibraryFields } from '@/lib/setupLibraryStorage';
 
 interface SetupComparisonProps {
   user: User | null;
@@ -119,7 +122,7 @@ const SetupComparison: React.FC<SetupComparisonProps> = ({ user, onSignInClick }
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(50);
-    if (data) setAllSetups(data);
+    if (data) setAllSetups(data.filter(s => canAccessSetupClass(s.race_class)).map(rowWithLibraryFields));
     setLoading(false);
   };
 
@@ -132,7 +135,20 @@ const SetupComparison: React.FC<SetupComparisonProps> = ({ user, onSignInClick }
   };
 
   const selectedSetups = allSetups.filter(s => selected.includes(s.id));
-  const filteredAvailable = filterType === 'all' ? allSetups : allSetups.filter(s => s.setup_type === filterType);
+  const libraryGroups = new Map<string, { label: string; fields: { key: string; label: string; type: string }[] }>();
+  for (const setup of selectedSetups) {
+    for (const section of EXPANDED_CLASS_CONFIGS[setup.race_class]?.extraSections || []) {
+      const group = libraryGroups.get(section.id) || { label: section.title, fields: [] };
+      for (const field of section.fields) if (!group.fields.some(f => f.key === field.key)) group.fields.push({ key: field.key, label: field.label, type: field.type || 'text' });
+      libraryGroups.set(section.id, group);
+    }
+  }
+  const fieldGroups = libraryGroups.size
+    ? [FIELD_GROUPS[0], ...libraryGroups.values(), FIELD_GROUPS[FIELD_GROUPS.length - 1]]
+    : FIELD_GROUPS;
+  const filteredAvailable = (filterType === 'all' ? allSetups : allSetups.filter(s => s.setup_type === filterType))
+    .filter(s => !selectedSetups.length || (!isDevelopmentClass(s.race_class) && !isDevelopmentClass(selectedSetups[0].race_class))
+      || areSetupSheetsCompatible(s.race_class, selectedSetups[0].race_class));
 
   const getDisplayValue = (setup: SetupRow, key: string, field: any): string => {
     const val = setup[key];
@@ -173,7 +189,7 @@ const SetupComparison: React.FC<SetupComparisonProps> = ({ user, onSignInClick }
     if (idx === 0 || selectedSetups.length < 2 || field.type !== 'number') return null;
     const baseVal = selectedSetups[0][key];
     const curVal = setup[key];
-    if (baseVal === null || curVal === null) return null;
+    if (baseVal == null || curVal == null || baseVal === '' || curVal === '' || !Number.isFinite(Number(baseVal)) || !Number.isFinite(Number(curVal))) return null;
     const diff = Number(curVal) - Number(baseVal);
     if (diff === 0) return null;
     return diff > 0 ? `+${diff.toFixed(2).replace(/\.?0+$/, '')}` : diff.toFixed(2).replace(/\.?0+$/, '');
@@ -325,7 +341,7 @@ ${printContent.innerHTML}</body></html>`);
                 </tr>
               </thead>
               <tbody>
-                {FIELD_GROUPS.map(group => {
+                {fieldGroups.map(group => {
                   const visibleFields = showOnlyDiffs ? group.fields.filter(f => isDifferent(f.key)) : group.fields;
                   if (visibleFields.length === 0) return null;
                   return (
@@ -364,11 +380,11 @@ ${printContent.innerHTML}</body></html>`);
             <h4 className="text-base font-bold text-[#1A1B23] mb-3">Comparison Summary</h4>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="bg-[#F9FAFB] rounded-xl p-4 text-center border border-[#E5E7EB]">
-                <p className="text-2xl font-bold text-[#1A1B23]">{FIELD_GROUPS.reduce((acc, g) => acc + g.fields.filter(f => isDifferent(f.key)).length, 0)}</p>
+                <p className="text-2xl font-bold text-[#1A1B23]">{fieldGroups.reduce((acc, g) => acc + g.fields.filter(f => isDifferent(f.key)).length, 0)}</p>
                 <p className="text-xs text-[#6B7280] mt-1">Fields Different</p>
               </div>
               <div className="bg-[#F9FAFB] rounded-xl p-4 text-center border border-[#E5E7EB]">
-                <p className="text-2xl font-bold text-[#1A1B23]">{FIELD_GROUPS.reduce((acc, g) => acc + g.fields.filter(f => !isDifferent(f.key) && selectedSetups.some(s => s[f.key] != null && s[f.key] !== '')).length, 0)}</p>
+                <p className="text-2xl font-bold text-[#1A1B23]">{fieldGroups.reduce((acc, g) => acc + g.fields.filter(f => !isDifferent(f.key) && selectedSetups.some(s => s[f.key] != null && s[f.key] !== '')).length, 0)}</p>
                 <p className="text-xs text-[#6B7280] mt-1">Fields Matching</p>
               </div>
               <div className="bg-[#F9FAFB] rounded-xl p-4 text-center border border-[#E5E7EB]">

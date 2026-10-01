@@ -1,5 +1,6 @@
 // Class-specific setup configurations for dirt track racing
 // Each class has unique chassis, suspension, aero, drivetrain, and weight fields
+import { EXPANDED_CLASS_CONFIGS } from './setupLibrary.ts';
 
 export interface FieldDef {
   label: string;
@@ -8,6 +9,10 @@ export interface FieldDef {
   placeholder?: string;
   step?: string;
   options?: { value: string; label: string }[];
+  unit?: string;
+  section?: string;
+  applicableClass?: string;
+  applicableCategory?: string;
 }
 
 export interface ClassSection {
@@ -18,6 +23,10 @@ export interface ClassSection {
 }
 
 export interface ClassConfig {
+  category?: string;
+  family?: string;
+  fieldGroups?: string[];
+  developmentOnly?: boolean;
   name: string;
   description: string;
   showWingAero: boolean;
@@ -278,6 +287,7 @@ const lsWingSection: ClassSection = {
 
 
 export const CAR_CLASSES: string[] = [
+  'Custom Car',
   'Dwarf Cars',
   'Late Model',
   'Lightning Sprints',
@@ -293,6 +303,7 @@ export const CAR_CLASSES: string[] = [
 // Classes currently selectable in the app. The remaining CAR_CLASSES stay
 // visible as Coming Soon in onboarding.
 export const AVAILABLE_CAR_CLASSES = [
+  'Custom Car',
   'Dwarf Cars',
   'Modified',
   'Sport Mod',
@@ -302,6 +313,11 @@ export const AVAILABLE_CAR_CLASSES = [
 ];
 
 export const CLASS_CONFIGS: Record<string, ClassConfig> = {
+  'Custom Car': {
+    name: 'Custom Car', description: 'Build your own setup sheet with custom fields',
+    showWingAero: false, showWeightBalance: false, showDrivechain: false,
+    generalFields: [], frontCornerFields: [], rearCornerFields: [], suspensionFields: [], extraSections: [],
+  },
   'Dwarf Cars': {
     name: 'Dwarf Cars',
     description: '5/8 scale vintage-bodied race cars with motorcycle engines',
@@ -549,5 +565,5 @@ export const CLASS_CONFIGS: Record<string, ClassConfig> = {
 };
 
 export const getClassConfig = (className: string): ClassConfig => {
-  return CLASS_CONFIGS[className] || CLASS_CONFIGS['Dwarf Cars'];
+  return EXPANDED_CLASS_CONFIGS[className] || CLASS_CONFIGS[className] || CLASS_CONFIGS['Dwarf Cars'];
 };

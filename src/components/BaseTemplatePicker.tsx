@@ -1,3 +1,5 @@
+import { areSetupSheetsCompatible } from '@/lib/setupLibrary';
+import { canAccessSetupClass } from '@/lib/setupLibraryAccess';
 import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -5,10 +7,11 @@ import { User } from '@supabase/supabase-js';
 interface BaseTemplatePickerProps {
   user: User | null;
   refreshKey?: number;
+  raceClass?: string;
   onApply: (template: any) => void;
 }
 
-const BaseTemplatePicker: React.FC<BaseTemplatePickerProps> = ({ user, refreshKey, onApply }) => {
+const BaseTemplatePicker: React.FC<BaseTemplatePickerProps> = ({ user, refreshKey, onApply, raceClass }) => {
   const [templates, setTemplates] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -33,10 +36,10 @@ const BaseTemplatePicker: React.FC<BaseTemplatePickerProps> = ({ user, refreshKe
         .order('created_at', { ascending: false });
       const byId = new Map<string, any>();
       [...(primary || []), ...(fallback || [])].forEach(row => byId.set(row.id, row));
-      setTemplates([...byId.values()]);
+      setTemplates([...byId.values()].filter(t => canAccessSetupClass(t.race_class) && areSetupSheetsCompatible(t.race_class, raceClass)));
     } catch {}
     setLoading(false);
-  }, [user]);
+  }, [user, raceClass]);
 
   useEffect(() => { fetchTemplates(); }, [fetchTemplates, refreshKey]);
 

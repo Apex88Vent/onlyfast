@@ -1,3 +1,8 @@
+import CustomCarSetupForm, { useCustomCarTemplate } from './CustomCarSheet';
+import { CUSTOM_CAR, CUSTOM_SHEET_KEY, customSheetFromRow, readCustomSheet, snapshotCustomSheet, emptyCustomSheet } from '@/lib/customCar';
+import { areSetupSheetsCompatible, isDevelopmentClass } from '@/lib/setupLibrary';
+import { canAccessSetupClass } from '@/lib/setupLibraryAccess';
+import { buildLibraryCustomFields, libraryFieldsFromRow, SETUP_LIBRARY_KEY } from '@/lib/setupLibraryStorage';
 import React, { useState, useEffect, useCallback, useId, useRef } from 'react';
 import { isMedianIOSApp } from '@/lib/paymentVisibility';
 import { supabase } from '@/lib/supabase';
@@ -335,6 +340,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   classLocksEnabled,
   onUpgrade,
 }) => {
+  const { template: customCarTemplate, initialSheet } = useCustomCarTemplate();
   const { hasBetaFeature, testerKind } = useBetaFeatures();
   const onlyLapsLinkingEnabled =
     testerKind === 'experimental' &&
@@ -471,12 +477,37 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     writeSavedDashboardRoute(buildCurrentRoute());
   }, [buildCurrentRoute, resumeAttempted, stateLoaded]);
 
+  useEffect(() => {
+    if (!stateLoaded || selectedCar !== CUSTOM_CAR || !customCarTemplate) return;
+    setSetups(prev => {
+      let changed = false;
+      const next = { ...prev };
+      ALL_SLOTS.forEach(slot => {
+        if (!prev[slot][CUSTOM_SHEET_KEY] && (!prev[slot].raceClass || prev[slot].raceClass === CUSTOM_CAR)) {
+          next[slot] = { ...prev[slot], [CUSTOM_SHEET_KEY]: JSON.stringify(snapshotCustomSheet(customCarTemplate)) };
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [stateLoaded, selectedCar, customCarTemplate, setups]);
+
+  const initialSheetApplied = useRef(false);
+  useEffect(() => {
+    if (!stateLoaded || !initialSheet || initialSheetApplied.current) return;
+    initialSheetApplied.current = true;
+    setSetups(prev => ({ ...prev, base: { ...prev.base, [CUSTOM_SHEET_KEY]: JSON.stringify(snapshotCustomSheet(initialSheet)) } }));
+  }, [stateLoaded, initialSheet]);
+
   // Load persisted state on mount
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STATE_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
+        const draftClass = parsed.setups?.base?.raceClass;
+        if (!canAccessSetupClass(draftClass) || !areSetupSheetsCompatible(draftClass, selectedCar)) throw new Error('Different sheet type');
+        if ((selectedCar === CUSTOM_CAR || draftClass === CUSTOM_CAR) && draftClass !== selectedCar) throw new Error('Different sheet type');
         if (parsed.setups) {
           // Merge persisted setups onto a fully-keyed (6-slot) base so extra
           // sessions survive a reload and no slot is ever undefined.
@@ -849,7 +880,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       'session_started', 'session_finished',
       'notes', 'setup_name',
     ]);
-    const targetHasChassis = Object.entries(target).some(([k, v]) => !ignoreKeys.has(k) && String(v || '').trim() !== '');
+    const targetHasChassis = Object.entries(target).some(([k, v]) => !ignoreKeys.has(k) && (k === CUSTOM_SHEET_KEY ? !!readCustomSheet(v)?.sections.some(section => section.fields.some(f => f.value.trim())) : String(v || '').trim() !== ''));
     if (targetHasChassis) return;
     setSetups(prev => ({
       ...prev,
@@ -941,6 +972,10 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   };
 
   const buildPayload = (s: SetupState, tabKey: SetupType, name?: string) => {
+    if (!canAccessSetupClass(s.raceClass || selectedCar)) throw new Error('This setup class is available only to the OnlyFast test account.');
+    if ((s.raceClass || selectedCar) === CUSTOM_CAR && readCustomSheet(s[CUSTOM_SHEET_KEY])?.sections.some(section => section.fields.some(f => !f.label.trim()))) {
+      throw new Error('Give every Custom Car field a name before saving.');
+    }
     const customFieldData: Record<string, string> = {};
     customFields.forEach(f => {
       const val = s[`custom_${f.id}`];
@@ -1008,7 +1043,11 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       entry_handling: s.entry_handling || null,
       mid_handling: s.mid_handling || null,
       exit_handling: s.exit_handling || null,
-      custom_fields: Object.keys(customFieldData).length > 0 ? customFieldData : null,
+      custom_fields: (s.raceClass || selectedCar) === CUSTOM_CAR
+        ? { [CUSTOM_SHEET_KEY]: readCustomSheet(s[CUSTOM_SHEET_KEY]) || snapshotCustomSheet(customCarTemplate || emptyCustomSheet()) }
+        : isDevelopmentClass(s.raceClass || selectedCar)
+          ? buildLibraryCustomFields(s.raceClass || selectedCar, s, customFieldData)
+          : Object.keys(customFieldData).length > 0 ? customFieldData : null,
       notes: s.notes || null,
       session_fastest_lap: s.session_fastest_lap || null,
       session_slowest_lap: s.session_slowest_lap || null,
@@ -1023,6 +1062,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       if (!error) return data;
       const match = error.message?.match(/column\s+"?(\w+)"?/i);
       if (match && match[1] && p[match[1]] !== undefined) {
+        if (match[1] === 'custom_fields' && (payload.race_class === CUSTOM_CAR || isDevelopmentClass(payload.race_class))) throw error;
         const { [match[1]]: _, ...rest } = p;
         p = rest;
         continue;
@@ -1040,6 +1080,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       if (!error) return data;
       const match = error.message?.match(/column\s+"?(\w+)"?/i);
       if (match && match[1] && p[match[1]] !== undefined) {
+        if (match[1] === 'custom_fields' && (payload.race_class === CUSTOM_CAR || isDevelopmentClass(payload.race_class))) throw error;
         const { [match[1]]: _, ...rest } = p;
         p = rest;
         continue;
@@ -1055,7 +1096,8 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     if (!s) return false;
     return Object.entries(s).some(([k, v]) => {
       if (!v) return false;
-      if (k === 'raceDate' || k === 'raceClass' || k === 'setup_name') return false;
+      if (k === CUSTOM_SHEET_KEY) return readCustomSheet(v)?.sections.some(section => section.fields.some(f => f.value.trim())) || false;
+      if (k === 'raceDate' || k === 'raceClass' || k === 'setup_name' || k === SETUP_LIBRARY_KEY) return false;
       return String(v).trim() !== '';
     });
   };
@@ -1069,7 +1111,8 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     ]);
 
     return Object.entries(s).some(([key, value]) => {
-      if (!value || sharedRaceFields.has(key)) return false;
+      if (!value || sharedRaceFields.has(key) || key === SETUP_LIBRARY_KEY) return false;
+      if (key === CUSTOM_SHEET_KEY) return readCustomSheet(value)?.sections.some(section => section.fields.some(f => f.value.trim())) || false;
       return String(value).trim() !== '';
     });
   };
@@ -1436,6 +1479,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       trackName: setup.track_name || '',
       raceDate: setup.race_date || '',
       raceClass: setup.race_class || '',
+      [CUSTOM_SHEET_KEY]: customSheetFromRow(setup),
       trackShape: setup.track_shape || '',
       trackLength: setup.track_length || '',
 
@@ -1496,11 +1540,13 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       front_axle: '', fuel_mixture: '', bumper_height: '',
       total_weight: '', left_side_pct: '', rear_weight_pct: '',
       lead_location: '', lead_weight: '',
+      ...libraryFieldsFromRow(setup),
     };
   };
 
   // Load the whole "file" — all rows sharing the same setup_name
   const handleLoadSetup = async (setup: any) => {
+    if (!canAccessSetupClass(setup.race_class)) return;
     if (isBaseTemplateSetup(setup)) {
       setBaseTemplateToEdit(setup);
       setActiveView('create-base');
@@ -1707,6 +1753,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   };
 
   const handleCopyFromPastSetup = (setup: any) => {
+    if (!canAccessSetupClass(setup.race_class) || !areSetupSheetsCompatible(setup.race_class, setups[activeTab].raceClass || selectedCar)) return;
     const loaded = loadSetupIntoState(setup);
     const current = setups[activeTab];
     setSetups(prev => ({
@@ -1736,6 +1783,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
 
   // Apply a base template to the Hot Laps setup
   const handleApplyBaseTemplate = (template: any) => {
+    if (!canAccessSetupClass(template.race_class) || !areSetupSheetsCompatible(template.race_class, setups.base.raceClass || selectedCar)) return;
     const loaded = loadSetupIntoState(template);
     if (template.custom_fields) {
       Object.entries(template.custom_fields).forEach(([key, value]) => {
@@ -2101,6 +2149,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
 
     const restoreSavedRoute = async () => {
       const savedRoute = readSavedDashboardRoute();
+      if (selectedCar === CUSTOM_CAR && !savedMeta.name) { finish('setup'); return; }
       if (!savedRoute || Date.now() - savedRoute.timestamp >= IDLE_HOME_TIMEOUT_MS) {
         finish('home');
         return;
@@ -3122,7 +3171,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
 
 
                   <ul className="space-y-2 max-h-[200px] overflow-y-auto" aria-label="Past setups to copy from">
-                    {savedSetupsList.map(setup => (
+                    {savedSetupsList.map(setup => canAccessSetupClass(setup.race_class) && areSetupSheetsCompatible(setup.race_class, currentSetup.raceClass || selectedCar) ? (
                       <li key={setup.id}>
                         <button
                           onClick={() => handleCopyFromPastSetup(setup)}
@@ -3143,13 +3192,14 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
                           </svg>
                         </button>
                       </li>
-                    ))}
+                    ) : null)}
                   </ul>
                 </section>
               )}
 
               {activeTab === 'base' && user && (
                 <BaseTemplatePicker
+                  raceClass={currentSetup.raceClass || selectedCar}
                   user={user}
                   refreshKey={baseTemplateRefresh}
                   onApply={handleApplyBaseTemplate}
@@ -3190,6 +3240,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
                 onExitChange={(v) => handleChange('exit_handling', v)}
               />
 
+              {(currentSetup.raceClass || selectedCar) === CUSTOM_CAR ? <CustomCarSetupForm data={currentSetup} onChange={handleChange} /> : (
               <ChassisSetupForm
                 data={currentSetup}
                 customFields={customFields}
@@ -3198,15 +3249,15 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
                 activeTab={activeTab}
                 baseSetup={baseSetupForDiff}
                 baseLabel={baseLabelForDiff}
-              />
+              />)}
 
-              <CustomFieldManager
+              {(currentSetup.raceClass || selectedCar) !== CUSTOM_CAR && (<CustomFieldManager
                 fields={customFields}
                 onAdd={(f) => setCustomFields(prev => [...prev, f])}
                 onRemove={(id) => setCustomFields(prev => prev.filter(f => f.id !== id))}
                 isOpen={customFieldsOpen}
                 onToggle={() => setCustomFieldsOpen(!customFieldsOpen)}
-              />
+              />)}
 
               <ScanTimingScreen
                 key={savedMeta.ids[activeTab] || activeTab}

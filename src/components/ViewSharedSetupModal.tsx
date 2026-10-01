@@ -1,8 +1,12 @@
+import { CustomSheetFields } from './CustomCarSheet';
+import { CUSTOM_CAR, customSheetFromRow, readCustomSheet, emptyCustomSheet } from '@/lib/customCar';
 import React, { useState, useEffect, useRef } from 'react';
 import { isMedianIOSApp } from '@/lib/paymentVisibility';
 import { supabase } from '@/lib/supabase';
 import type { User } from '@supabase/supabase-js';
 import { getClassConfig, FieldDef } from '@/lib/classConfigs';
+import { canAccessSetupClass } from '@/lib/setupLibraryAccess';
+import { rowWithLibraryFields, SETUP_LIBRARY_KEY } from '@/lib/setupLibraryStorage';
 import { openSetupPdf, getCarStyle, CAR_STYLE_A } from '@/lib/setupPdf';
 import { hasFeatureAccess, readMembership } from '@/lib/membership';
 
@@ -121,7 +125,12 @@ const ViewSharedSetupModal: React.FC<ViewSharedSetupModalProps> = ({ isOpen, onC
         setLoading(false);
         return;
       }
-      setSetup({ ...row, __share_code: trimmed });
+      if (!canAccessSetupClass(row.race_class)) {
+        setError('This shared setup is available only to the OnlyFast test account.');
+        setLoading(false);
+        return;
+      }
+      setSetup({ ...rowWithLibraryFields(row), __share_code: trimmed });
     } catch {
       setError('Could not load that setup. Please try again.');
     }
@@ -224,7 +233,8 @@ const ViewSharedSetupModal: React.FC<ViewSharedSetupModalProps> = ({ isOpen, onC
               </div>
             )}
 
-            {config && (
+            {setup.race_class === CUSTOM_CAR && <CustomSheetFields sheet={readCustomSheet(customSheetFromRow(setup)) || emptyCustomSheet()} />}
+            {config && !config.developmentOnly && setup.race_class !== CUSTOM_CAR && (
               <>
                 <section className="border border-[#E5E7EB] rounded-xl p-4">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-[#00A8E8] mb-2 border-b border-[#E5E7EB] pb-1.5">General Chassis</h3>
@@ -248,10 +258,16 @@ const ViewSharedSetupModal: React.FC<ViewSharedSetupModalProps> = ({ isOpen, onC
               </>
             )}
 
-            {setup.custom_fields && typeof setup.custom_fields === 'object' && Object.keys(setup.custom_fields).length > 0 && (
+            {config?.developmentOnly && config.extraSections.map(section => (
+              <section key={section.id} className="border border-[#E5E7EB] rounded-xl p-4">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#00A8E8] mb-2 border-b border-[#E5E7EB] pb-1.5">{section.title}</h3>
+                <MiniTable rows={rowsFor(setup, section.fields)} />
+              </section>
+            ))}
+            {setup.race_class !== CUSTOM_CAR && setup.custom_fields && typeof setup.custom_fields === 'object' && Object.keys(setup.custom_fields).some(k => k !== SETUP_LIBRARY_KEY) && (
               <section className="border border-[#E5E7EB] rounded-xl p-4">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#00A8E8] mb-2 border-b border-[#E5E7EB] pb-1.5">Custom Fields</h3>
-                <MiniTable rows={Object.entries(setup.custom_fields).map(([k, v]): [string, string] => [k, v == null ? '' : String(v)]).filter(([, v]) => has(v))} />
+                <MiniTable rows={Object.entries(setup.custom_fields).filter(([k]) => k !== SETUP_LIBRARY_KEY).map(([k, v]): [string, string] => [k, v == null ? '' : String(v)]).filter(([, v]) => has(v))} />
               </section>
             )}
 

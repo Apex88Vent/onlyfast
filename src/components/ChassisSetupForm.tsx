@@ -1,5 +1,7 @@
 import React, { useId, useCallback } from 'react';
 import { getClassConfig, FieldDef, rideHeightOptions, toeOptions, crossWeightTurnsOptions } from '@/lib/classConfigs';
+import { useBetaFeatures } from '@/hooks/useBetaFeatures';
+import { canAccessSetupClass } from '@/lib/setupLibraryAccess';
 
 interface SetupData {
   [key: string]: string;
@@ -119,6 +121,7 @@ CornerCard.displayName = 'CornerCard';
 const ChassisSetupForm: React.FC<ChassisSetupFormProps> = ({ data, customFields, onChange, raceClass, activeTab = 'base', baseSetup = null, baseLabel = 'Hot Laps' }) => {
 
   const prefix = useId();
+  const betaAccess = useBetaFeatures();
   const config = getClassConfig(raceClass || '');
 
   const sectionHeaderClass = "text-base font-bold text-[#1A1B23] mb-3 flex items-center gap-2";
@@ -226,8 +229,13 @@ const ChassisSetupForm: React.FC<ChassisSetupFormProps> = ({ data, customFields,
 
   const showCwTurns = activeTab === 'heat' || activeTab === 'main';
 
+  if (!canAccessSetupClass(raceClass || '', betaAccess)) return (
+    <div className="bg-white rounded-2xl border border-[#E5E7EB] p-6 text-sm text-[#6B7280]" role="status">This setup sheet is available only to the OnlyFast test account.</div>
+  );
+
   return (
     <div className="space-y-6">
+      {config.developmentOnly && <p className="text-xs font-semibold text-[#00A8E8]">Development setup sheet · {config.name}</p>}
       {baseSetup && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 flex items-center gap-2 text-xs text-amber-900">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -240,7 +248,7 @@ const ChassisSetupForm: React.FC<ChassisSetupFormProps> = ({ data, customFields,
 
 
       {/* General Chassis */}
-      <section className="bg-white rounded-2xl border border-[#E5E7EB] p-6 shadow-sm" aria-labelledby="general-chassis-heading">
+      {!config.developmentOnly && <section className="bg-white rounded-2xl border border-[#E5E7EB] p-6 shadow-sm" aria-labelledby="general-chassis-heading">
         <h3 id="general-chassis-heading" className={sectionHeaderClass}>
           {sectionIcon}
           General Chassis
@@ -251,10 +259,10 @@ const ChassisSetupForm: React.FC<ChassisSetupFormProps> = ({ data, customFields,
             {config.generalFields.map(f => renderField(f))}
           </div>
         </fieldset>
-      </section>
+      </section>}
 
       {/* Four Corners - LF on LEFT, RF on RIGHT */}
-      <section className="bg-white rounded-2xl border border-[#E5E7EB] p-6 shadow-sm" aria-labelledby="four-corners-heading">
+      {!config.developmentOnly && <section className="bg-white rounded-2xl border border-[#E5E7EB] p-6 shadow-sm" aria-labelledby="four-corners-heading">
         <h3 id="four-corners-heading" className={sectionHeaderClass}>
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00A8E8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><circle cx="15.5" cy="8.5" r="1.5" /><circle cx="8.5" cy="15.5" r="1.5" /><circle cx="15.5" cy="15.5" r="1.5" />
@@ -275,10 +283,10 @@ const ChassisSetupForm: React.FC<ChassisSetupFormProps> = ({ data, customFields,
             fields={config.rearCornerFields} data={data} onChange={onChange} prefix={prefix}
             showCwTurns={showCwTurns} baseSetup={baseSetup} />
         </div>
-      </section>
+      </section>}
 
       {/* Rear-End & Drivetrain */}
-      <section className="bg-white rounded-2xl border border-[#E5E7EB] p-6 shadow-sm" aria-labelledby="suspension-heading">
+      {!config.developmentOnly && <section className="bg-white rounded-2xl border border-[#E5E7EB] p-6 shadow-sm" aria-labelledby="suspension-heading">
         <h3 id="suspension-heading" className={sectionHeaderClass}>
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00A8E8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
@@ -292,7 +300,7 @@ const ChassisSetupForm: React.FC<ChassisSetupFormProps> = ({ data, customFields,
             {config.suspensionFields.map(f => renderField(f))}
           </div>
         </fieldset>
-      </section>
+      </section>}
 
       {/* Extra Class-Specific Sections */}
       {config.extraSections.map(section => (

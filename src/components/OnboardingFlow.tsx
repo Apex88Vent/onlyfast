@@ -1,12 +1,16 @@
+import { CUSTOM_CAR, CUSTOM_CAR_DISCIPLINES } from '@/lib/customCar';
 import React, { useState, useRef, useEffect } from 'react';
-import { AVAILABLE_CAR_CLASSES, CAR_CLASSES, CLASS_CONFIGS } from '@/lib/classConfigs';
+import { AVAILABLE_CAR_CLASSES, CLASS_CONFIGS } from '@/lib/classConfigs';
 import { ArrowLeft, Check } from 'lucide-react';
 // The explicitly flagged experimental account can click into every
 // "Coming Soon" discipline/class. Other users still see them locked.
-import { isCurrentUserTestAccount } from '@/lib/testAccount';
+import { useBetaFeatures } from '@/hooks/useBetaFeatures';
+import { canAccessSetupLibrary, getDisciplineSetupClasses } from '@/lib/setupLibraryAccess';
+import { EXPANDED_CLASS_CONFIGS, type SetupCategory } from '@/lib/setupLibrary';
 
 interface OnboardingFlowProps {
   onComplete: (car: string) => void;
+  error?: string;
 }
 
 
@@ -136,16 +140,16 @@ const disciplines = [
   },
 ];
 
-const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
+const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error }) => {
   // Plan selection no longer happens during onboarding — selecting a car/class
   // takes the user straight into the app. The subscription page only appears
   // the first time the user tries to save a setup (handled in SetupDashboard).
   const [step, setStep] = useState<2 | 3>(2);
   const [selectedDiscipline, setSelectedDiscipline] = useState('');
-  // TEST-ACCOUNT BYPASS (remove before production): when the dedicated demo
-  // account is signed in, treat every "Coming Soon" discipline/class as
-  // selectable so the test account can preview everything. Real users unaffected.
-  const testBypass = isCurrentUserTestAccount();
+  // The existing user-ID-backed experimental account and feature flag gate
+  // unlock development disciplines/classes after authorization loads.
+  const betaAccess = useBetaFeatures();
+  const testBypass = canAccessSetupLibrary(betaAccess);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -200,6 +204,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
 
 
         {/* Step 2: Discipline */}
+        {error && <p className="mb-4 text-sm text-red-600" role="alert">{error}</p>}
         {step === 2 && (
           <section aria-labelledby="step2-heading">
             <div className="flex items-center gap-3 mb-6">
@@ -231,6 +236,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
                           <p className="text-[#6B7280] mt-1">
                             {disc.description}
                           </p>
+                          <p className="text-gray-400 text-sm mt-2" aria-disabled="true">Custom Car — Coming Soon</p>
                         </div>
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#9CA3AF] group-hover:text-[#00A8E8] transition-colors flex-shrink-0" aria-hidden="true">
                           <polyline points="9 18 15 12 9 6" />
@@ -291,9 +297,12 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" role="group" aria-label="Car class options">
-              {CAR_CLASSES.map((className) => {
-                const config = CLASS_CONFIGS[className];
-                const isEnabled = ENABLED_CLASSES.includes(className) || testBypass;
+              {getDisciplineSetupClasses((disciplines.find(d => d.name === selectedDiscipline)?.key || 'dirt_oval') as SetupCategory, betaAccess).map((className) => {
+                const config = EXPANDED_CLASS_CONFIGS[className] || CLASS_CONFIGS[className];
+                const discipline = disciplines.find(d => d.name === selectedDiscipline);
+                const isEnabled = className === CUSTOM_CAR
+                  ? CUSTOM_CAR_DISCIPLINES[discipline?.key || ''] === true
+                  : ENABLED_CLASSES.includes(className) || testBypass;
 
                 if (isEnabled) {
                   return (

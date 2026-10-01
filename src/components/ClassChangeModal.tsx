@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { isMedianIOSApp } from '@/lib/paymentVisibility';
 import type { User } from '@supabase/supabase-js';
-import { AVAILABLE_CAR_CLASSES, CAR_CLASSES } from '@/lib/classConfigs';
-import { isCurrentUserTestAccount } from '@/lib/testAccount';
+import { useBetaFeatures } from '@/hooks/useBetaFeatures';
+import { canAccessSetupClass, getSelectableSetupClasses } from '@/lib/setupLibraryAccess';
 import type { MembershipTier } from '@/lib/membership';
 import {
   changeActiveClass,
@@ -41,10 +41,11 @@ const ClassChangeModal: React.FC<ClassChangeModalProps> = ({
   const cancelRef = useRef<HTMLButtonElement>(null);
   const clientUnlimited = tier === 'team';
   const unlimited = serverUnlimited ?? clientUnlimited;
-  const baseClasses = isCurrentUserTestAccount() ? CAR_CLASSES : AVAILABLE_CAR_CLASSES;
+  const betaAccess = useBetaFeatures();
+  const baseClasses = getSelectableSetupClasses(betaAccess);
   const availableClasses = baseClasses.some(car => sameClass(car, currentClass))
     ? baseClasses
-    : [currentClass, ...baseClasses].filter(Boolean);
+    : [currentClass, ...baseClasses].filter(car => car && canAccessSetupClass(car, betaAccess));
 
   useEffect(() => {
     if (!isOpen) return;

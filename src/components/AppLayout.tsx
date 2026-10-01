@@ -1,3 +1,4 @@
+import { CustomCarGate } from './CustomCarSheet';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -21,10 +22,13 @@ import { useBetaFeatures } from '@/hooks/useBetaFeatures';
 import { BETA_FEATURES } from '@/lib/betaFeatures';
 import { isOnlyFastFilePickerOpen } from '@/lib/filePickerState';
 import { resolveAuthUiTransition } from '@/lib/authUiTransition';
+import { canAccessSetupClass } from '@/lib/setupLibraryAccess';
+import { isDevelopmentClass } from '@/lib/setupLibrary';
 
 const AppLayout: React.FC = () => {
   const navigate = useNavigate();
-  const { hasBetaFeature, testerKind } = useBetaFeatures();
+  const betaAccess = useBetaFeatures();
+  const { hasBetaFeature, testerKind } = betaAccess;
   const [user, setUser] = useState<User | null>(null);
   const [selectedCar, setSelectedCar] = useState<string>('');
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -34,8 +38,9 @@ const AppLayout: React.FC = () => {
   const [showHowOnlyFastWorks, setShowHowOnlyFastWorks] = useState(false);
   const [hasCheckedHowOnlyFastWorks, setHasCheckedHowOnlyFastWorks] = useState(false);
   const [isReplayingHowOnlyFastWorks, setIsReplayingHowOnlyFastWorks] = useState(false);
-  const [skipHowOnlyFastWorksAfterLogin, setSkipHowOnlyFastWorksAfterLogin] = useState(false);
   const [isLoadingSavedCar, setIsLoadingSavedCar] = useState(false);
+  const [classSelectionUserId, setClassSelectionUserId] = useState<string | null | undefined>(undefined);
+  const [classSelectionError, setClassSelectionError] = useState('');
   const [legalModal, setLegalModal] = useState<'privacy' | 'terms' | null>(null);
   const [showSplash, setShowSplash] = useState(() => !isOnlyFastFilePickerOpen());
   const [authChecked, setAuthChecked] = useState(false);
@@ -73,27 +78,10 @@ const AppLayout: React.FC = () => {
     setShowHowOnlyFastWorks(false);
     setIsReplayingHowOnlyFastWorks(false);
     setHasCheckedHowOnlyFastWorks(true);
+    // Finishing first-run guidance always leads to discipline selection.
+    // Replaying help uses closeHowOnlyFastWorksReplay instead.
+    setIsOnboarded(false);
   }, [user]);
-
-  const hasSelectedMembership = useCallback((signedInUser: User | null | undefined): boolean => {
-    const metadata = (signedInUser?.user_metadata || {}) as Record<string, unknown>;
-    if (
-      metadata.membership_tier ||
-      metadata.has_admin_full_access ||
-      metadata.promo_access_level
-    ) {
-      return true;
-    }
-
-    try {
-      const raw = localStorage.getItem('onlyfast_membership');
-      if (!raw) return false;
-      const saved = JSON.parse(raw) as { membership_tier?: unknown };
-      return Boolean(saved?.membership_tier);
-    } catch {
-      return false;
-    }
-  }, []);
 
   const handleHowOnlyFastWorksLogin = useCallback(() => {
     onboardingLoginEscapeRef.current = true;
@@ -110,26 +98,26 @@ const AppLayout: React.FC = () => {
   }, [showSplash]);
 
 
-  // Check for persisted car selection
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('onlyfast_car');
-      if (saved) {
-        setSelectedCar(saved);
-        setIsOnboarded(true);
-      }
-    } catch {/* Storage can be unavailable in restricted WebViews. */}
-  }, []);
-
   const applySelectedCar = useCallback((car: string) => {
     setSelectedCar(car);
     setIsOnboarded(true);
-    try { localStorage.setItem('onlyfast_car', car); } catch {/* ignore */}
-  }, []);
+    try {
+      localStorage.setItem(authenticatedUserId ? `onlyfast_car_${authenticatedUserId}` : 'onlyfast_car', car);
+    } catch {/* ignore */}
+  }, [authenticatedUserId]);
 
   useEffect(() => {
     if (!authChecked) return;
+    setSelectedCar('');
+    setIsOnboarded(false);
+    setClassSelectionError('');
+    setUnlimitedClasses(null);
     if (!authenticatedUserId) {
+      try {
+        const saved = localStorage.getItem('onlyfast_car');
+        if (saved) applySelectedCar(saved);
+      } catch {/* Storage can be unavailable in restricted WebViews. */}
+      setClassSelectionUserId(null);
       setIsLoadingSavedCar(false);
       return;
     }
@@ -137,38 +125,54 @@ const AppLayout: React.FC = () => {
     let cancelled = false;
     setIsLoadingSavedCar(true);
     (async () => {
+      let classLookupFailed = false;
       try {
-        let state = await getActiveClassState();
-        if (!cancelled) setUnlimitedClasses(state.unlimited);
-        if (!state.active_class && selectedCar) {
-          state = await initializeActiveClass(selectedCar);
-          if (!cancelled) setUnlimitedClasses(state.unlimited);
-        }
-        if (!cancelled && state.active_class) {
-          applySelectedCar(state.active_class);
-        }
-      } catch {
-        // Compatibility fallback until the migration is deployed.
         try {
-          const { data } = await supabase
+          const state = await getActiveClassState();
+          if (!cancelled) setUnlimitedClasses(state.unlimited);
+          if (!cancelled && state.active_class) {
+            applySelectedCar(state.active_class);
+            return;
+          }
+        } catch {
+          classLookupFailed = true;
+          // Compatibility fallback until the active-class migration is deployed.
+        }
+        try {
+          // Recover an existing user's class from their own saved setups only.
+          // A device-wide guest/previous-account selection cannot initialize it.
+          const { data, error } = await supabase
             .from('race_setups')
             .select('race_class')
             .eq('user_id', authenticatedUserId)
             .not('race_class', 'is', null)
             .order('created_at', { ascending: false })
             .limit(1);
+          if (error) throw error;
           const savedCar = (data?.[0]?.race_class || '').trim();
           if (!cancelled && savedCar) applySelectedCar(savedCar);
-        } catch {/* Existing users without a saved class continue to onboarding. */}
+        } catch {
+          // Network fallback can use only this user's own previous selection.
+          // A successful server lookup with no active class remains authoritative.
+          if (classLookupFailed) {
+            try {
+              const savedCar = localStorage.getItem(`onlyfast_car_${authenticatedUserId}`);
+              if (!cancelled && savedCar) applySelectedCar(savedCar);
+            } catch {/* Unconfigured users continue to discipline selection. */}
+          }
+        }
       } finally {
-        if (!cancelled) setIsLoadingSavedCar(false);
+        if (!cancelled) {
+          setClassSelectionUserId(authenticatedUserId);
+          setIsLoadingSavedCar(false);
+        }
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [authChecked, authenticatedUserId, selectedCar, applySelectedCar]);
+  }, [authChecked, authenticatedUserId, applySelectedCar]);
 
   // Auth state listener
   useEffect(() => {
@@ -185,6 +189,12 @@ const AppLayout: React.FC = () => {
 
       setUser(session?.user ?? null);
       setAuthChecked(true);
+      if (authTransition.identityChanged) {
+        setSelectedCar('');
+        setIsOnboarded(false);
+        setClassSelectionUserId(undefined);
+        setIsLoadingSavedCar(Boolean(session?.user));
+      }
       if (authTransition.shouldMarkOnboardingChecked) {
         setHasCheckedHowOnlyFastWorks(true);
       } else if (authTransition.shouldRecheckOnboarding) {
@@ -192,17 +202,15 @@ const AppLayout: React.FC = () => {
       }
 
       if (!session?.user) {
-        setSkipHowOnlyFastWorksAfterLogin(false);
         setUnlimitedClasses(null);
       }
 
       if (event === 'SIGNED_IN') {
         if (isOnboardingLoginEscape) {
           onboardingLoginEscapeRef.current = false;
-          setSkipHowOnlyFastWorksAfterLogin(true);
           setShowHowOnlyFastWorks(false);
           setIsReplayingHowOnlyFastWorks(false);
-          setHasCheckedHowOnlyFastWorks(true);
+          setHasCheckedHowOnlyFastWorks(false);
           setAuthModalOpen(false);
         }
 
@@ -252,6 +260,7 @@ const AppLayout: React.FC = () => {
   useEffect(() => {
     if (showSplash || isReplayingHowOnlyFastWorks) return;
     if (!authChecked) return;
+    if (classSelectionUserId !== authenticatedUserId || isLoadingSavedCar) return;
 
     if (isOnlyFastFilePickerOpen()) {
       setShowHowOnlyFastWorks(false);
@@ -259,7 +268,7 @@ const AppLayout: React.FC = () => {
       return;
     }
 
-    if (skipHowOnlyFastWorksAfterLogin || selectedCar || hasSelectedMembership(user)) {
+    if (selectedCar) {
       setShowHowOnlyFastWorks(false);
       setHasCheckedHowOnlyFastWorks(true);
       return;
@@ -274,9 +283,11 @@ const AppLayout: React.FC = () => {
     const completed = completedInMetadata || completedLocally;
     setShowHowOnlyFastWorks(!completed);
     setHasCheckedHowOnlyFastWorks(true);
-  }, [authChecked, user, selectedCar, showSplash, isReplayingHowOnlyFastWorks, skipHowOnlyFastWorksAfterLogin, hasSelectedMembership]);
+  }, [authChecked, user, selectedCar, showSplash, isReplayingHowOnlyFastWorks, classSelectionUserId, authenticatedUserId, isLoadingSavedCar]);
 
   const handleCarSelect = async (car: string) => {
+    setClassSelectionError('');
+    if (!canAccessSetupClass(car, betaAccess)) return;
     if (!user) {
       applySelectedCar(car);
       return;
@@ -286,7 +297,9 @@ const AppLayout: React.FC = () => {
       setUnlimitedClasses(state.unlimited);
       applySelectedCar(state.active_class || car);
     } catch {
-      applySelectedCar(car);
+      setClassSelectionError(isDevelopmentClass(car)
+        ? 'Your class could not be saved. This development class requires the setup-library database migration. Please try again after it is applied.'
+        : 'Your class could not be saved. Please try again.');
     }
   };
 
@@ -305,6 +318,10 @@ const AppLayout: React.FC = () => {
   // Show splash screen on first load
   if (showSplash) {
     return <SplashScreen onComplete={handleSplashComplete} />;
+  }
+
+  if (!authChecked || isLoadingSavedCar || classSelectionUserId !== authenticatedUserId) {
+    return <div className="min-h-screen bg-[#F5F5F7]" role="status" aria-label="Loading your racing profile" />;
   }
 
   if (!hasCheckedHowOnlyFastWorks || showHowOnlyFastWorks) {
@@ -328,7 +345,7 @@ const AppLayout: React.FC = () => {
     );
   }
 
-  if (!authChecked || isLoadingSavedCar) {
+  if (betaAccess.loading && (!isOnboarded || !canAccessSetupClass(selectedCar, betaAccess))) {
     return (
       <AnnouncerProvider>
         <SkipLink />
@@ -339,11 +356,11 @@ const AppLayout: React.FC = () => {
   }
 
   // Show discipline/class selection when no working class has been chosen yet.
-  if (!isOnboarded) {
+  if (!isOnboarded || !canAccessSetupClass(selectedCar, betaAccess)) {
     return (
       <AnnouncerProvider>
         <SkipLink />
-        <OnboardingFlow onComplete={handleCarSelect} />
+        <OnboardingFlow onComplete={handleCarSelect} error={classSelectionError} />
         <CookieConsent />
       </AnnouncerProvider>
     );
@@ -363,6 +380,7 @@ const AppLayout: React.FC = () => {
         />
         <main id="main-content" tabIndex={-1} className="flex-1">
           <h1 className="sr-only">OnlyFast Setup Assist - Dirt Track Racing Setup Tracker</h1>
+          <CustomCarGate user={user} selectedCar={selectedCar}>
           <SetupDashboard
             user={user}
             selectedCar={selectedCar}
@@ -371,6 +389,7 @@ const AppLayout: React.FC = () => {
             classLocksEnabled={!(unlimitedClasses ?? (effectiveTier === 'team'))}
             onUpgrade={openTeamsUpgrade}
           />
+          </CustomCarGate>
         </main>
         <Footer
           onPrivacyClick={() => setLegalModal('privacy')}

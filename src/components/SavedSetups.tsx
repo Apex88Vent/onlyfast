@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { isMedianIOSApp } from '@/lib/paymentVisibility';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
+import { canAccessSetupClass } from '@/lib/setupLibraryAccess';
 import {
   DEFAULT_RACE_SESSION_ORDER,
   isValidSavedRaceSession,
@@ -180,7 +181,7 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
     try {
       const { data: summaryData, error: summaryError } = await supabase.rpc('list_user_setup_summaries');
       if (!summaryError && Array.isArray(summaryData)) {
-        setSetups(summaryData.slice(0, 50));
+        setSetups(summaryData.filter(s => canAccessSetupClass(s.race_class)).slice(0, 50));
       } else {
         const { data, error } = await supabase
           .from('race_setups')
@@ -189,7 +190,7 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
           .order('created_at', { ascending: false })
           .limit(50);
         if (error) setFetchError(error.message || 'Unable to fetch your setups right now.');
-        else if (data) setSetups(data);
+        else if (data) setSetups(data.filter(s => canAccessSetupClass(s.race_class)));
       }
     } catch (err: any) {
       setFetchError(err?.message || 'Network error — unable to reach the server.');

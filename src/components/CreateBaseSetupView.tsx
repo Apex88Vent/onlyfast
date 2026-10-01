@@ -1,4 +1,9 @@
-import React, { useState, useEffect, useCallback, useId } from 'react';
+import CustomCarSetupForm, { useCustomCarTemplate } from './CustomCarSheet';
+import { CUSTOM_CAR, CUSTOM_SHEET_KEY, customSheetFromRow, readCustomSheet, snapshotCustomSheet, emptyCustomSheet } from '@/lib/customCar';
+import React, { useState, useEffect, useCallback, useId, useRef } from 'react';
+import { areSetupSheetsCompatible, isDevelopmentClass } from '@/lib/setupLibrary';
+import { canAccessSetupClass } from '@/lib/setupLibraryAccess';
+import { buildLibraryCustomFields, libraryFieldsFromRow } from '@/lib/setupLibraryStorage';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import ChassisSetupForm from './ChassisSetupForm';
@@ -53,9 +58,11 @@ const STORAGE_KEY = 'onlyfast_base_template_draft_v1';
 const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
   user, selectedCar, onSignInClick, customFields, onCustomFieldsChange, onTemplatesChange, initialTemplate,
 }) => {
+  const { template: customCarTemplate } = useCustomCarTemplate();
   const prefix = useId();
   const [template, setTemplate] = useState<BaseTemplateState>(emptyTemplate());
   const [templates, setTemplates] = useState<any[]>([]);
+  const compatibleTemplates = templates.filter(t => canAccessSetupClass(t.race_class) && areSetupSheetsCompatible(t.race_class, selectedCar));
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -66,6 +73,7 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
   const [renameValue, setRenameValue] = useState('');
   const [renameBusy, setRenameBusy] = useState(false);
   const [renameError, setRenameError] = useState('');
+  const previousClass = useRef(selectedCar);
 
   // Load draft from localStorage
   useEffect(() => {
@@ -73,6 +81,9 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
+        const draftClass = parsed.template?.raceClass;
+        if (!canAccessSetupClass(draftClass) || !areSetupSheetsCompatible(draftClass, selectedCar)) throw new Error('Different sheet type');
+        if ((selectedCar === CUSTOM_CAR || draftClass === CUSTOM_CAR) && draftClass !== selectedCar) throw new Error('Different sheet type');
         if (parsed.template) setTemplate({ ...emptyTemplate(), ...parsed.template });
         if (parsed.editingId) setEditingId(parsed.editingId);
       }
@@ -90,6 +101,14 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
   // Sync race class
   useEffect(() => {
     if (!loaded) return;
+    if (previousClass.current !== selectedCar && (isDevelopmentClass(previousClass.current) || isDevelopmentClass(selectedCar))) {
+      previousClass.current = selectedCar;
+      setTemplate({ ...emptyTemplate(), raceClass: selectedCar });
+      setEditingId(null);
+      setCopySourceId('');
+      return;
+    }
+    previousClass.current = selectedCar;
     if (selectedCar && !template.raceClass) {
       setTemplate(prev => ({ ...prev, raceClass: selectedCar }));
     }
@@ -123,6 +142,10 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
   }, []);
 
   const buildPayload = (s: BaseTemplateState) => {
+    if (!canAccessSetupClass(s.raceClass || selectedCar)) throw new Error('This setup class is available only to the OnlyFast test account.');
+    if ((s.raceClass || selectedCar) === CUSTOM_CAR && readCustomSheet(s[CUSTOM_SHEET_KEY])?.sections.some(section => section.fields.some(f => !f.label.trim()))) {
+      throw new Error('Give every Custom Car field a name before saving.');
+    }
     const customFieldData: Record<string, string> = {};
     customFields.forEach(f => {
       const val = s[`custom_${f.id}`];
@@ -172,7 +195,11 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
       third_link: s.third_link || null,
       panhard_bar: s.panhard_bar || null,
       gear_ratio: s.gear_ratio || null,
-      custom_fields: Object.keys(customFieldData).length > 0 ? customFieldData : null,
+      custom_fields: (s.raceClass || selectedCar) === CUSTOM_CAR
+        ? { [CUSTOM_SHEET_KEY]: readCustomSheet(s[CUSTOM_SHEET_KEY]) || snapshotCustomSheet(customCarTemplate || emptyCustomSheet()) }
+        : isDevelopmentClass(s.raceClass || selectedCar)
+          ? buildLibraryCustomFields(s.raceClass || selectedCar, s, customFieldData)
+          : Object.keys(customFieldData).length > 0 ? customFieldData : null,
       notes: s.notes || null,
     };
   };
@@ -188,6 +215,7 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
       if (!error) return data;
       const match = error.message?.match(/column\s+"?(\w+)"?/i);
       if (match && match[1] && p[match[1]] !== undefined) {
+        if (match[1] === 'custom_fields' && (payload.race_class === CUSTOM_CAR || isDevelopmentClass(payload.race_class))) throw error;
         const { [match[1]]: _, ...rest } = p;
         p = rest;
         continue;
@@ -280,6 +308,7 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
     ...emptyTemplate(),
     setup_name: (t.setup_name || '').replace(/^\[BASE TEMPLATE\]\s*/, ''),
     raceClass: t.race_class || '',
+    [CUSTOM_SHEET_KEY]: customSheetFromRow(t),
     cross_weight: t.cross_weight?.toString() || '',
     toe: t.toe || '',
     toe_direction: t.toe_direction || '',
@@ -318,9 +347,11 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
     panhard_bar: t.panhard_bar || '',
     gear_ratio: t.gear_ratio || '',
     notes: t.notes || '',
+    ...libraryFieldsFromRow(t),
   });
 
   const handleEdit = (t: any) => {
+    if (!canAccessSetupClass(t.race_class)) return;
     const loaded = loadTemplateIntoState(t);
     if (t.custom_fields) {
       Object.entries(t.custom_fields).forEach(([key, value]) => {
@@ -485,11 +516,11 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
       </div>
 
       {/* Existing templates list */}
-      {templates.length > 0 && (
+      {compatibleTemplates.length > 0 && (
         <section className="bg-white rounded-2xl border border-[#E5E7EB] p-5 shadow-sm">
-          <h3 className="text-sm font-bold text-[#1A1B23] mb-3">Your Base Templates ({templates.length})</h3>
+          <h3 className="text-sm font-bold text-[#1A1B23] mb-3">Your Base Templates ({compatibleTemplates.length})</h3>
           <ul className="space-y-2 max-h-[220px] overflow-y-auto">
-            {templates.map(t => (
+            {compatibleTemplates.map(t => (
               <li key={t.id} className={`flex items-center justify-between gap-2 rounded-lg px-3 py-2 border ${editingId === t.id ? 'bg-amber-50 border-amber-200' : 'bg-[#F9FAFB] border-[#E5E7EB]'}`}>
                 <div className="min-w-0 flex-1">
                   <div className="font-semibold text-sm text-[#1A1B23] truncate">
@@ -523,7 +554,7 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
 
       {/* Template name */}
       <section className="bg-white rounded-2xl border border-[#E5E7EB] p-5 shadow-sm">
-        {!editingId && templates.length > 0 && (
+        {!editingId && compatibleTemplates.length > 0 && (
           <div className="mb-4">
             <label htmlFor={`${prefix}-copy-source`} className="block text-xs font-semibold text-[#4B5563] uppercase tracking-wider mb-1">
               Start from existing base setup
@@ -535,7 +566,7 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
               className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-lg focus:ring-2 focus:ring-[#00A8E8] focus:border-[#00A8E8] outline-none transition-all text-[#1A1B23] bg-[#F9FAFB] text-sm font-medium"
             >
               <option value="">Blank base setup</option>
-              {templates.map(t => (
+              {compatibleTemplates.map(t => (
                 <option key={t.id} value={t.id}>
                   {(t.setup_name || 'Untitled').replace(/^\[BASE TEMPLATE\]\s*/, '')} ({t.race_class || 'No class'})
                 </option>
@@ -561,21 +592,22 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
       </section>
 
       {/* Chassis form */}
-      <ChassisSetupForm
+      {(template.raceClass || selectedCar) === CUSTOM_CAR ? <CustomCarSetupForm data={template} onChange={handleChange} /> : (
+              <ChassisSetupForm
         data={template as any}
         customFields={customFields}
         onChange={handleChange}
         raceClass={template.raceClass || selectedCar}
         activeTab="base"
-      />
+      />)}
 
-      <CustomFieldManager
+      {(template.raceClass || selectedCar) !== CUSTOM_CAR && (<CustomFieldManager
         fields={customFields}
         onAdd={(f) => onCustomFieldsChange([...customFields, f])}
         onRemove={(id) => onCustomFieldsChange(customFields.filter(f => f.id !== id))}
         isOpen={customFieldsOpen}
         onToggle={() => setCustomFieldsOpen(!customFieldsOpen)}
-      />
+      />)}
 
       {/* Notes */}
       <section className="bg-white rounded-2xl border border-[#E5E7EB] p-5 shadow-sm">
