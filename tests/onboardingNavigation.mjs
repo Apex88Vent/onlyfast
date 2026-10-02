@@ -10,7 +10,8 @@ import * as configs from '../src/lib/classConfigs.ts';
 import * as library from '../src/lib/setupLibrary.ts';
 import * as access from '../src/lib/setupLibraryAccess.ts';
 import * as custom from '../src/lib/customCar.ts';
-import { buildBetaAccessSnapshot, CLOSED_BETA_ACCESS } from '../src/lib/betaFeatures.ts';
+import * as pavementValues from '../src/lib/pavementSetupValues.ts';
+import { buildBetaAccessSnapshot, CLOSED_BETA_ACCESS, setCachedBetaAccess, clearCachedBetaAccess } from '../src/lib/betaFeatures.ts';
 import { componentFunction } from './setupLibraryHarness.ts';
 import { resolveAuthUiTransition } from '../src/lib/authUiTransition.ts';
 
@@ -36,6 +37,7 @@ function compile(file, modules = {}) {
     if (name === '@/lib/setupLibrary') return library;
     if (name === '@/lib/setupLibraryAccess') return access;
     if (name === '@/lib/customCar') return custom;
+    if (name === '@/lib/pavementSetupValues') return pavementValues;
     if (name in modules) return { __esModule: true, ...modules[name] };
     throw new Error(`Unstubbed dependency ${name}`);
   }, output, output.exports);
@@ -118,7 +120,7 @@ async function mount(component = App) {
   if (component === App) await click(view.root, 'End splash');
   return view;
 }
-const heading = (root, label) => root.findAll(n => ['h1', 'h2'].includes(n.type) && text(n) === label).length > 0;
+const heading = (root, label) => root.findAll(n => ['h1', 'h2', 'h3'].includes(n.type) && text(n) === label).length > 0;
 const landing = root => root.findAll(n => n.props['data-landing']).length > 0;
 async function requiredSlides(root) {
   await click(root, 'Let’s Get Faster');
@@ -392,3 +394,64 @@ test('class selection cannot autosave a restored draft before an explicit editor
   await Promise.resolve();
   assert.equal(saves, 1, 'explicit editor action retains existing named-file autosave');
 });
+
+const pavementClasses = ['Legends', 'Pavement Late Model', 'Stock Car / ARCA', 'Pavement Modified', 'Street Stock / Sportsman', 'Mini Stock / Compact'];
+for (const car of pavementClasses) {
+  test('pavement class selection: ' + car + ' initializes into landing without opening a form', async () => {
+    reset({ access: experiment, user: { id: 'test-id', user_metadata: { onboarding_completed: true } } });
+    const view = await mount();
+    await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith('Pavement Oval -')).props.onClick());
+    await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith(car + ' -')).props.onClick());
+    assert.ok(landing(view.root));
+    assert.equal(view.root.findAllByType(Chassis).length, 0);
+    assert.deepEqual(fixture.initializations, [car]);
+    await act(async () => view.unmount());
+  });
+
+  test('mounted ' + car + ': native corners, editable sections, weight display and real base/race serializer round trips', async () => {
+    reset({ access: experiment });
+    setCachedBetaAccess(experiment);
+    const save = componentFunction('CreateBaseSetupView.tsx', 'buildPayload');
+    const reopen = componentFunction('CreateBaseSetupView.tsx', 'loadTemplateIntoState');
+    const race = componentFunction('SetupDashboard.tsx', 'buildPayload');
+    let values = { raceClass: car, setup_name: 'Pavement baseline' };
+    let view;
+    const onChange = (key, value) => { values = { ...values, [key]: value }; view.update(React.createElement(Chassis, { raceClass: car, data: values, customFields: [], onChange })); };
+    const field = key => view.root.find(n => ['input', 'select'].includes(n.type) && n.props.id?.endsWith('-' + key));
+    const enter = async (key, value) => act(async () => field(key).props.onChange({ target: { value } }));
+    try {
+      await act(async () => { view = create(React.createElement(Chassis, { raceClass: car, data: values, customFields: [], onChange })); });
+      for (const section of ['General Chassis', 'Four Corners', 'Front', 'Rear-End & Drivetrain']) assert.ok(heading(view.root, section));
+      for (const legend of ['Left Front (LF)', 'Right Front (RF)', 'Left Rear (LR)', 'Right Rear (RR)']) assert.ok(view.root.findAllByType('legend').some(n => text(n) === legend));
+      assert.equal(field('total_weight').props.readOnly, false);
+      await enter('total_weight', '1500');
+      const representative = {
+        [car === 'Legends' ? 'engine_rpm' : car === 'Mini Stock / Compact' ? 'transmission_gear' : 'final_drive']: car === 'Mini Stock / Compact' ? '4th' : '7500',
+        lf_cold_pressure: '17.5', lf_camber: '-1.5',
+        [car === 'Pavement Modified' || car === 'Street Stock / Sportsman' ? 'pinion_angle' : car === 'Mini Stock / Compact' ? 'lr_toe' : 'rear_steer']: '-0.25',
+        front_toe: '1/8', front_toe_direction: 'in',
+        lf_corner_weight: '500', rf_corner_weight: '520', lr_corner_weight: '580', rr_corner_weight: '400',
+      };
+      for (const [key, value] of Object.entries(representative)) await enter(key, value);
+      assert.equal(field('total_weight').props.value, '2000');
+      assert.equal(field('total_weight').props.readOnly, true);
+      assert.equal(field('cross_weight').props.value, '55');
+      let row = JSON.parse(JSON.stringify(save(values)));
+      assert.equal(row.race_class, car);
+      await act(async () => view.unmount()); // leave the setup
+      values = reopen(row);
+      await act(async () => { view = create(React.createElement(Chassis, { raceClass: car, data: values, customFields: [], onChange })); });
+      for (const [key, value] of Object.entries(representative)) assert.equal(field(key).props.value, value, key + ' reopened');
+      await enter('lf_cold_pressure', '18.25');
+      row = JSON.parse(JSON.stringify(save(values)));
+      const copy = save({ ...reopen(row), setup_name: 'Renamed pavement copy' });
+      assert.equal(copy.setup_name, 'Renamed pavement copy');
+      assert.equal(copy.race_class, car);
+      assert.equal(reopen(copy).lf_cold_pressure, '18.25');
+      assert.equal(reopen(copy).total_weight, '2000');
+      const raceRow = race(reopen(copy), 'base', 'Pavement race');
+      assert.equal(raceRow.race_class, car);
+      assert.equal(reopen(raceRow).lf_cold_pressure, '18.25');
+    } finally { clearCachedBetaAccess(); await act(async () => view?.unmount()); }
+  });
+}

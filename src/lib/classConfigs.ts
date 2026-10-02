@@ -13,6 +13,8 @@ export interface FieldDef {
   section?: string;
   applicableClass?: string;
   applicableCategory?: string;
+  // A companion value rendered by its existing compound input (e.g. toe).
+  pairedWith?: string;
 }
 
 export interface ClassSection {
@@ -20,6 +22,7 @@ export interface ClassSection {
   title: string;
   icon: string; // SVG path or identifier
   fields: FieldDef[];
+  layout?: 'four-corners';
 }
 
 export interface ClassConfig {

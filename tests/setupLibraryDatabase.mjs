@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
-import { EXPANDED_CAR_CLASSES } from '../src/lib/setupLibrary.ts';
+import { EXPANDED_CAR_CLASSES, EXPANDED_CLASS_CONFIGS } from '../src/lib/setupLibrary.ts';
 import { buildBetaAccessSnapshot, setCachedBetaAccess, clearCachedBetaAccess } from '../src/lib/betaFeatures.ts';
 import { SETUP_LIBRARY_KEY } from '../src/lib/setupLibraryStorage.ts';
 import { componentFunction, populatedLibraryState } from './setupLibraryHarness.ts';
@@ -81,20 +81,32 @@ test('PostgreSQL: every new sheet saves/reopens/copies; gating, sharing, cooldow
     for (const name of EXPANDED_CAR_CLASSES) {
       await db.query('select public.change_active_race_class($1)', [name]);
       const state = populatedLibraryState(name);
+      if (EXPANDED_CLASS_CONFIGS[name].category === 'pavement_oval') Object.assign(state, {
+        lf_corner_weight: '500', rf_corner_weight: '520', lr_corner_weight: '580', rr_corner_weight: '400',
+        front_toe: '1/8', front_toe_direction: 'out',
+      });
       const base = await insert(saveBase(state));
       const reopened = (await db.query('select * from public.race_setups where id=$1', [base.id])).rows[0];
       for (const [key, value] of Object.entries(base.custom_fields[SETUP_LIBRARY_KEY].values)) assert.equal(loadBase(reopened)[key], value, `${name} ${key}`);
       const copy = await insert(saveBase({ ...loadBase(reopened), setup_name: `Copy ${name}` }));
       assert.deepEqual(copy.custom_fields, base.custom_fields);
       await db.query('update public.race_setups set setup_name=$1 where id=$2', ['Renamed baseline', copy.id]);
+      assert.equal((await db.query('select setup_name, race_class from public.race_setups where id=$1', [copy.id])).rows[0].setup_name, 'Renamed baseline');
+      assert.equal(copy.race_class, name);
       const race = await insert(saveRace(loadBase(copy), 'base', `Race ${name}`));
       const loaded = loadRace((await db.query('select * from public.race_setups where id=$1', [race.id])).rows[0]);
       const heat = await insert(saveRace({ ...loaded }, 'heat', `Race ${name}`));
       assert.deepEqual(heat.custom_fields, base.custom_fields);
-      const key = Object.keys(base.custom_fields[SETUP_LIBRARY_KEY].values)[0];
+      const key = EXPANDED_CLASS_CONFIGS[name].category === 'pavement_oval' ? 'lf_cold_pressure' : Object.keys(base.custom_fields[SETUP_LIBRARY_KEY].values)[0];
       const edited = saveRace({ ...loaded, [key]: 'edited value' }, 'base', `Race ${name}`);
       await db.query('update public.race_setups set custom_fields=$1 where id=$2', [JSON.stringify(edited.custom_fields), race.id]);
       assert.equal(loadRace((await db.query('select * from public.race_setups where id=$1', [race.id])).rows[0])[key], 'edited value');
+      if (EXPANDED_CLASS_CONFIGS[name].category === 'pavement_oval') {
+        assert.equal(loadBase(reopened).total_weight, '2000');
+        assert.equal(loadBase(reopened).cross_weight, '55');
+        assert.equal(race.race_class, name);
+        assert.equal(heat.race_class, name);
+      }
       if (name === 'GT3') sharedId = race.id;
       if (name.endsWith(' Kart')) {
         kartIds.push(race.id);
@@ -109,7 +121,7 @@ test('PostgreSQL: every new sheet saves/reopens/copies; gating, sharing, cooldow
       await assert.rejects(db.query("select public.initialize_active_race_class('GT3')"), /CLASS_INVALID/);
       await assert.rejects(db.query("select public.change_active_race_class('GT3')"), /CLASS_INVALID/);
       await assert.rejects(insert({ user_id: id, race_class: 'GT3', setup_type: 'base', custom_fields: { [SETUP_LIBRARY_KEY]: { version: 1, race_class: 'GT3', values: {} } } }), /TEST_ACCOUNT_REQUIRED|row-level security/);
-      for (const name of ['Shifter Kart', 'Clutch Kart']) {
+      for (const name of ['Shifter Kart', 'Clutch Kart', ...EXPANDED_CAR_CLASSES.filter(n => EXPANDED_CLASS_CONFIGS[n].category === 'pavement_oval')]) {
         assert.equal((await db.query('select public.onlyfast_canonical_race_class($1) as name', [name])).rows[0].name, null);
         await assert.rejects(db.query('select public.initialize_active_race_class($1)', [name]), /CLASS_INVALID/);
         await assert.rejects(db.query('select public.change_active_race_class($1)', [name]), /CLASS_INVALID/);

@@ -1,4 +1,5 @@
 import type { ClassConfig, ClassSection, FieldDef } from './classConfigs.ts';
+import { PAVEMENT_FIELD_GROUPS, pavementLegendsSchema, pavementLateModelSchema, pavementModifiedSchema, pavementCompactSchema } from './pavementSetupSchemas.ts';
 
 export type SetupCategory = 'dirt_oval' | 'pavement_oval' | 'road_course' | 'motorcycle' | 'rc';
 export const SETUP_CATEGORY_LABELS: Record<SetupCategory, string> = {
@@ -20,6 +21,7 @@ const atCorners = (fields: FieldDef[], frontOnly = false): FieldDef[] => (frontO
 const ends = (fields: FieldDef[]) => ['front', 'rear'].flatMap(end => fields.map(f => ({ ...f, key: `${end}_${f.key}`, label: `${end === 'front' ? 'Front' : 'Rear'} ${f.label}` })));
 
 export const SETUP_FIELD_GROUPS: Record<string, ClassSection> = {
+  ...PAVEMENT_FIELD_GROUPS,
   session: section('session', 'Session & Conditions', [text('session_track', 'Track'), text('session_name', 'Session'), text('session_weather', 'Weather'), field('ambient_temperature', 'Ambient temperature', '°F'), field('track_temperature', 'Track temperature', '°F'), field('fuel_load', 'Fuel load', 'gal'), field('driver_weight', 'Driver weight', 'lb')]),
   ovalWeights: section('oval-weights', 'Weights & Balance', [...atCorners([field('corner_weight', 'Corner weight', 'lb')]), field('total_weight', 'Total weight', 'lb'), field('front_weight_pct', 'Front weight', '%'), field('rear_weight_pct', 'Rear weight', '%'), field('left_side_pct', 'Left side weight', '%'), field('cross_weight', 'Cross weight', '%')]),
   roadWeights: section('road-weights', 'Weights & Balance', [...atCorners([field('corner_weight', 'Corner weight', 'lb')]), field('total_weight', 'Total weight', 'lb'), field('front_weight_pct', 'Front weight', '%'), field('rear_weight_pct', 'Rear weight', '%'), field('cross_weight', 'Cross weight', '%')]),
@@ -103,13 +105,12 @@ function add(name: string, category: SetupCategory, family: string, groups: stri
   };
 }
 
-const oval = ['session', 'ovalWeights', 'fourCornerTires', 'ovalTires', 'ovalCorners', 'ovalAlignment', 'ovalChassis'];
-add('Legends', 'pavement_oval', 'oval', [...oval.filter(g => g !== 'ovalChassis'), 'legendsChassis', 'rearSuspensionOval', 'ovalDifferential', 'gearing', 'brakes'], 'Motorcycle-powered spec coupe with coil springs and a live rear axle');
-add('Pavement Late Model', 'pavement_oval', 'oval', [...oval, 'bumpStops', 'rearSuspensionOval', 'ovalDifferential', 'gearing', 'brakes', 'ovalAero'], 'Base sheet for Late Model Stock, Pro Late Model and Super Late Model cars');
-add('Pavement Modified', 'pavement_oval', 'oval', [...oval, 'rearSuspensionOval', 'ovalDifferential', 'gearing', 'brakes'], 'Common asphalt tube-frame modified with a live rear axle');
-add('Stock Car / ARCA', 'pavement_oval', 'oval', [...oval, 'bumpStops', 'rearSuspensionOval', 'ovalDifferential', 'gearing', 'brakes', 'ovalAero'], 'Traditional live-axle ARCA / regional stock car foundation');
-add('Street Stock / Sportsman', 'pavement_oval', 'oval', [...oval, 'rearSuspensionOval', 'ovalDifferential', 'gearing', 'brakes'], 'Common coil-spring pavement stock car / sportsman foundation');
-add('Mini Stock / Compact', 'pavement_oval', 'oval', [...oval, 'compactRearAlignment', 'differential', 'gearing', 'brakes'], 'Production-based four-cylinder pavement oval car; rear alignment where adjustable');
+add('Legends', 'pavement_oval', 'oval', pavementLegendsSchema, 'Motorcycle-powered spec coupe with coil springs and a live rear axle');
+add('Pavement Late Model', 'pavement_oval', 'oval', pavementLateModelSchema, 'Base sheet for Late Model Stock, Pro Late Model and Super Late Model cars');
+add('Pavement Modified', 'pavement_oval', 'oval', pavementModifiedSchema, 'Common asphalt tube-frame modified with a live rear axle');
+add('Stock Car / ARCA', 'pavement_oval', 'oval', pavementLateModelSchema, 'Traditional live-axle ARCA / regional stock car foundation');
+add('Street Stock / Sportsman', 'pavement_oval', 'oval', pavementModifiedSchema, 'Common coil-spring pavement stock car / sportsman foundation');
+add('Mini Stock / Compact', 'pavement_oval', 'oval', pavementCompactSchema, 'Production-based four-cylinder pavement oval car; rear alignment where adjustable');
 
 const road = ['session', 'roadWeights', 'fourCornerTires', 'roadRaceAlignment', 'roadRideHeight', 'fourCornerSprings'];
 add('GT3', 'road_course', 'sports_car', [...road, 'fourCornerDampers', 'antiRollBars', 'aero', 'differential', 'brakes', 'electronics', 'gearing'], 'Comprehensive GT3 foundation with multi-channel dampers, aero, ABS and TC');

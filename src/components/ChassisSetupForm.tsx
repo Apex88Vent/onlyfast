@@ -1,7 +1,8 @@
-import React, { useId, useCallback } from 'react';
+import React, { useId, useCallback, useMemo } from 'react';
 import { getClassConfig, FieldDef, rideHeightOptions, toeOptions, crossWeightTurnsOptions } from '@/lib/classConfigs';
 import { useBetaFeatures } from '@/hooks/useBetaFeatures';
 import { canAccessSetupClass } from '@/lib/setupLibraryAccess';
+import { calculatePavementWeights, normalizePavementToe } from '@/lib/pavementSetupValues';
 
 interface SetupData {
   [key: string]: string;
@@ -123,13 +124,18 @@ const ChassisSetupForm: React.FC<ChassisSetupFormProps> = ({ data, customFields,
   const prefix = useId();
   const betaAccess = useBetaFeatures();
   const config = getClassConfig(raceClass || '');
+  const isPavement = config.category === 'pavement_oval';
+  const calculatedWeights = useMemo(() => isPavement ? calculatePavementWeights(data) : {}, [isPavement, data]);
+  const pavementToe = useMemo(() => isPavement ? normalizePavementToe(data) : {}, [isPavement, data]);
 
   const sectionHeaderClass = "text-base font-bold text-[#1A1B23] mb-3 flex items-center gap-2";
 
   const renderField = useCallback((field: FieldDef, fieldPrefix: string = '') => {
+    if (field.pairedWith) return null;
     const fieldKey = fieldPrefix ? `${fieldPrefix}_${field.key}` : field.key;
     const fieldId = `${prefix}-${fieldKey}`;
-    const value = data[fieldKey] || '';
+    const calculated = calculatedWeights[fieldKey];
+    const value = calculated ?? pavementToe[fieldKey] ?? data[fieldKey] ?? '';
     const changed = isChanged(baseSetup, fieldKey, value);
     const curLabelClass = changed ? changedLabelClass : labelClass;
     const curInputClass = changed ? changedInputClass : inputClass;
@@ -137,8 +143,10 @@ const ChassisSetupForm: React.FC<ChassisSetupFormProps> = ({ data, customFields,
     // Toe field - positive values with In/Out selector
     // Compact single-column layout; selected value rendered with larger, bold text
     // so the chosen fraction is clearly readable once picked.
-    if (field.key === 'toe' && field.type === 'select') {
-      const dirChanged = isChanged(baseSetup, 'toe_direction', data['toe_direction'] || '');
+    if ((field.key === 'toe' || (isPavement && field.key === 'front_toe')) && field.type === 'select') {
+      const directionKey = field.key === 'toe' ? 'toe_direction' : 'front_toe_direction';
+      const direction = pavementToe[directionKey] ?? data[directionKey] ?? '';
+      const dirChanged = isChanged(baseSetup, directionKey, direction);
       const anyChanged = changed || dirChanged;
       const toeSelectBase = "px-3 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#00A8E8] focus:border-[#00A8E8] outline-none transition-all text-base font-semibold text-[#1A1B23] bg-[#F9FAFB]";
       const toeSelectChanged = "px-3 py-2.5 border-2 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all text-base font-bold text-amber-900 bg-amber-50 border-amber-400";
@@ -153,18 +161,25 @@ const ChassisSetupForm: React.FC<ChassisSetupFormProps> = ({ data, customFields,
             <select
               id={fieldId}
               value={value}
-              onChange={(e) => onChange(fieldKey, e.target.value)}
+              onChange={(e) => {
+                onChange(fieldKey, e.target.value);
+                if (isPavement) onChange(directionKey, direction);
+              }}
               className={`${changed ? toeSelectChanged : toeSelectBase} flex-1 min-w-0`}
               aria-label="Toe amount"
             >
               {toeOptions.map(opt => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
+              {isPavement && value && !toeOptions.some(opt => opt.value === value) && <option value={value}>{value}″</option>}
             </select>
             <select
-              id={`${fieldId}-direction`}
-              value={data['toe_direction'] || ''}
-              onChange={(e) => onChange('toe_direction', e.target.value)}
+              id={isPavement ? `${prefix}-${directionKey}` : `${fieldId}-direction`}
+              value={direction}
+              onChange={(e) => {
+                onChange(directionKey, e.target.value);
+                if (isPavement) onChange(fieldKey, value);
+              }}
               className={`${dirChanged ? dirSelectChanged : dirSelectBase} w-14 flex-shrink-0`}
               aria-label="Toe direction"
             >
@@ -213,13 +228,15 @@ const ChassisSetupForm: React.FC<ChassisSetupFormProps> = ({ data, customFields,
           type="text"
           inputMode={field.type === 'number' ? 'decimal' : 'text'}
           value={value}
+          readOnly={calculated !== undefined}
+          aria-describedby={calculated !== undefined ? `${prefix}-weight-calculation-note` : undefined}
           onChange={(e) => onChange(fieldKey, e.target.value)}
           className={curInputClass}
           placeholder={field.placeholder || '--'}
         />
       </div>
     );
-  }, [data, onChange, prefix, baseSetup]);
+  }, [data, onChange, prefix, baseSetup, calculatedWeights, pavementToe, isPavement]);
 
   const sectionIcon = (
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00A8E8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -236,6 +253,9 @@ const ChassisSetupForm: React.FC<ChassisSetupFormProps> = ({ data, customFields,
   return (
     <div className="space-y-6">
       {config.developmentOnly && <p className="text-xs font-semibold text-[#00A8E8]">Development setup sheet · {config.name}</p>}
+      {isPavement && <p id={`${prefix}-weight-calculation-note`} className="text-xs text-[#6B7280]">
+        Weight totals calculate from all four corner weights when complete. With incomplete weights, enter totals manually.
+      </p>}
       {baseSetup && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 flex items-center gap-2 text-xs text-amber-900">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -319,12 +339,19 @@ const ChassisSetupForm: React.FC<ChassisSetupFormProps> = ({ data, customFields,
             </svg>
             {section.title}
           </h3>
-          <fieldset>
+          {section.layout === 'four-corners' ? <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {(['lf', 'rf', 'lr', 'rr'] as const).map(corner => <CornerCard key={corner}
+              title={{ lf: 'Left Front (LF)', rf: 'Right Front (RF)', lr: 'Left Rear (LR)', rr: 'Right Rear (RR)' }[corner]}
+              cornerPrefix={corner} color={corner.endsWith('f') ? '#00A8E8' : '#6B7280'} legendId={`${prefix}-${corner}-legend`}
+              fields={section.fields.filter(f => f.key.startsWith(`${corner}_`)).map(f => ({ ...f,
+                key: f.key.slice(3), label: f.label.replace(/^(LF|RF|LR|RR) /, '') }))}
+              data={data} onChange={onChange} prefix={prefix} baseSetup={baseSetup} />)}
+          </div> : <fieldset>
             <legend className="sr-only">{section.title} settings</legend>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
               {section.fields.map(f => renderField(f))}
             </div>
-          </fieldset>
+          </fieldset>}
         </section>
       ))}
 

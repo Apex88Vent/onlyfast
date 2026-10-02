@@ -10,6 +10,7 @@ import * as library from '../src/lib/setupLibrary.ts';
 import * as access from '../src/lib/setupLibraryAccess.ts';
 import * as storage from '../src/lib/setupLibraryStorage.ts';
 import * as custom from '../src/lib/customCar.ts';
+import * as pavementValues from '../src/lib/pavementSetupValues.ts';
 import { buildBetaAccessSnapshot, CLOSED_BETA_ACCESS, setCachedBetaAccess, clearCachedBetaAccess } from '../src/lib/betaFeatures.ts';
 import { componentFunction, populatedLibraryState } from './setupLibraryHarness.ts';
 
@@ -107,7 +108,7 @@ function renderForm(raceClass: string, betaAccess = experimentalAccess) {
   const source = readFileSync(new URL('../src/components/ChassisSetupForm.tsx', import.meta.url), 'utf8');
   const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2021, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, esModuleInterop: true } }).outputText;
   const mod = { exports: {} as { default: React.ComponentType<any> } };
-  const localRequire = (id: string) => id === '@/lib/classConfigs' ? configs : id === '@/lib/setupLibraryAccess' ? access : id === '@/hooks/useBetaFeatures' ? { useBetaFeatures: () => betaAccess } : require(id);
+  const localRequire = (id: string) => id === '@/lib/classConfigs' ? configs : id === '@/lib/setupLibraryAccess' ? access : id === '@/lib/pavementSetupValues' ? pavementValues : id === '@/hooks/useBetaFeatures' ? { useBetaFeatures: () => betaAccess } : require(id);
   new Function('require', 'module', 'exports', js)(localRequire, mod, mod.exports);
   return renderToStaticMarkup(React.createElement(mod.exports.default, { raceClass, data: {}, customFields: [], onChange: () => {} }));
 }
