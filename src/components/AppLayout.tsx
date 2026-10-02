@@ -41,6 +41,7 @@ const AppLayout: React.FC = () => {
   const [isLoadingSavedCar, setIsLoadingSavedCar] = useState(false);
   const [classSelectionUserId, setClassSelectionUserId] = useState<string | null | undefined>(undefined);
   const [classSelectionError, setClassSelectionError] = useState('');
+  const [landingRequest, setLandingRequest] = useState(0);
   const [legalModal, setLegalModal] = useState<'privacy' | 'terms' | null>(null);
   const [showSplash, setShowSplash] = useState(() => !isOnlyFastFilePickerOpen());
   const [authChecked, setAuthChecked] = useState(false);
@@ -106,11 +107,17 @@ const AppLayout: React.FC = () => {
     } catch {/* ignore */}
   }, [authenticatedUserId]);
 
+  const completeClassSelection = useCallback((car: string) => {
+    applySelectedCar(car);
+    setLandingRequest(request => request + 1);
+  }, [applySelectedCar]);
+
   useEffect(() => {
     if (!authChecked) return;
     setSelectedCar('');
     setIsOnboarded(false);
     setClassSelectionError('');
+    setLandingRequest(0);
     setUnlimitedClasses(null);
     if (!authenticatedUserId) {
       try {
@@ -289,13 +296,13 @@ const AppLayout: React.FC = () => {
     setClassSelectionError('');
     if (!canAccessSetupClass(car, betaAccess)) return;
     if (!user) {
-      applySelectedCar(car);
+      completeClassSelection(car);
       return;
     }
     try {
       const state = await initializeActiveClass(car);
       setUnlimitedClasses(state.unlimited);
-      applySelectedCar(state.active_class || car);
+      completeClassSelection(state.active_class || car);
     } catch {
       setClassSelectionError(isDevelopmentClass(car)
         ? 'Your class could not be saved. This development class requires the setup-library database migration. Please try again after it is applied.'
@@ -384,6 +391,7 @@ const AppLayout: React.FC = () => {
           <SetupDashboard
             user={user}
             selectedCar={selectedCar}
+            landingRequest={landingRequest}
             onSignInClick={() => setAuthModalOpen(true)}
             onChangeClass={openClassChange}
             classLocksEnabled={!(unlimitedClasses ?? (effectiveTier === 'team'))}
@@ -410,7 +418,7 @@ const AppLayout: React.FC = () => {
           tier={effectiveTier}
           currentClass={selectedCar}
           onClose={() => setClassChangeOpen(false)}
-          onChanged={applySelectedCar}
+          onChanged={completeClassSelection}
           onUpgrade={openTeamsUpgrade}
         />
         <CookieConsent />

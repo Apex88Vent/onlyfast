@@ -1,13 +1,13 @@
 # OnlyFast manual GitHub deployment
 
-The release is prepared as a local commit on `main` in this OnlyFast checkout. The user will perform the push. `origin` is `https://github.com/Apex88Vent/onlyfast.git`.
+The release is prepared as local commits on `main` in this OnlyFast checkout. The user will perform the push. `origin` is `https://github.com/Apex88Vent/onlyfast.git`.
 
-## Push the prepared commit
+## Push the prepared commits
 
 Open this checkout in your Git client and push local `main` to `origin/main`. The command-line equivalent, run from this repository, is:
 
 ```powershell
-git log -1 --oneline
+git log origin/main..main --oneline
 git push origin main
 ```
 
@@ -17,7 +17,7 @@ If Git reports that the remote branch advanced, reconcile those changes before p
 
 1. Open the existing Vercel `onlyfast` project and verify the new Git commit deploys to production. Project ID: `prj_yPHsgwfcKm4LfEmpzkop9XwHVRmR`. The previous production deployment came from Git `main` at `a2ab5bbfb9620bdac0696dedc1bc2d87f7fff3fc`.
 2. Confirm the deployment is READY and serves `https://onlyfast.app`. A push alone does not prove that production changed.
-3. Confirm the served frontend contains `onlyfast_setup_library_v1`, GT3, Formula Vee, and the corrected `Select My Discipline` / `Skip to discipline selection` labels. The freshly checked local build is `dist/assets/main-DyhosJnG.js`; the remote build may produce a different hash depending on its environment. The older production build is `main-m9nQttuU.js`.
+3. Confirm the served frontend contains `onlyfast_setup_library_v1`, GT3, Formula Vee, Shifter Kart, Clutch Kart, and the corrected `Select My Discipline` / `Skip to discipline selection` labels. The freshly checked local build is `dist/assets/main-DyRSZjm7.js`; the remote build may produce a different hash depending on its environment. The older production build is `main-m9nQttuU.js`.
 4. Verify the deployed frontend still targets Supabase project `thpyjvwtfvfxiufchrxn`.
 
 ## Database is already deployed
@@ -27,8 +27,9 @@ Do not rerun the migrations as a prerequisite for this push. These were applied 
 - `20260929_add_custom_car_class.sql`
 - `20260930_add_development_setup_library.sql`
 - `20261001_verify_designated_test_account.sql`
+- `20261002030004_add_development_kart_classes.sql`
 
-The real designated account accepts all 36 development classes. Six QA setups persisted, covering all five disciplines; GT3 rename/copy/edit and original preservation passed. Normal-account PostgreSQL/RLS checks blocked all 36 classes. The original nine setups remain unchanged, and active class Pro Stock was restored.
+The real designated account accepts all 38 development classes. The kart addition used a new additive migration; its live save/reopen/copy/rename and normal-account denial checks were fully rolled back. Existing rows and active classes were preserved. See [the kart and navigation report](KART_SETUP_NAVIGATION_REPORT.md). Six QA setups persisted, covering all five disciplines; GT3 rename/copy/edit and original preservation passed. Normal-account PostgreSQL/RLS checks blocked the original 36 classes and both additional kart classes. The original nine setups remain unchanged, and active class Pro Stock was restored.
 
 Read-only persistence verification and transaction-rolled-back access checks are documented in [the live deployment report](LIVE_SETUP_LIBRARY_DEPLOYMENT_REPORT.md). Do not rerun the QA creation transaction; the QA rows already exist.
 
@@ -44,8 +45,8 @@ Read-only persistence verification and transaction-rolled-back access checks are
 
 ## Validation
 
-- October 1 production build: passed, 1,837 modules; existing bundle-size warning only.
+- October 1 production build: passed, 1,838 modules; existing bundle-size warning only.
 - `git diff --check`: passed.
-- Prior implementation verification: 287 project tests, 12 mounted React onboarding tests, and actual PostgreSQL tests for all 36 sheets passed. See [onboarding verification](TEST_ACCOUNT_ONBOARDING_REPORT.md) and [setup-library verification](SETUP_LIBRARY_REPORT.md).
+- Current implementation verification: 290 project tests, 19 mounted React/navigation checks, and actual PostgreSQL tests for all 38 sheets passed. See [onboarding verification](TEST_ACCOUNT_ONBOARDING_REPORT.md) and [setup-library verification](SETUP_LIBRARY_REPORT.md).
 - Live backend deployment and role-based access/persistence checks: passed.
 - Fresh production frontend deployment and authenticated browser flow: pending the manual push and live verification.

@@ -94,6 +94,7 @@ interface SetupDashboardProps {
   onChangeClass: () => void;
   classLocksEnabled: boolean;
   onUpgrade: () => void;
+  landingRequest?: number;
 }
 
 const readCarNumber = (user: User | null | undefined, override?: string): string => {
@@ -339,6 +340,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   onChangeClass,
   classLocksEnabled,
   onUpgrade,
+  landingRequest = 0,
 }) => {
   const { template: customCarTemplate, initialSheet } = useCustomCarTemplate();
   const { hasBetaFeature, testerKind } = useBetaFeatures();
@@ -384,7 +386,14 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   const [stateLoaded, setStateLoaded] = useState(false);
   const [baseTemplateMessage, setBaseTemplateMessage] = useState('');
   const [resumedBanner, setResumedBanner] = useState<string | null>(null);
-  const [resumeAttempted, setResumeAttempted] = useState(false);
+  const [resumeAttempted, setResumeAttempted] = useState(landingRequest > 0);
+  useEffect(() => {
+    if (!landingRequest) return;
+    // A successful initial selection/class change is a home navigation action.
+    // Later explicit New/Edit/Base Setup actions retain their existing routes.
+    setActiveView('home');
+    setResumeAttempted(true);
+  }, [landingRequest]);
   const [pendingCount, setPendingCount] = useState<number>(() => {
     try { return readPendingQueue().length; } catch { return 0; }
   });
@@ -1413,9 +1422,10 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     if (saveThenClear) setSaveThenClear(false);
   };
 
-  // Autosave every 5 minutes, only if we've named the file at least once
+  // Class selection alone must not autosave a restored named draft. The
+  // existing autosave resumes when the user explicitly enters the editor.
   useEffect(() => {
-    if (!user) return;
+    if (!user || (landingRequest > 0 && activeView !== 'setup')) return;
     const interval = setInterval(() => {
       if (savedMeta.name) {
         performSave(savedMeta.name, true).then((r) => {
@@ -1425,7 +1435,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     }, AUTOSAVE_MS);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, savedMeta, setups, customFields]);
+  }, [user, savedMeta, setups, customFields, landingRequest, activeView]);
 
   const handleShareCurrent = async () => {
     if (!user) {
@@ -2137,7 +2147,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   orderedSessionsRef.current = orderedSessions;
 
   useEffect(() => {
-    if (!stateLoaded || resumeAttempted) return;
+    if (!stateLoaded || resumeAttempted || landingRequest > 0) return;
     let cancelled = false;
 
     const finish = (view: DashboardView, tab?: SetupType) => {
@@ -2216,7 +2226,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [activeTab, orderedSessionKey, resumeAttempted, savedMeta.name, setups, stateLoaded, user, deletedSessionSlots]);
+  }, [activeTab, orderedSessionKey, resumeAttempted, savedMeta.name, setups, stateLoaded, user, deletedSessionSlots, landingRequest]);
 
   useEffect(() => {
     if (activeView !== 'setup') return;

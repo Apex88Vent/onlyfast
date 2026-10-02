@@ -62,6 +62,11 @@ test('PostgreSQL: every new sheet saves/reopens/copies; gating, sharing, cooldow
     assert.deepEqual((await db.query('select * from auth.users order by id')).rows, accountsBefore, 'no authentication/onboarding data changes');
     assert.deepEqual((await db.query('select * from public.beta_tester_accounts where user_id=$1', [ids[5]])).rows, personalBefore, 'personal beta designation unchanged');
     assert.deepEqual((await db.query('select feature_key from public.user_feature_flags where user_id=$1', [ids[0]])).rows, [{ feature_key: 'test_account_full_access' }], 'no reset/unrelated flags enabled');
+    await signIn(ids[0]);
+    for (const name of ['Shifter Kart', 'Clutch Kart']) assert.equal((await db.query('select public.onlyfast_canonical_race_class($1) as name', [name])).rows[0].name, null, 'old migration did not include karts');
+    await db.exec('reset role');
+    await runMigration('supabase/migrations/20261002030004_add_development_kart_classes.sql');
+    await runMigration('supabase/migrations/20261002030004_add_development_kart_classes.sql'); // additive/idempotent
     await db.exec('grant select, insert, update, delete on public.race_setups, public.shared_setups to authenticated; grant select on public.race_setups, public.shared_setups to anon;');
     const access = buildBetaAccessSnapshot({ user_id: ids[0], is_test_account: true, beta_features_enabled: true, tester_kind: 'experimental' }, [{ feature_key: 'test_account_full_access', enabled: true }]);
     setCachedBetaAccess(access);
@@ -72,6 +77,7 @@ test('PostgreSQL: every new sheet saves/reopens/copies; gating, sharing, cooldow
     await signIn(ids[0]);
     assert.equal((await db.query('select public.get_active_race_class_state() as state')).rows[0].state.unlimited, true);
     let sharedId;
+    const kartIds = [];
     for (const name of EXPANDED_CAR_CLASSES) {
       await db.query('select public.change_active_race_class($1)', [name]);
       const state = populatedLibraryState(name);
@@ -90,6 +96,10 @@ test('PostgreSQL: every new sheet saves/reopens/copies; gating, sharing, cooldow
       await db.query('update public.race_setups set custom_fields=$1 where id=$2', [JSON.stringify(edited.custom_fields), race.id]);
       assert.equal(loadRace((await db.query('select * from public.race_setups where id=$1', [race.id])).rows[0])[key], 'edited value');
       if (name === 'GT3') sharedId = race.id;
+      if (name.endsWith(' Kart')) {
+        kartIds.push(race.id);
+        assert.equal((await db.query('select setup_name from public.race_setups where id=$1', [copy.id])).rows[0].setup_name, 'Renamed baseline');
+      }
     }
     await assert.rejects(insert({ user_id: ids[0], race_class: 'GT3', setup_type: 'base' }), /SETUP_LIBRARY_SNAPSHOT_REQUIRED/);
     await db.query("insert into public.shared_setups(setup_id,shared_by,share_code,is_public) values ($1,$2,'LIBRARY-QA',true)", [sharedId, ids[0]]);
@@ -99,6 +109,13 @@ test('PostgreSQL: every new sheet saves/reopens/copies; gating, sharing, cooldow
       await assert.rejects(db.query("select public.initialize_active_race_class('GT3')"), /CLASS_INVALID/);
       await assert.rejects(db.query("select public.change_active_race_class('GT3')"), /CLASS_INVALID/);
       await assert.rejects(insert({ user_id: id, race_class: 'GT3', setup_type: 'base', custom_fields: { [SETUP_LIBRARY_KEY]: { version: 1, race_class: 'GT3', values: {} } } }), /TEST_ACCOUNT_REQUIRED|row-level security/);
+      for (const name of ['Shifter Kart', 'Clutch Kart']) {
+        assert.equal((await db.query('select public.onlyfast_canonical_race_class($1) as name', [name])).rows[0].name, null);
+        await assert.rejects(db.query('select public.initialize_active_race_class($1)', [name]), /CLASS_INVALID/);
+        await assert.rejects(db.query('select public.change_active_race_class($1)', [name]), /CLASS_INVALID/);
+        await assert.rejects(insert({ user_id: id, race_class: name, setup_type: 'base', custom_fields: { [SETUP_LIBRARY_KEY]: { version: 1, race_class: name, values: {} } } }), /TEST_ACCOUNT_REQUIRED|row-level security/);
+      }
+      for (const kartId of kartIds) assert.equal((await db.query('select * from public.race_setups where id=$1', [kartId])).rows.length, 0);
       // Renaming the class cannot smuggle the library snapshot into a normal row.
       await assert.rejects(insert({ user_id: id, race_class: 'Dwarf Cars', setup_type: 'base', custom_fields: { [SETUP_LIBRARY_KEY]: {} } }), /TEST_ACCOUNT_REQUIRED|row-level security/);
       assert.equal((await db.query('select * from public.race_setups where id=$1', [sharedId])).rows.length, 0);

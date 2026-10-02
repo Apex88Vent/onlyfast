@@ -22,7 +22,7 @@ const loadRace = componentFunction('SetupDashboard.tsx', 'loadSetupIntoState');
 test('production registries remain unchanged and all new class IDs are development-only', () => {
   assert.deepEqual(configs.AVAILABLE_CAR_CLASSES, ['Custom Car', 'Dwarf Cars', 'Modified', 'Sport Mod', 'Lightning Sprints', 'Pro Stock', 'Pure Stock']);
   assert.equal(configs.CAR_CLASSES.length, 11);
-  assert.equal(library.EXPANDED_CAR_CLASSES.length, 36);
+  assert.equal(library.EXPANDED_CAR_CLASSES.length, 38);
   for (const [name, config] of Object.entries(library.EXPANDED_CLASS_CONFIGS)) {
     assert.equal(config.developmentOnly, true);
     assert.equal(configs.CLASS_CONFIGS[name], undefined);
@@ -47,7 +47,7 @@ test('normal Rookie/Pro/Team/admin, personal beta, disabled switches and missing
     { ...experimentalAccess, betaFeaturesEnabled: false }, { ...experimentalAccess, isBetaTester: false }, { ...experimentalAccess, enabledFeatures: [] }]) {
     assert.equal(access.canAccessSetupLibrary(snapshot), false);
   }
-  assert.equal(access.getSelectableSetupClasses(experimentalAccess).length, 47);
+  assert.equal(access.getSelectableSetupClasses(experimentalAccess).length, 49);
   for (const category of Object.keys(library.SETUP_CATEGORY_LABELS)) {
     const classes = access.getDisciplineSetupClasses(category as library.SetupCategory, experimentalAccess);
     for (const name of classes.filter(library.isDevelopmentClass)) assert.equal(library.EXPANDED_CLASS_CONFIGS[name].category, category);
@@ -154,14 +154,16 @@ test('actual onboarding and class-change selectors hide additions from every pro
   for (const tier of ['rookie', 'pro', 'team', 'admin']) {
     const modal = loadUI('components/ClassChangeModal.tsx', CLOSED_BETA_ACCESS, ['selector', 'Dwarf Cars', null, '', false, true]).default;
     const html = renderToStaticMarkup(React.createElement(modal, { isOpen: true, currentClass: 'Dwarf Cars', tier }));
-    assert.doesNotMatch(html, /GT3|Legends|RC 1\/8 Buggy|Superbike/);
+    assert.doesNotMatch(html, /Shifter Kart|Clutch Kart|GT3|Legends|RC 1\/8 Buggy|Superbike/);
   }
   const onboarding = loadUI('components/OnboardingFlow.tsx', CLOSED_BETA_ACCESS, [3, 'Dirt Track Oval']).default;
   const normal = renderToStaticMarkup(React.createElement(onboarding, { onComplete: () => {} }));
-  assert.doesNotMatch(normal, /GT3|Legends|Superbike/);
+  assert.doesNotMatch(normal, /Shifter Kart|Clutch Kart|GT3|Legends|Superbike/);
   const testOnboarding = loadUI('components/OnboardingFlow.tsx', experimentalAccess, [3, 'Road Course']).default;
   const expanded = renderToStaticMarkup(React.createElement(testOnboarding, { onComplete: () => {} }));
   assert.match(expanded, /GT3|Formula Ford 1600/);
+  assert.match(expanded, /Shifter Kart/);
+  assert.match(expanded, /Clutch Kart/);
   assert.doesNotMatch(expanded, /Dwarf Cars|RC 1\/8 Buggy|Superbike/);
 });
 
@@ -189,4 +191,20 @@ test('actual comparison and PDF display JSON values with schema labels instead o
     clearCachedBetaAccess();
     assert.throws(() => pdf.buildSetupPdfHtml(first), /test account/);
   } finally { clearCachedBetaAccess(); }
+});
+
+test('dedicated kart sheets share flex/axle geometry, use Road Course and differentiate brakes/drive', () => {
+  for (const name of ['Shifter Kart', 'Clutch Kart']) {
+    const config = library.EXPANDED_CLASS_CONFIGS[name];
+    assert.equal(config.category, 'road_course');
+    assert.equal(config.family, 'kart');
+    const html = renderForm(name);
+    assert.doesNotMatch(html, /spring|shock|anti-roll|differential|wing angle/i);
+    for (const label of ['Rear axle', 'Seat', 'Ackerman', 'Front / drive sprocket', 'Rear sprocket']) assert.ok(html.includes(label), name + ': ' + label);
+    for (const corner of ['lf', 'rf', 'lr', 'rr']) assert.ok(config.extraSections.flatMap(s => s.fields).some(f => f.key === corner + '_cold_pressure'));
+  }
+  assert.match(renderForm('Shifter Kart'), /Front brake configuration|Front brake balance/);
+  assert.doesNotMatch(renderForm('Shifter Kart'), /Clutch engagement|Individual transmission/);
+  assert.match(renderForm('Clutch Kart'), /Rear brake \/ pad configuration|Clutch engagement/);
+  assert.doesNotMatch(renderForm('Clutch Kart'), /Front brake|brake balance/i);
 });

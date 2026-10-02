@@ -11,6 +11,7 @@ import * as library from '../src/lib/setupLibrary.ts';
 import * as access from '../src/lib/setupLibraryAccess.ts';
 import * as custom from '../src/lib/customCar.ts';
 import { buildBetaAccessSnapshot, CLOSED_BETA_ACCESS } from '../src/lib/betaFeatures.ts';
+import { componentFunction } from './setupLibraryHarness.ts';
 import { resolveAuthUiTransition } from '../src/lib/authUiTransition.ts';
 
 const qaRequire = createRequire(process.env.REACT_TEST_RENDERER_MODULE);
@@ -62,7 +63,7 @@ const App = compile('components/AppLayout.tsx', {
   './OnboardingFlow': { default: Selection },
   './HowOnlyFastWorks': { default: How },
   './Header': { default: ({ onOpenHowOnlyFastWorks }) => React.createElement('button', { onClick: onOpenHowOnlyFastWorks }, 'Replay help') },
-  './SetupDashboard': { default: ({ selectedCar }) => React.createElement('div', { 'data-landing': true }, `Landing: ${selectedCar}`) },
+  './SetupDashboard': { default: ({ selectedCar, landingRequest }) => React.createElement('div', { 'data-landing': true, 'data-landing-request': landingRequest }, `Landing: ${selectedCar}`) },
   './AuthModal': { default: Auth },
   './CookieConsent': { default: empty },
   './Footer': { default: empty },
@@ -79,7 +80,13 @@ const App = compile('components/AppLayout.tsx', {
   '@/lib/filePickerState': { isOnlyFastFilePickerOpen: () => false },
   '@/lib/authUiTransition': { resolveAuthUiTransition },
 });
-const Preview = compile('pages/OnboardingPreview.tsx', { '@/components/HowOnlyFastWorks': { default: How }, '@/components/OnboardingFlow': { default: Selection } });
+const Home = compile('components/HomeLanding.tsx');
+const Chassis = compile('components/ChassisSetupForm.tsx');
+const PreviewLanding = compile('components/SetupPreviewLanding.tsx', {
+  './HomeLanding': { default: Home }, './ChassisSetupForm': { default: Chassis },
+  './CustomCarSheet': { CustomSheetFields: empty },
+});
+const Preview = compile('pages/OnboardingPreview.tsx', { '@/components/HowOnlyFastWorks': { default: How }, '@/components/OnboardingFlow': { default: Selection }, '@/components/SetupPreviewLanding': { default: PreviewLanding } });
 const ChangeClass = compile('components/ClassChangeModal.tsx', {
   '@/lib/paymentVisibility': { isMedianIOSApp: false },
   '@/lib/activeClass': {
@@ -276,7 +283,7 @@ test('class-change modal uses existing server test bypass while preserving norma
   const props = { isOpen: true, user: { id: 'test-id' }, tier: 'rookie', currentClass: 'Dwarf Cars', onClose: () => { closed = true; }, onChanged: car => { selected = car; }, onUpgrade() {} };
   let view;
   await act(async () => { view = create(React.createElement(ChangeClass, props)); });
-  assert.equal(view.root.findAllByType('option').length, 47);
+  assert.equal(view.root.findAllByType('option').length, 49);
   await act(async () => view.root.findByType('select').props.onChange({ target: { value: 'GT3' } }));
   await click(view.root, 'Change Class');
   assert.equal(selected, 'GT3');
@@ -288,4 +295,100 @@ test('class-change modal uses existing server test bypass while preserving norma
   assert.equal(view.root.findAllByType('select').length, 0);
   assert.ok(heading(view.root, 'Class change unavailable'));
   await act(async () => view.unmount());
+});
+
+for (const car of ['GT3', 'Shifter Kart', 'Clutch Kart']) {
+  test('A/B/C: first-run Road Course ' + car + ' initializes before landing, without requesting an editor', async () => {
+    reset({ access: experiment });
+    const view = await mount();
+    await requiredSlides(view.root);
+    await click(view.root, 'Skip');
+    const road = buttons(view.root).find(b => b.props['aria-label']?.startsWith('Road Course -'));
+    await act(async () => road.props.onClick());
+    const selected = buttons(view.root).find(b => b.props['aria-label']?.startsWith(car + ' -'));
+    await act(async () => selected.props.onClick());
+    assert.ok(landing(view.root));
+    assert.equal(view.root.findByProps({ 'data-landing': true }).props['data-landing-request'], 1);
+    assert.deepEqual(fixture.initializations, [car]);
+    await act(async () => view.unmount());
+  });
+}
+
+for (const car of ['Shifter Kart', 'Clutch Kart']) {
+  test('G/E: actual protected preview ends on real landing for ' + car + '; explicit New Setup opens its form', async () => {
+    reset({ access: experiment });
+    const view = await mount(Preview);
+    await requiredSlides(view.root);
+    await click(view.root, 'Skip to discipline selection');
+    await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith('Road Course -')).props.onClick());
+    await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith(car + ' -')).props.onClick());
+    assert.equal(view.root.findAllByType(Home).length, 1);
+    assert.equal(view.root.findAllByType(Chassis).length, 0);
+    await click(view.root, 'New Setup');
+    assert.ok(heading(view.root, car + ' Setup Sheet'));
+    assert.equal(view.root.findAllByType(Chassis).length, 1);
+    assert.equal(view.root.findAllByType(Home).length, 0);
+    await click(view.root, 'Back to landing');
+    assert.equal(view.root.findAllByType(Home).length, 1);
+    assert.deepEqual(fixture.initializations, []);
+    assert.deepEqual(fixture.metadataWrites, []);
+    await act(async () => view.unmount());
+  });
+}
+
+// Execute the actual dashboard effects and New Setup handler. This catches
+// restoration of a recent setup (including Custom Car) after initialization.
+function dashboardEffect(marker, scope) {
+  const source = readFileSync(new URL('../src/components/SetupDashboard.tsx', import.meta.url), 'utf8');
+  const ast = ts.createSourceFile('dashboard.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let expression;
+  const visit = node => {
+    if (ts.isCallExpression(node) && node.expression.getText(ast) === 'useEffect' && node.arguments[0]?.getText(ast).includes(marker)) expression = node.arguments[0].getText(ast);
+    ts.forEachChild(node, visit);
+  };
+  visit(ast);
+  assert.ok(expression, marker);
+  const js = ts.transpileModule('const callback = ' + expression, { compilerOptions: { target: ts.ScriptTarget.ES2021 } }).outputText;
+  return new Function(...Object.keys(scope), js + '\nreturn callback;')(...Object.values(scope));
+}
+
+test('E/F: actual dashboard blocks stale setup restoration after selection, keeps returning landing and explicit New Setup', async () => {
+  let route = 'home';
+  let reads = 0;
+  let resume = false;
+  const scope = { stateLoaded: true, resumeAttempted: false, landingRequest: 1, selectedCar: 'Custom Car', CUSTOM_CAR: 'Custom Car', savedMeta: {},
+    setActiveView: value => { route = value; }, setResumeAttempted: value => { resume = value; },
+    setActiveTab() {}, readSavedDashboardRoute: () => { reads++; return { view: 'setup', timestamp: Date.now() }; }, IDLE_HOME_TIMEOUT_MS: 1800000 };
+  dashboardEffect('const restoreSavedRoute', scope)();
+  assert.equal(route, 'home');
+  assert.equal(reads, 0, 'no recent setup opened/read simply because a class was selected');
+  route = 'setup';
+  dashboardEffect('A successful initial selection/class change', scope)();
+  assert.equal(route, 'home', 'a class change while editing returns to landing');
+  assert.equal(resume, true);
+  dashboardEffect('const restoreSavedRoute', { ...scope, landingRequest: 0, selectedCar: 'Dwarf Cars', readSavedDashboardRoute: () => null })();
+  assert.equal(route, 'home', 'configured returning user without an intentional recent route enters home');
+  const onNew = componentFunction('SetupDashboard.tsx', 'handleNewSetupClick', { workspaceHasData: () => false, savedMeta: {}, setDeletedSessionSlots() {}, setAddedSessionSlots() {}, setActiveView: value => { route = value; } });
+  let view;
+  await act(async () => { view = create(React.createElement(Home, { selectedCar: 'Shifter Kart', onChangeClass() {}, onAction: action => { assert.equal(action, 'new-setup'); onNew(); } })); });
+  await click(view.root, 'New Setup');
+  assert.equal(route, 'setup');
+  // Existing intentional resume remains available outside class selection.
+  dashboardEffect('const restoreSavedRoute', { ...scope, landingRequest: 0, selectedCar: 'Dwarf Cars', activeTab: 'base', ALL_SLOTS: ['base'], deletedSessionSlots: {}, orderedSessions: ['base'], setups: {}, tabHasData: () => false })();
+  assert.equal(route, 'setup');
+  await act(async () => view.unmount());
+});
+
+test('class selection cannot autosave a restored draft before an explicit editor action', async () => {
+  let intervalCallback;
+  let saves = 0;
+  const scope = { user: { id: 'new-id' }, landingRequest: 1, activeView: 'home', savedMeta: { name: 'Restored draft' }, AUTOSAVE_MS: 300000,
+    setInterval: callback => { intervalCallback = callback; return 1; }, clearInterval() {}, performSave: async () => { saves++; return true; }, setLastAutoSave() {} };
+  dashboardEffect('landingRequest > 0 && activeView', scope)();
+  assert.equal(intervalCallback, undefined);
+  assert.equal(saves, 0);
+  dashboardEffect('landingRequest > 0 && activeView', { ...scope, activeView: 'setup' })();
+  intervalCallback();
+  await Promise.resolve();
+  assert.equal(saves, 1, 'explicit editor action retains existing named-file autosave');
 });

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Check, RotateCcw } from 'lucide-react';
 import HowOnlyFastWorks from '@/components/HowOnlyFastWorks';
 import OnboardingFlow from '@/components/OnboardingFlow';
+import SetupPreviewLanding from '@/components/SetupPreviewLanding';
 
 const OnboardingPreview = () => {
   const [complete, setComplete] = useState(false);
@@ -13,6 +14,12 @@ const OnboardingPreview = () => {
       <div className="mx-auto w-full max-w-[390px] overflow-hidden bg-[#F5F5F7] shadow-2xl sm:rounded-[2rem] sm:ring-8 sm:ring-slate-900">
         {complete && !loginClicked && !selectedClass ? (
           <OnboardingFlow onComplete={setSelectedClass} />
+        ) : complete && selectedClass && !loginClicked ? (
+          <>
+            <SetupPreviewLanding key={selectedClass} selectedCar={selectedClass} onChangeClass={() => setSelectedClass('')} />
+            <button type="button" className="w-full px-5 py-3.5 font-bold text-[#00A8E8]"
+              onClick={() => { setComplete(false); setSelectedClass(''); }}>Preview again</button>
+          </>
         ) : complete ? (
           <main className="min-h-screen flex items-center justify-center p-6 text-center">
             <div className="w-full rounded-3xl border border-[#E5E7EB] bg-white p-8 shadow-xl shadow-slate-900/5">
