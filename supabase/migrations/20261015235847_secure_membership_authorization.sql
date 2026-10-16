@@ -18,13 +18,17 @@ returns text language sql stable security definer set search_path = '' as $$
     when (lower(s.plan) in ('team','teams') and lower(s.status) in ('active','trialing')
       and (s.subscription_source is distinct from 'revenuecat' or s.revenuecat_expires_at > now()))
       or (lower(u.raw_app_meta_data ->> 'promo_access_level') in ('team','teams','admin','admin_full_access')
-        and (nullif(u.raw_app_meta_data ->> 'promo_access_expires_at','') is null
-          or (u.raw_app_meta_data ->> 'promo_access_expires_at')::timestamptz > now())) then 'team'
+        and case when nullif(u.raw_app_meta_data ->> 'promo_access_expires_at','') is null then true
+          when pg_input_is_valid(u.raw_app_meta_data ->> 'promo_access_expires_at','timestamptz')
+            then (u.raw_app_meta_data ->> 'promo_access_expires_at')::timestamptz > now()
+          else false end) then 'team'
     when (lower(s.plan)='pro' and lower(s.status) in ('active','trialing')
       and (s.subscription_source is distinct from 'revenuecat' or s.revenuecat_expires_at > now()))
       or (lower(u.raw_app_meta_data ->> 'promo_access_level')='pro'
-        and (nullif(u.raw_app_meta_data ->> 'promo_access_expires_at','') is null
-          or (u.raw_app_meta_data ->> 'promo_access_expires_at')::timestamptz > now())) then 'pro'
+        and case when nullif(u.raw_app_meta_data ->> 'promo_access_expires_at','') is null then true
+          when pg_input_is_valid(u.raw_app_meta_data ->> 'promo_access_expires_at','timestamptz')
+            then (u.raw_app_meta_data ->> 'promo_access_expires_at')::timestamptz > now()
+          else false end) then 'pro'
     else 'rookie' end
     from auth.users u left join public.user_subscriptions s on s.user_id=u.id
     where u.id=p_user_id), 'rookie');
@@ -48,9 +52,17 @@ grant execute on function public.get_onlyfast_membership() to authenticated;
 create or replace function onlyfast_private.has_unlimited_vehicles(p_uid uuid)
 returns boolean language sql stable security definer set search_path = '' as $$
   select p_uid = (select auth.uid())
-    and public.onlyfast_subscription_tier(p_uid) in ('team','admin');
+    and (public.onlyfast_subscription_tier(p_uid) in ('team','admin')
+      or exists(select 1 from auth.users u where u.id=p_uid
+        and u.raw_app_meta_data ->> 'onlyfast_vehicle_unlimited' = 'true'
+        and case when nullif(u.raw_app_meta_data ->> 'onlyfast_vehicle_grant_expires_at','') is null then true
+          when pg_input_is_valid(u.raw_app_meta_data ->> 'onlyfast_vehicle_grant_expires_at','timestamptz')
+            then (u.raw_app_meta_data ->> 'onlyfast_vehicle_grant_expires_at')::timestamptz > now()
+          else false end));
 $$;
 revoke all on function onlyfast_private.has_unlimited_vehicles(uuid) from public, anon;
 grant execute on function onlyfast_private.has_unlimited_vehicles(uuid) to authenticated;
-revoke insert, update, delete on public.user_subscriptions from public, anon, authenticated;
+revoke all on public.user_subscriptions from public, anon, authenticated;
+grant select on public.user_subscriptions to authenticated;
+grant select, insert, update, delete on public.user_subscriptions to service_role;
 commit;

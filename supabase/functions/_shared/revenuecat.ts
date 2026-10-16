@@ -16,9 +16,12 @@ export type SubscriberResponse = {
   subscriber: { entitlements: Record<string, Entitlement>; subscriptions: Record<string, StoreSubscription> };
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
+
 export function mapRevenueCatSnapshot(body: SubscriberResponse, config: RevenueCatConfig, now = Date.now()) {
-  if (!body?.subscriber?.entitlements || !body.subscriber.subscriptions ||
-      !Number.isFinite(body.request_date_ms) || body.request_date_ms > now + 300_000) {
+  if (!isRecord(body?.subscriber?.entitlements) || !isRecord(body.subscriber.subscriptions) ||
+      !Number.isSafeInteger(body.request_date_ms) || body.request_date_ms < 0 || body.request_date_ms > now + 300_000) {
     throw new Error('Invalid RevenueCat subscriber response');
   }
   const candidates = [
@@ -29,7 +32,10 @@ export function mapRevenueCatSnapshot(body: SubscriberResponse, config: RevenueC
   let selected: { plan: string; status: string; product_id: string; store: string; expires_at: string; observed_at: string } | null = null;
   for (const candidate of candidates) {
     const entitlement = body.subscriber.entitlements[candidate.id];
-    if (!entitlement) continue;
+    if (entitlement === undefined) continue;
+    if (!isRecord(entitlement) || typeof entitlement.product_identifier !== 'string') {
+      throw new Error('Invalid RevenueCat entitlement');
+    }
     const subscription = body.subscriber.subscriptions[entitlement.product_identifier];
     if (!subscription || !['app_store', 'play_store'].includes(subscription.store)) continue;
     if (subscription.is_sandbox !== false && !config.allowSandbox) continue;

@@ -1,6 +1,9 @@
 # OnlyFast native subscriptions: implementation and rollout
 
-> Updated pre-build status: see [REVENUECAT_PREBUILD_REPORT.md](REVENUECAT_PREBUILD_REPORT.md).
+> Backend deployment readiness and current live inventory (2026-10-16): see
+> [REVENUECAT_DEPLOYMENT_CHECKLIST.md](REVENUECAT_DEPLOYMENT_CHECKLIST.md).
+> That checklist supersedes the rollout instructions below where they differ.
+> Earlier pre-build status: [REVENUECAT_PREBUILD_REPORT.md](REVENUECAT_PREBUILD_REPORT.md).
 > This is a future rollout guide. No dashboard, store, deployment, or enablement actions are authorized for this pre-build update.
 > Review legacy grants and the pending authorization migration before releasing the updated app.
 
@@ -48,6 +51,10 @@ Apply in order, after the repository's existing migrations:
 2. `supabase/migrations/202609240002_schedule_revenuecat_expiration.sql`
    - Enables Supabase `pg_cron` and schedules expiry checks every minute.
      A late/missing store webhook cannot indefinitely preserve expired access.
+3. `supabase/migrations/20261015235847_secure_membership_authorization.sql`
+   - Replaces legacy editable-claim authorization, preserves server-owned grants,
+     checks native expiry and restricts client subscription privileges to reads.
+   - Must follow onboarding restoration if that separate app release is included.
 
 The initial table is defined in root `SUBSCRIPTIONS_RLS.sql`, not the migration
 history. For a fresh staging database, establish that baseline before migrations.
@@ -96,9 +103,11 @@ New functions:
   native sign-in/resume. Gateway JWT verification is off because authentication is
   performed in the handler, supporting current Supabase key configurations.
 
-Modified `stripe-webhook`: now checks database write errors and returns failure
-so Stripe can retry. Its checkout/price/customer mapping is otherwise preserved.
-The Stripe portal function is unchanged.
+Keep the deployed `stripe-webhook` and billing portal unchanged for this backend
+rollout. The local Stripe implementation differs from the deployed implementation;
+do not replace it as part of RevenueCat deployment. The pending synchronization
+migration recognizes the deployed webhook's writes of Stripe identifiers even
+though that version omits `subscription_source`, preserving provider precedence.
 
 Set these **Supabase Edge Function secrets**, never `VITE_` variables:
 
@@ -134,7 +143,8 @@ Deploy after applying migrations and secrets, using your selected project:
 ```text
 supabase functions deploy revenuecat-webhook
 supabase functions deploy sync-revenuecat-subscription
-supabase functions deploy stripe-webhook
+supabase functions deploy get-suggestions
+supabase functions deploy scan-timing-screen
 ```
 
 No remote deployment or configuration was performed in this task.
@@ -143,19 +153,17 @@ No remote deployment or configuration was performed in this task.
 
 1. Use one OnlyFast RevenueCat project, with iOS and Android apps matching the
    existing Median bundle/package identifiers. Connect the store credentials.
-2. Create entitlements `pro` and `team`. Attach each platform's Pro subscription
-   to `pro` and Team subscription to `team`. The backend maps those to existing
-   table values `pro` and `teams`; Rookie requires no paid product.
+2. Verify existing entitlements `OnlyFast Pro` and `OnlyFast Teams`. Pro products
+   grant `OnlyFast Pro`; Teams products grant both. These identifiers already
+   match the backend defaults and map to table values `pro` and `teams`.
+   Rookie requires no paid product.
 3. Import the real store products. Example product names are
    `onlyfast_pro_monthly` and `onlyfast_team_monthly`; these are **suggestions**, not
    hardcoded requirements. Existing product IDs can be used. The backend maps by
    entitlement, and the Median paywall determines which product/package to buy.
-4. Create a **current/default offering** containing both paid plans and publish a
-   native paywall for it. Use custom package identifiers if both are monthly.
-   Display store-local price, billing interval, recurring terms, benefits, privacy,
-   terms, and any actually configured/eligible trial. Match OnlyFast styling.
-   `presentPaywall()` presents this offering; an unpublished/empty offering is not
-   a completed integration.
+4. Offering changes, paywall publication, and purchase enablement belong to a
+   separately authorized launch. Leave the current offering and draft paywall
+   unchanged during backend preparation and deployment validation.
 5. Set restore behavior deliberately. For subscriptions bound to an OnlyFast
    account, select **Keep with original App User ID** and provide account recovery
    support. The store owner must sign into the purchasing OnlyFast account.

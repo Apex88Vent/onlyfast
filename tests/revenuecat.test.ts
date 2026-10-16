@@ -48,8 +48,26 @@ test('sandbox and non-native stores are excluded from production access', () => 
 });
 test('malformed responses fail without producing a downgrade snapshot', () => {
   assert.throws(() => mapRevenueCatSnapshot({} as SubscriberResponse, config, now));
+  for (const field of ['entitlements', 'subscriptions']) {
+    const malformed = subscriber();
+    Object.assign(malformed.subscriber, { [field]: [] });
+    assert.throws(() => mapRevenueCatSnapshot(malformed, config, now));
+  }
+  for (const timestamp of [-1, now + 300_001, 1.5]) {
+    assert.throws(() => mapRevenueCatSnapshot({ ...subscriber(), request_date_ms: timestamp }, config, now));
+  }
   const body = subscriber(); body.subscriber.entitlements.pro.expires_date = 'bad-date';
   assert.throws(() => mapRevenueCatSnapshot(body, config, now));
+});
+
+test('7-day store trials grant access without a payment; Android base-plan IDs use entitlements', () => {
+  const trial = subscriber('team', { store: 'play_store', period_type: 'trial' });
+  trial.subscriber.entitlements.team.product_identifier = 'teams:teams';
+  trial.subscriber.entitlements.team.expires_date = new Date(now + 7 * 86400000).toISOString();
+  trial.subscriber.subscriptions['teams:teams'] = { ...trial.subscriber.subscriptions.team_monthly,
+    expires_date: trial.subscriber.entitlements.team.expires_date };
+  assert.equal(mapRevenueCatSnapshot(trial, config, now).plan, 'teams');
+  assert.equal(mapRevenueCatSnapshot(trial, config, now + 7 * 86400000).plan, 'free');
 });
 test('Team wins over Pro, expired Team falls back to active Pro', () => {
   const body = subscriber(); const team = subscriber('team');

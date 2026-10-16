@@ -15,6 +15,8 @@ test('RevenueCat HTTP handlers authenticate, reject forged state and retry faile
   let dbFailure = false;
   let duplicate = false;
   let rpcFailure = false;
+  let fetchFailure = false;
+  let responseSubscriber = { entitlements: {}, subscriptions: {} };
   let handler: (req: Request) => Promise<Response>;
   const originalFetch = globalThis.fetch;
   const host = globalThis as typeof globalThis & {
@@ -37,7 +39,8 @@ test('RevenueCat HTTP handlers authenticate, reject forged state and retry faile
   host.Deno = { env: { get: (key: string) => env.get(key) }, serve(callback: typeof handler) { handler = callback; } };
   globalThis.fetch = async input => {
     fetched.push(String(input));
-    return Response.json({ request_date_ms: Date.now(), subscriber: { entitlements: {}, subscriptions: {} } });
+    return fetchFailure ? new Response('', { status: 503 }) :
+      Response.json({ request_date_ms: Date.now(), subscriber: responseSubscriber });
   };
   async function load(name: string) {
     let source = await readFile(new URL(`../supabase/functions/${name}/index.ts`, import.meta.url), 'utf8');
@@ -56,6 +59,9 @@ test('RevenueCat HTTP handlers authenticate, reject forged state and retry faile
     assert.equal((await handler!(request({ api_version: '1.0', event }, 'wrong'))).status, 401);
     assert.equal(rpcCalls.length, 0); assert.equal(fetched.length, 0);
     assert.equal((await handler!(request({ forged: true }))).status, 400);
+    for (const invalid of [{ id: '' }, { type: '' }, { event_timestamp_ms: 1e30 }, { event_timestamp_ms: -1 }]) {
+      assert.equal((await handler!(request({ api_version: '1.0', event: { ...event, ...invalid } }))).status, 400);
+    }
     assert.equal((await handler!(request({ api_version: '1.0', event }))).status, 200);
     assert.equal(rpcCalls[0].p_user_id, uid);
     assert.equal((rpcCalls[0].p_snapshot as { plan: string }).plan, 'free');
@@ -70,6 +76,27 @@ test('RevenueCat HTTP handlers authenticate, reject forged state and retry faile
     const before = rpcCalls.length;
     assert.equal((await handler!(request({ api_version: '1.0', event: { ...event, environment: 'SANDBOX' } }))).status, 200);
     assert.equal(rpcCalls.length, before);
+    assert.equal((await handler!(request({ api_version: '1.0', event: { ...event, app_id: 'test_store' } }))).status, 200);
+    assert.equal(rpcCalls.length, before);
+    fetchFailure = true;
+    assert.equal((await handler!(request({ api_version: '1.0', event }))).status, 500);
+    assert.equal(rpcCalls.length, before, 'provider failure never writes a downgrade');
+    fetchFailure = false;
+    const future = new Date(Date.now() + 7 * 86400000).toISOString();
+    for (const [entitlement, product, plan] of [
+      ['OnlyFast Pro', 'app.onlyfast.pro.monthly', 'pro'],
+      ['OnlyFast Teams', 'teams:teams', 'teams'],
+    ]) {
+      responseSubscriber = { entitlements: { [entitlement]: { product_identifier: product, expires_date: future } },
+        subscriptions: { [product]: { store: plan === 'pro' ? 'app_store' : 'play_store', is_sandbox: false, expires_date: future } } };
+      for (const type of ['INITIAL_PURCHASE', 'RENEWAL', 'CANCELLATION', 'UNCANCELLATION', 'PRODUCT_CHANGE', 'BILLING_ISSUE']) {
+        assert.equal((await handler!(request({ api_version: '1.0', event: { ...event, type } }))).status, 200);
+        assert.equal((rpcCalls.at(-1)?.p_snapshot as { plan: string }).plan, plan);
+      }
+    }
+    responseSubscriber = { entitlements: {}, subscriptions: {} };
+    assert.equal((await handler!(request({ api_version: '1.0', event: { ...event, type: 'EXPIRATION' } }))).status, 200);
+    assert.equal((rpcCalls.at(-1)?.p_snapshot as { plan: string }).plan, 'free');
     // Official transfer payloads may omit environment and app_id entirely.
     const transfer = { id: 'transfer', type: 'TRANSFER', event_timestamp_ms: Date.now(), transferred_from: [uid], transferred_to: [other] };
     assert.equal((await handler!(request({ api_version: '1.0', event: transfer }))).status, 200);

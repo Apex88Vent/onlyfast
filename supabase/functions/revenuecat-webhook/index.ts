@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { authorizationMatches, fetchRevenueCatSnapshot, revenueCatConfig, webhookUserIds } from '../_shared/revenuecat.ts';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
@@ -16,8 +16,10 @@ Deno.serve(async (req: Request) => {
   try {
     const body = await req.json();
     event = body.event;
-    if (body.api_version !== '1.0' || !event || typeof event.id !== 'string' ||
-        typeof event.type !== 'string' || !Number.isFinite(event.event_timestamp_ms)) throw new Error();
+    if (body.api_version !== '1.0' || !event || typeof event.id !== 'string' || !event.id.trim() ||
+        typeof event.type !== 'string' || !event.type.trim() ||
+        !Number.isSafeInteger(event.event_timestamp_ms) || Number(event.event_timestamp_ms) < 0 ||
+        Number(event.event_timestamp_ms) > 8_640_000_000_000_000) throw new Error();
   } catch { return json({ error: 'Invalid webhook' }, 400); }
   if (event.type === 'TEST') return json({ received: true });
   try {

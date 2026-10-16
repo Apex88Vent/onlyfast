@@ -35,6 +35,26 @@ grant all on public.revenuecat_webhook_events to service_role;
 -- Existing Stripe upserts continue to use plan/status. Capture their provider
 -- snapshot, then resolve the existing effective fields under the row write lock.
 -- Native RPC writes its own snapshot directly. Unrelated class writes do nothing.
+-- The deployed Stripe webhook predates subscription_source. Recognize writes
+-- that explicitly include Stripe identifiers, even when their values did not
+-- change. Trigger names ensure this runs before provider projection. Never infer
+-- Stripe ownership merely from OLD identifiers during a native sync.
+create function public.onlyfast_capture_stripe_source()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if new.stripe_customer_id is not null or new.stripe_subscription_id is not null
+    or new.stripe_checkout_session_id is not null then
+    new.subscription_source := 'stripe';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.onlyfast_capture_stripe_source() from public, anon, authenticated;
+create trigger onlyfast_capture_stripe_source
+before insert or update of stripe_customer_id, stripe_subscription_id, stripe_price_id, stripe_checkout_session_id
+on public.user_subscriptions
+for each row execute function public.onlyfast_capture_stripe_source();
+
 create function public.onlyfast_project_subscription()
 returns trigger language plpgsql set search_path = public as $$
 begin
@@ -123,5 +143,9 @@ grant execute on function public.onlyfast_expire_revenuecat() to service_role;
 
 -- Enforce the documented subscription write boundary even if the original table
 -- grants were broader. Existing class RPCs run as their definer and still work.
-revoke insert, update, delete on public.user_subscriptions from anon, authenticated;
+-- RLS does not govern TRUNCATE. Remove every client write privilege, including
+-- inherited PUBLIC grants, then explicitly expose only the own-row read API.
+revoke all on public.user_subscriptions from public, anon, authenticated;
+grant select on public.user_subscriptions to authenticated;
+grant select, insert, update, delete on public.user_subscriptions to service_role;
 commit;
