@@ -1,3 +1,4 @@
+import { setupClassLabel } from '@/lib/setupLibrary';
 import { areSetupSheetsCompatible } from '@/lib/setupLibrary';
 import { canAccessSetupClass } from '@/lib/setupLibraryAccess';
 import React, { useEffect, useState, useCallback } from 'react';
@@ -96,7 +97,7 @@ const BaseTemplatePicker: React.FC<BaseTemplatePickerProps> = ({ user, refreshKe
                   </div>
                   <div className="flex items-center gap-2 text-xs text-[#9CA3AF] mt-0.5">
                     <span className="bg-[#00A8E8]/10 text-[#00A8E8] font-medium px-1.5 py-0.5 rounded">Base Template</span>
-                    <span>{t.race_class || '—'}</span>
+                    <span>{setupClassLabel(t.race_class) || '—'}</span>
                   </div>
                 </div>
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00A8E8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 ml-2">

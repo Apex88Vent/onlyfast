@@ -78,7 +78,9 @@ test('PostgreSQL: every new sheet saves/reopens/copies; gating, sharing, cooldow
     assert.equal((await db.query('select public.get_active_race_class_state() as state')).rows[0].state.unlimited, true);
     let sharedId;
     const kartIds = [];
-    for (const name of EXPANDED_CAR_CLASSES) {
+    // This fixture verifies the historical, pre-release migration sequence.
+    // Current Road Racing IDs are covered by racingOnboardingDatabase.mjs.
+    for (const name of EXPANDED_CAR_CLASSES.filter(name => !name.startsWith('road_'))) {
       await db.query('select public.change_active_race_class($1)', [name]);
       const state = populatedLibraryState(name);
       if (EXPANDED_CLASS_CONFIGS[name].category === 'pavement_oval') Object.assign(state, {

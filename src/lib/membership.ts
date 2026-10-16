@@ -2,6 +2,7 @@
 // Single source of truth for OnlyFast membership/plan gating.
 
 import { supabase, supabaseUrl, supabaseKey } from '@/lib/supabase';
+import { getTrustedMembership } from './trustedMembership';
 // The disposable experimental account can retain its legacy full-access mode
 // through an explicit account-level feature flag.
 import { isCurrentUserTestAccount } from '@/lib/testAccount';
@@ -75,6 +76,7 @@ export interface PlanMeta {
   badge?: string;
   buttonText: string;
   recommended?: boolean;
+  description: string;
   synopsis: string[];
 }
 
@@ -82,12 +84,14 @@ export const PLANS: PlanMeta[] = [
   {
     tier: 'rookie',
     displayName: 'Rookie',
-    priceDisplay: 'Free',
-    buttonText: 'Start Free',
+    priceDisplay: 'FREE',
+    badge: 'Free Forever',
+    buttonText: 'Continue Free',
+    description: 'Everything you need to get started with OnlyFast and track your race weekends.',
     synopsis: [
       '1 car, 1 base setup',
       '2 race weekend setups (lock after 48h)',
-      '2 timing uploads & 2 setup assists / month',
+      '2 timing uploads / month; 1 Setup Assist / race weekend',
       'View leaderboards (ads enabled)',
     ],
   },
@@ -98,18 +102,21 @@ export const PLANS: PlanMeta[] = [
     badge: 'Most Popular',
     buttonText: 'Choose Pro',
     recommended: true,
+    description: 'Unlock the full OnlyFast experience for your race car.',
     synopsis: [
       'No ads — built for one car',
       'Unlimited base & race weekend setups',
       'Unlimited timing uploads & setup assists',
-      'Setup export, full history & leaderboard badges',
+      'No 48-hour editing lock; setup exports',
+      'Leaderboard uploads, badges & advanced profile',
     ],
   },
   {
     tier: 'team',
-    displayName: 'Team',
+    displayName: 'Teams',
     priceDisplay: '$8/month',
-    buttonText: 'Choose Team',
+    buttonText: 'Choose Teams',
+    description: 'Everything in Pro, with the freedom to manage unlimited cars and classes.',
     synopsis: [
       'Everything in Pro, no ads',
       'Unlimited cars & classes',
@@ -162,6 +169,22 @@ export function clearPendingPlan(): void {
   }
 }
 
+// A free selection is a preference, never an authorization or billing change.
+export async function selectRookie(userId: string): Promise<boolean> {
+  const { data } = await supabase.auth.getSession();
+  if (data.session?.user.id !== userId) return false;
+  try {
+    localStorage.setItem(`onlyfast_plan_selection_${userId}`, 'rookie');
+    await fetch(`${supabaseUrl}/auth/v1/user`, {
+      method: 'PUT',
+      headers: { apikey: supabaseKey, Authorization: `Bearer ${data.session.access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: { onlyfast_plan_selection: 'rookie' } }),
+    });
+  } catch { /* Free access does not depend on saving an optional preference. */ }
+  const { data: current } = await supabase.auth.getSession();
+  return current.session?.user.id === userId;
+}
+
 
 // ---------------------------------------------------------------------------
 // User access shape stored in localStorage + Supabase user_metadata
@@ -187,25 +210,9 @@ export const DEFAULT_MEMBERSHIP: MembershipState = {
 
 const STORAGE_KEY = 'onlyfast_membership';
 
-export function readMembership(metadata?: Record<string, any> | null): MembershipState {
-  // Prefer Supabase user_metadata when provided (authoritative across devices)
-  if (metadata && (metadata.membership_tier || metadata.has_admin_full_access)) {
-    return {
-      membership_tier: (metadata.membership_tier as MembershipTier) || 'rookie',
-      promo_code_used: metadata.promo_code_used ?? null,
-      promo_access_level: metadata.promo_access_level ?? null,
-      promo_access_started_at: metadata.promo_access_started_at ?? null,
-      promo_access_expires_at: metadata.promo_access_expires_at ?? null,
-      has_admin_full_access: metadata.has_admin_full_access === true,
-    };
-  }
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return { ...DEFAULT_MEMBERSHIP, ...JSON.parse(raw) };
-  } catch {
-    /* ignore */
-  }
-  return { ...DEFAULT_MEMBERSHIP };
+export function readMembership(_metadata?: Record<string, any> | null): MembershipState {
+  // The argument is retained for existing callers, but is not trusted.
+  return getTrustedMembership() || { ...DEFAULT_MEMBERSHIP };
 }
 
 export async function saveMembership(state: MembershipState, expectedUserId?: string): Promise<void> {
@@ -266,84 +273,9 @@ export interface PromoResult {
   state?: MembershipState;
 }
 
-interface PromoDef {
-  // normalized (lowercase, trimmed) match key
-  match: string;
-  caseSensitive?: boolean;
-  apply: () => MembershipState;
-  success: string;
-}
-
-function monthsFromNow(months: number): string {
-  const d = new Date();
-  d.setMonth(d.getMonth() + months);
-  return d.toISOString();
-}
-
-const PROMO_DEFS: PromoDef[] = [
-  {
-    match: 'launch26',
-    apply: () => ({
-      membership_tier: 'pro',
-      promo_code_used: 'Launch26',
-      promo_access_level: 'pro',
-      promo_access_started_at: new Date().toISOString(),
-      promo_access_expires_at: monthsFromNow(3),
-      has_admin_full_access: false,
-    }),
-    success: 'Launch promo accepted. Pro unlocked for 3 months.',
-  },
-  {
-    match: 'ambassador2026',
-    apply: () => ({
-      membership_tier: 'pro',
-      promo_code_used: 'Ambassador2026',
-      promo_access_level: 'pro',
-      promo_access_started_at: new Date().toISOString(),
-      promo_access_expires_at: monthsFromNow(12),
-      has_admin_full_access: false,
-    }),
-    success: 'Ambassador promo accepted. Pro unlocked for 12 months.',
-  },
-  {
-    // Admin / full-access code — kept case-sensitive for security
-    match: 'RaeRae2020!!!',
-    caseSensitive: true,
-    apply: () => ({
-      membership_tier: 'team',
-      promo_code_used: 'RaeRae2020!!!',
-      promo_access_level: 'admin_full_access',
-      promo_access_started_at: new Date().toISOString(),
-      promo_access_expires_at: null,
-      has_admin_full_access: true,
-    }),
-    success: 'Admin access unlocked.',
-  },
-];
-
-export function applyPromoCode(rawInput: string): PromoResult {
-  const trimmed = (rawInput || '').trim();
-  if (!trimmed) {
-    return { ok: false, message: 'That promo code is not valid.' };
-  }
-  const lower = trimmed.toLowerCase();
-
-  const def = PROMO_DEFS.find((p) =>
-    p.caseSensitive ? p.match === trimmed : p.match === lower
-  );
-
-  if (!def) {
-    return { ok: false, message: 'That promo code is not valid.' };
-  }
-
-  const state = def.apply();
-
-  // Expiration check (codes are time-based — verify not already expired)
-  if (state.promo_access_expires_at && new Date(state.promo_access_expires_at) <= new Date()) {
-    return { ok: false, message: 'That promo code has expired.' };
-  }
-
-  return { ok: true, message: def.success, state };
+// Promo/admin grants must be approved on the server, never minted by a public code.
+export function applyPromoCode(_rawInput: string): PromoResult {
+  return { ok: false, message: 'Redeem promotions through the supported checkout or contact OnlyFast support.' };
 }
 
 // ---------------------------------------------------------------------------
@@ -415,6 +347,8 @@ export function hasFeatureAccess(
 export type SaveKind = 'race_weekend' | 'base_template';
 
 export interface SavePermissionContext {
+  /** Server-confirmed active class. Historical classes do not consume maxCars. */
+  activeCarType?: string;
   /** Effective tier (already resolved via getEffectiveTier). */
   tier: MembershipTier;
   /** Which kind of save is being attempted. */
@@ -460,7 +394,10 @@ export function checkSavePermission(ctx: SavePermissionContext): SavePermission 
   // labels like "Dwarf Car" and "dwarf car" map to the same locked car type.
   if (typeof limits.maxCars === 'number') {
     const newCar = normCar(ctx.newCarType);
-    const known = ctx.existingCarTypes.map(normCar).filter(Boolean);
+    if (ctx.activeCarType && newCar !== normCar(ctx.activeCarType)) {
+      return { allowed: false, reason: 'car_type_locked', upgradeText: 'Locked — Switch back to this vehicle to access this setup.' };
+    }
+    const known = ctx.activeCarType ? [normCar(ctx.activeCarType)] : ctx.existingCarTypes.map(normCar).filter(Boolean);
     const distinct = new Set(known);
     const introducesNewCar = newCar !== '' && !distinct.has(newCar);
     if (introducesNewCar && distinct.size >= limits.maxCars) {
@@ -469,7 +406,7 @@ export function checkSavePermission(ctx: SavePermissionContext): SavePermission 
           allowed: false,
           reason: 'car_type_locked',
           upgradeText:
-            'Pro is limited to one car class. Upgrade to Team to manage multiple car classes.',
+            'Multiple car classes require Teams. Upgrade to Teams to manage unlimited cars and racing disciplines.',
         };
       }
       return {

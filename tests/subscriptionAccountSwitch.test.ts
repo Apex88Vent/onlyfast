@@ -63,6 +63,7 @@ test('subscription membership writes stay bound to the original account during s
       "const supabase = globalThis.__membershipSwitchClient; const supabaseUrl = 'https://auth.example.invalid'; const supabaseKey = 'test-public-key';");
     source = source.replace(/import \{ isCurrentUserTestAccount \} from '[^']+';/,
       'const isCurrentUserTestAccount = () => false;');
+    source = source.replace(/import \{ getTrustedMembership \} from '[^']+';/, 'const getTrustedMembership = () => null;');
     const compiled = ts.transpileModule(source, {
       compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
     }).outputText;

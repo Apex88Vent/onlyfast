@@ -30,6 +30,7 @@ function compile(file, modules = {}) {
   const output = { exports: {} };
   new Function('require', 'module', 'exports', code)(name => {
     if (name === 'react') return React;
+    if (name === '@/hooks/useMembershipRevision') return { useMembershipRevision: () => {} };
     if (name.startsWith('react/')) return qaRequire(name);
     if (name === 'lucide-react') return new Proxy({}, { get: () => icon });
     if (name === '@/hooks/useBetaFeatures') return { useBetaFeatures: () => ({ ...fixture.access, loading: fixture.betaLoading, hasBetaFeature: () => false }) };
@@ -44,7 +45,11 @@ function compile(file, modules = {}) {
   return output.exports.default;
 }
 const How = compile('components/HowOnlyFastWorks.tsx');
-const Selection = compile('components/OnboardingFlow.tsx');
+const membershipExports = {};
+const planSource = readFileSync(new URL('../src/lib/membership.ts', import.meta.url), 'utf8').match(/export const PLANS:[\s\S]*?\n\];/)[0];
+new Function('exports', ts.transpileModule(planSource, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText)(membershipExports);
+const Plan = compile('components/PlanSelection.tsx', { '@/lib/membership': membershipExports, './MembershipComparison': { default: empty }, './MembershipPaidAction': { default: empty }, '@/lib/paymentVisibility': { hideExternalPayments: true }, '@/lib/nativePurchases': { nativePurchasesEnabled: false } });
+const Selection = compile('components/OnboardingFlow.tsx', { './PlanSelection': { default: Plan } });
 const Auth = ({ isOpen, onClose }) => isOpen ? React.createElement('button', { onClick: onClose }, 'Dismiss login') : null;
 const App = compile('components/AppLayout.tsx', {
   './CustomCarSheet': { CustomCarGate: wrapper },
@@ -74,8 +79,21 @@ const App = compile('components/AppLayout.tsx', {
   'react-router-dom': { useNavigate: () => () => { throw new Error('Unexpected route redirect'); } },
   '@/lib/membership': { getEffectiveTier: () => 'rookie', readMembership: () => ({}) },
   '@/lib/activeClass': {
-    getActiveClassState: async () => { if (fixture.offline) throw new Error('Offline'); return fixture.deferredState || { active_class: fixture.activeClass, unlimited: fixture.access === experiment }; },
-    initializeActiveClass: async car => { fixture.initializations.push(car); if (fixture.rejectClass) throw new Error('CLASS_INVALID'); return { active_class: car, unlimited: fixture.access === experiment }; },
+    getActiveClassState: async () => { if (fixture.offline) throw new Error('Offline'); return fixture.deferredState || { active_class: fixture.activeClass, unlimited: fixture.access === experiment, ...fixture.progress }; },
+    saveOnboardingProgress: async (step, discipline, car) => {
+      if (fixture.rejectProgress) throw new Error('Offline');
+      fixture.progressWrites.push({ step, discipline, car });
+      fixture.progress = { onboarding_step: step, onboarding_discipline: discipline, onboarding_race_class: car };
+      return { active_class: fixture.activeClass, unlimited: fixture.access === experiment, ...fixture.progress };
+    },
+    completeRacingOnboarding: async () => {
+      const car = fixture.progress.onboarding_race_class;
+      fixture.initializations.push(car);
+      if (fixture.rejectClass) throw new Error('CLASS_INVALID');
+      fixture.activeClass = car;
+      fixture.progress.onboarding_step = 'complete';
+      return { active_class: car, unlimited: fixture.access === experiment, ...fixture.progress };
+    },
   },
   '@/lib/testAccount': { resetTestAccountData: () => { throw new Error('Account reset must not run'); } },
   '@/lib/betaFeatures': { BETA_FEATURES: { testAccountReset: 'test_account_reset' } },
@@ -93,14 +111,14 @@ const ChangeClass = compile('components/ClassChangeModal.tsx', {
   '@/lib/paymentVisibility': { isMedianIOSApp: false },
   '@/lib/activeClass': {
     sameClass: (a, b) => a?.trim().toLowerCase() === b?.trim().toLowerCase(),
-    getActiveClassState: async () => ({ unlimited: fixture.access === experiment, can_change: fixture.access === experiment, next_eligible_at: '2026-10-08' }),
-    changeActiveClass: async car => fixture.initializations.push(car),
+    getActiveClassState: async () => ({ unlimited: fixture.access === experiment || fixture.team, can_change: fixture.access === experiment || fixture.eligible, next_eligible_at: '2026-11-12T15:30:00Z' }),
+    changeActiveClass: async car => { fixture.initializations.push(car); if (fixture.rejectChange) throw new Error('CLASS_CHANGE_COOLDOWN:2026-11-12T15:30:00Z'); return { active_class: car }; },
     formatEligibleDate: value => value,
   },
 });
 
 function reset(options = {}) {
-  fixture = { user: { id: 'new-id', user_metadata: {} }, activeClass: null, savedClass: null, access: CLOSED_BETA_ACCESS, betaLoading: false, metadataWrites: [], initializations: [], ...options };
+  fixture = { user: { id: 'new-id', user_metadata: {} }, activeClass: null, savedClass: null, access: CLOSED_BETA_ACCESS, betaLoading: false, metadataWrites: [], initializations: [], progress: {}, progressWrites: [], ...options };
   const store = new Map(Object.entries(options.storage || {}));
   globalThis.localStorage = { getItem: key => store.get(key) || null, setItem: (key, value) => store.set(key, value), removeItem: key => store.delete(key) };
   globalThis.sessionStorage = { getItem: () => null, setItem() {} };
@@ -155,11 +173,11 @@ test('B/E: new user ignores stale class/membership; Skip exits to discipline sel
   assert.ok(heading(view.root, 'Select Your Discipline'));
   assert.equal(landing(view.root), false);
   const categories = buttons(view.root).filter(b => / - /.test(b.props['aria-label'] || ''));
-  assert.equal(categories.length, 1);
+  assert.equal(categories.length, 3);
   await act(async () => categories[0].props.onClick());
   assert.ok(heading(view.root, 'Select Your Car'));
   assert.equal(buttons(view.root).some(b => /GT3|Legends/.test(text(b))), false);
-  assert.equal(buttons(view.root).filter(b => / - /.test(b.props['aria-label'] || '')).length, 7);
+  assert.equal(buttons(view.root).filter(b => / - /.test(b.props['aria-label'] || '')).length, 12);
   await act(async () => view.unmount());
 });
 
@@ -172,46 +190,48 @@ test('D: every Continue advances one slide; final button ends at Select Discipli
   await click(view.root, 'Select My Discipline');
   assert.ok(heading(view.root, 'Select Your Discipline'));
   assert.equal(landing(view.root), false);
-  assert.equal(fixture.metadataWrites[0].onboarding_completed, true);
+  assert.deepEqual(fixture.metadataWrites, []);
+  assert.equal(fixture.progress.onboarding_step, 'discipline');
   await act(async () => view.unmount());
 });
 
-test('C: flagged test@test.com sees all five disciplines, selects GT3; failed RPC cannot enter landing', async () => {
+test('C: flagged test@test.com sees three selectable disciplines, selects GT3; failed RPC cannot enter landing', async () => {
   reset({ user: { id: 'test-id', email: 'test@test.com', user_metadata: { onboarding_completed: true } }, access: experiment, rejectClass: true });
   const view = await mount();
   assert.ok(heading(view.root, 'Select Your Discipline'));
   const categories = buttons(view.root).filter(b => / - /.test(b.props['aria-label'] || ''));
-  assert.equal(categories.length, 5);
-  await act(async () => categories.find(b => b.props['aria-label'].startsWith('Road Course -')).props.onClick());
+  assert.equal(categories.length, 3);
+  await act(async () => categories.find(b => b.props['aria-label'].startsWith('Road Racing -')).props.onClick());
   const gt3 = buttons(view.root).find(b => b.props['aria-label']?.startsWith('GT3 -'));
   assert.ok(gt3);
   await act(async () => gt3.props.onClick());
-  assert.ok(heading(view.root, 'Select Your Car'));
+  assert.ok(heading(view.root, 'Choose Your OnlyFast Plan'));
+  await click(view.root, 'Continue Free');
   assert.equal(landing(view.root), false);
-  assert.match(view.root.findByProps({ role: 'alert' }).children.join(''), /could not be saved/);
+  assert.match(view.root.findByProps({ role: 'alert' }).children.join(''), /could not be completed/);
   fixture.rejectClass = false;
-  await act(async () => gt3.props.onClick());
+  await click(view.root, 'Continue Free');
   assert.ok(landing(view.root));
-  assert.deepEqual(fixture.initializations, ['GT3', 'GT3']);
+  assert.deepEqual(fixture.initializations, ['road_gt3', 'road_gt3']);
   await act(async () => view.unmount());
 });
 
-test('email alone cannot unlock development classes; a completed unconfigured user goes to selection', async () => {
+test('unconfigured legacy user goes to restored discipline selection', async () => {
   reset({ user: { id: 'unflagged-test', email: 'test@test.com', user_metadata: { onboarding_completed: true } } });
   const view = await mount();
   assert.ok(heading(view.root, 'Select Your Discipline'));
-  assert.equal(buttons(view.root).filter(b => / - /.test(b.props['aria-label'] || '')).length, 1);
+  assert.equal(buttons(view.root).filter(b => / - /.test(b.props['aria-label'] || '')).length, 3);
   await act(async () => view.unmount());
 });
 
 test('login from onboarding rechecks the new account; dismissing login does not complete onboarding', async () => {
   reset({ user: null });
   const view = await mount();
-  await click(view.root, 'Already a member? Login here');
+  await click(view.root, 'Create Account / Sign In');
   await click(view.root, 'Dismiss login');
   assert.ok(heading(view.root, 'Welcome to OnlyFast'));
   assert.deepEqual(fixture.metadataWrites, []);
-  await click(view.root, 'Already a member? Login here');
+  await click(view.root, 'Create Account / Sign In');
   fixture.user = { id: 'signed-up-id', user_metadata: {} };
   await act(async () => fixture.authListener('SIGNED_IN', { user: fixture.user }));
   assert.ok(heading(view.root, 'Welcome to OnlyFast'));
@@ -239,10 +259,34 @@ test('preview Finish/Skip uses the real discipline/class screens without writing
   await requiredSlides(view.root);
   await click(view.root, 'Skip to discipline selection');
   assert.ok(heading(view.root, 'Select Your Discipline'));
-  assert.equal(buttons(view.root).filter(b => / - /.test(b.props['aria-label'] || '')).length, 5);
+  assert.equal(buttons(view.root).filter(b => / - /.test(b.props['aria-label'] || '')).length, 3);
   assert.deepEqual(fixture.metadataWrites, []);
   assert.deepEqual(fixture.initializations, []);
   await act(async () => view.unmount());
+});
+
+test('unavailable disciplines have no pointer/keyboard handlers, including flagged accounts and resumed plans', async () => {
+  for (const accessSnapshot of [CLOSED_BETA_ACCESS, experiment]) {
+    reset({ access: accessSnapshot });
+    let view;
+    await act(async () => { view = create(React.createElement(Selection, { onComplete: () => assert.fail('Unavailable completion') })); });
+    for (const name of ['RC Racing', 'Motorcycle Racing']) {
+      const card = view.root.findByProps({ 'aria-label': name + ' - Coming Soon' });
+      assert.equal(String(card.props['aria-disabled']), 'true');
+      assert.equal(card.props.onClick, undefined);
+      assert.equal(card.props.onKeyDown, undefined);
+      assert.equal(card.props.tabIndex, undefined);
+      assert.match(text(card), /COMING SOON/);
+    }
+    await act(async () => view.unmount());
+    for (const [discipline, car] of [['rc', 'RC 1/8 Buggy'], ['motorcycle', 'Supersport']]) {
+      await act(async () => { view = create(React.createElement(Selection, { initialStep: 'plan', initialDiscipline: discipline,
+        initialClass: car, onComplete: () => assert.fail('Unavailable completion'), onProgress: () => assert.fail('Unavailable progress') })); });
+      assert.ok(heading(view.root, 'Select Your Discipline'));
+      assert.equal(heading(view.root, 'Choose Your OnlyFast Plan'), false);
+      await act(async () => view.unmount());
+    }
+  }
 });
 
 test('returning user recovers their own saved class without adopting the device-wide class', async () => {
@@ -285,8 +329,9 @@ test('class-change modal uses existing server test bypass while preserving norma
   const props = { isOpen: true, user: { id: 'test-id' }, tier: 'rookie', currentClass: 'Dwarf Cars', onClose: () => { closed = true; }, onChanged: car => { selected = car; }, onUpgrade() {} };
   let view;
   await act(async () => { view = create(React.createElement(ChangeClass, props)); });
-  assert.equal(view.root.findAllByType('option').length, 49);
-  await act(async () => view.root.findByType('select').props.onChange({ target: { value: 'GT3' } }));
+  await act(async () => view.root.findByProps({ id: 'active-discipline-select' }).props.onChange({ target: { value: 'road_course' } }));
+  assert.ok(view.root.findByProps({ id: 'active-class-select' }).findAllByType('option').some(option => option.props.value === 'GT3'), 'historical vehicle remains selectable');
+  await act(async () => view.root.findByProps({ id: 'active-class-select' }).props.onChange({ target: { value: 'GT3' } }));
   await click(view.root, 'Change Class');
   assert.equal(selected, 'GT3');
   assert.equal(closed, true);
@@ -299,16 +344,100 @@ test('class-change modal uses existing server test bypass while preserving norma
   await act(async () => view.unmount());
 });
 
-for (const car of ['GT3', 'Shifter Kart', 'Clutch Kart']) {
-  test('A/B/C: first-run Road Course ' + car + ' initializes before landing, without requesting an editor', async () => {
-    reset({ access: experiment });
+test('Rookie and Pro see the warning before commit; Cancel writes nothing; Confirm changes once', async () => {
+  for (const tier of ['rookie','pro']) {
+    reset({ eligible: true });
+    let closed = false;
+    let selected;
+    const props = { isOpen: true, user: { id: 'new-id' }, tier, currentClass: 'Dwarf Cars',
+      onClose: () => { closed = true; }, onChanged: car => { selected = car; }, onUpgrade() {} };
+    let view;
+    await act(async () => { view = create(React.createElement(ChangeClass, props)); });
+    await act(async () => view.root.findByProps({ id: 'active-discipline-select' }).props.onChange({ target: { value: 'road_course' } }));
+    await act(async () => view.root.findByProps({ id: 'active-class-select' }).props.onChange({ target: { value: 'GT3' } }));
+    await click(view.root, 'Continue');
+    assert.ok(heading(view.root, 'Confirm vehicle change'));
+    assert.match(text(view.root), /NOT be deleted/);
+    assert.match(text(view.root), /once every 30 days/);
+    assert.deepEqual(fixture.initializations, []);
+    await click(view.root, 'Cancel');
+    assert.equal(closed, true);
+    assert.equal(selected, undefined);
+    assert.deepEqual(fixture.initializations, []);
+    closed = false;
+    await click(view.root, 'Confirm Change');
+    assert.deepEqual(fixture.initializations, ['GT3']);
+    assert.equal(selected, 'GT3');
+    await act(async () => view.unmount());
+  }
+});
+
+test('server cooldown rejection after warning displays the authoritative eligible date', async () => {
+  reset({ eligible: true, rejectChange: true });
+  let view;
+  await act(async () => { view = create(React.createElement(ChangeClass, { isOpen: true, user: fixture.user,
+    tier: 'pro', currentClass: 'Dwarf Cars', onClose() {}, onChanged() { assert.fail('Blocked change'); }, onUpgrade() {} })); });
+  await act(async () => view.root.findByProps({ id: 'active-class-select' }).props.onChange({ target: { value: 'Modified' } }));
+  await click(view.root, 'Continue');
+  await click(view.root, 'Confirm Change');
+  assert.ok(heading(view.root, 'Class change unavailable'));
+  assert.match(text(view.root), /2026-11-12T15:30:00Z/);
+  await act(async () => view.unmount());
+});
+
+test('unfinished discipline, vehicle and plan steps resume from server after remount', async () => {
+  for (const [step,title] of [['discipline','Select Your Discipline'],['vehicle','Select Your Car'],['plan','Choose Your OnlyFast Plan']]) {
+    reset({ progress: { onboarding_step: step, onboarding_discipline: 'road_course', onboarding_race_class: 'GT3' } });
+    let view = await mount();
+    assert.ok(heading(view.root, title));
+    assert.equal(landing(view.root), false);
+    await act(async () => view.unmount());
+    view = await mount();
+    assert.ok(heading(view.root, title));
+    assert.deepEqual(fixture.initializations, []);
+    if (step === 'plan') {
+      const paid = buttons(view.root).filter(b => text(b) === 'Coming Soon');
+      assert.equal(paid.length, 2);
+      for (const button of paid) { assert.equal(button.props.disabled, true); assert.equal(button.props.onClick, undefined); }
+      await click(view.root, 'Continue Free');
+      assert.ok(landing(view.root));
+      assert.deepEqual(fixture.initializations, ['GT3']);
+    }
+    await act(async () => view.unmount());
+  }
+});
+
+test('Dirt Track Dwarf Cars waits for Rookie selection and progress failures stay on the current step', async () => {
+  reset();
+  const view = await mount();
+  await requiredSlides(view.root);
+  await click(view.root, 'Skip');
+  fixture.rejectProgress = true;
+  await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith('Dirt Track Oval -')).props.onClick());
+  assert.ok(heading(view.root, 'Select Your Discipline'));
+  fixture.rejectProgress = false;
+  await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith('Dirt Track Oval -')).props.onClick());
+  await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith('Dwarf Cars -')).props.onClick());
+  assert.ok(heading(view.root, 'Choose Your OnlyFast Plan'));
+  assert.deepEqual(fixture.initializations, []);
+  await click(view.root, 'Continue Free');
+  assert.ok(landing(view.root));
+  assert.deepEqual(fixture.initializations, ['Dwarf Cars']);
+  await act(async () => view.unmount());
+});
+
+for (const car of ['road_spec_miata', 'road_gt3', 'road_karts', 'road_ta2']) {
+  test('A/B/C: first-run Road Racing ' + car + ' initializes before landing, without requesting an editor', async () => {
+    reset();
     const view = await mount();
     await requiredSlides(view.root);
     await click(view.root, 'Skip');
-    const road = buttons(view.root).find(b => b.props['aria-label']?.startsWith('Road Course -'));
+    const road = buttons(view.root).find(b => b.props['aria-label']?.startsWith('Road Racing -'));
     await act(async () => road.props.onClick());
-    const selected = buttons(view.root).find(b => b.props['aria-label']?.startsWith(car + ' -'));
+    const selected = buttons(view.root).find(b => b.props['aria-label']?.startsWith(library.setupClassLabel(car) + ' -'));
     await act(async () => selected.props.onClick());
+    assert.ok(heading(view.root, 'Choose Your OnlyFast Plan'));
+    await click(view.root, 'Continue Free');
     assert.ok(landing(view.root));
     assert.equal(view.root.findByProps({ 'data-landing': true }).props['data-landing-request'], 1);
     assert.deepEqual(fixture.initializations, [car]);
@@ -316,18 +445,19 @@ for (const car of ['GT3', 'Shifter Kart', 'Clutch Kart']) {
   });
 }
 
-for (const car of ['Shifter Kart', 'Clutch Kart']) {
+for (const car of ['road_karts']) {
   test('G/E: actual protected preview ends on real landing for ' + car + '; explicit New Setup opens its form', async () => {
     reset({ access: experiment });
     const view = await mount(Preview);
     await requiredSlides(view.root);
     await click(view.root, 'Skip to discipline selection');
-    await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith('Road Course -')).props.onClick());
-    await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith(car + ' -')).props.onClick());
+    await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith('Road Racing -')).props.onClick());
+    await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith(library.setupClassLabel(car) + ' -')).props.onClick());
+    await click(view.root, 'Continue Free');
     assert.equal(view.root.findAllByType(Home).length, 1);
     assert.equal(view.root.findAllByType(Chassis).length, 0);
     await click(view.root, 'New Setup');
-    assert.ok(heading(view.root, car + ' Setup Sheet'));
+    assert.ok(heading(view.root, library.setupClassLabel(car) + ' Setup Sheet'));
     assert.equal(view.root.findAllByType(Chassis).length, 1);
     assert.equal(view.root.findAllByType(Home).length, 0);
     await click(view.root, 'Back to landing');
@@ -401,7 +531,8 @@ for (const car of pavementClasses) {
     reset({ access: experiment, user: { id: 'test-id', user_metadata: { onboarding_completed: true } } });
     const view = await mount();
     await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith('Pavement Oval -')).props.onClick());
-    await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith(car + ' -')).props.onClick());
+    await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith(library.setupClassLabel(car) + ' -')).props.onClick());
+    await click(view.root, 'Continue Free');
     assert.ok(landing(view.root));
     assert.equal(view.root.findAllByType(Chassis).length, 0);
     assert.deepEqual(fixture.initializations, [car]);

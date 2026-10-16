@@ -96,6 +96,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
 
   useEffect(() => {
     if (!isOpen) return;
+    let active = true;
+    const refresh = () => { void fetchUserSubscription(user.id).then(row => {
+      if (active) setAccount(deriveAccountStatus(row));
+    }).catch(() => {}); };
+    window.addEventListener('membership-updated', refresh);
+    return () => { active = false; window.removeEventListener('membership-updated', refresh); };
+  }, [isOpen, user.id]);
+
+  useEffect(() => {
+    if (!isOpen) return;
     const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', handleKey);
     document.body.style.overflow = 'hidden';
@@ -361,11 +371,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
                   <span className="h-4 w-4 rounded-full border-2 border-[#00A8E8]/30 border-t-[#00A8E8] animate-spin" aria-hidden="true" />
                   Loading subscription…
                 </div>
-              ) : isMedianIOSApp ? (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-[#6B7280]">Current Plan:</span>
-                  {planBadge}
-                </div>
               ) : (
                 <>
                   <div className="flex items-center justify-between">
@@ -377,7 +382,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
                     {account?.label === 'Admin'
                       ? 'Admin full access — all features unlocked.'
                       : account?.label === 'Teams'
-                      ? 'Your Team membership is active.'
+                      ? 'Your Teams membership is active.'
                       : account?.label === 'Pro'
                       ? 'Your Pro membership is active.'
                       : 'You are on the free Rookie plan.'}
@@ -388,7 +393,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
                     <ul className="text-xs text-[#6B7280] mt-2 space-y-1 list-disc pl-4">
                       <li>Everything in Pro</li>
                       <li>Unlimited cars &amp; classes for your team</li>
-                      <li>Shared team setups &amp; comparisons</li>
+                      <li>All Pro features across your vehicles</li>
                     </ul>
                   )}
                   {account?.label === 'Pro' && (
@@ -405,6 +410,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
                     </div>
                   )}
 
+                  <Link to="/pricing" onClick={onClose} className="mt-3 inline-block text-sm font-semibold text-[#00A8E8] underline">View Plans and included features</Link>
                   {/* Admin keeps full access and is never shown upgrade/cancel. */}
                   {account?.label !== 'Admin' && (
                     hideExternalPayments ? (
@@ -560,7 +566,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
             <h4 className="text-lg font-bold text-[#1A1B23] mb-2">Cancel your subscription?</h4>
             <p className="text-sm text-[#374151]">
               You'll be taken to the secure billing portal to confirm cancellation.
-              After it's cancelled, your account returns to the free Rookie plan.
+              Opening the portal does not cancel your subscription. If you cancel auto-renewal, paid access continues until your current billing period ends.
             </p>
             <div className="flex justify-end gap-2 mt-5">
               <button

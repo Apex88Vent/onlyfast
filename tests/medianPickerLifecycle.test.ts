@@ -236,7 +236,7 @@ test('membership synchronization does not feed USER_UPDATED back into updateUser
     new URL('../src/contexts/AppContext.tsx', import.meta.url),
     'utf8',
   );
-  const authSyncCondition = source.match(/if \(event === 'SIGNED_IN'[\s\S]*?\) \{\s*sync\(\)/)?.[0] ?? '';
+  const authSyncCondition = source.match(/if \(event === 'SIGNED_IN'[\s\S]*?\) \{\s*setTimeout\(sync, 0\)/)?.[0] ?? '';
 
   assert.match(authSyncCondition, /SIGNED_IN/);
   assert.match(authSyncCondition, /TOKEN_REFRESHED/);

@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
 
-interface DirtOvalTrackProps {
+export interface DirtOvalTrackProps {
+  surface?: 'dirt' | 'asphalt';
   entryHandling: string;
   midHandling: string;
   exitHandling: string;
@@ -39,7 +40,7 @@ const getIcon = (handling: string): string => {
 
 const DirtOvalTrack: React.FC<DirtOvalTrackProps> = ({
   entryHandling, midHandling, exitHandling,
-  onEntryChange, onMidChange, onExitChange
+  onEntryChange, onMidChange, onExitChange, surface = 'dirt'
 }) => {
   const cycleHandling = useCallback((current: string) => {
     const states = ['', 'loose', 'tight', 'perfect'];
@@ -68,15 +69,15 @@ const DirtOvalTrack: React.FC<DirtOvalTrackProps> = ({
           <svg viewBox="0 0 600 280" className="w-full" aria-hidden="true">
             <defs>
               <linearGradient id="dirtGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#C4A882" />
-                <stop offset="100%" stopColor="#B89B72" />
+                <stop offset="0%" stopColor={surface === 'asphalt' ? '#374151' : '#C4A882'} />
+                <stop offset="100%" stopColor={surface === 'asphalt' ? '#1F2937' : '#B89B72'} />
               </linearGradient>
               <linearGradient id="infieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
                 <stop offset="0%" stopColor="#7CB668" />
                 <stop offset="100%" stopColor="#6AA856" />
               </linearGradient>
               <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
-                <polygon points="0 0, 10 3.5, 0 7" fill="#1A1B23" opacity="0.4" />
+                <polygon points="0 0, 10 3.5, 0 7" fill={surface === 'asphalt' ? '#FFFFFF' : '#1A1B23'} opacity="0.4" />
               </marker>
             </defs>
 
@@ -84,23 +85,23 @@ const DirtOvalTrack: React.FC<DirtOvalTrackProps> = ({
             <rect x="0" y="0" width="600" height="280" fill="#F9FAFB" rx="12" />
 
             {/* Outer track boundary */}
-            <path d="M 580 40 L 200 40 A 100 100 0 0 0 200 240 L 580 240" fill="url(#dirtGrad)" stroke="#A08560" strokeWidth="2" />
+            <path d="M 580 40 L 200 40 A 100 100 0 0 0 200 240 L 580 240" fill="url(#dirtGrad)" stroke={surface === 'asphalt' ? '#6B7280' : '#A08560'} strokeWidth="2" />
 
             {/* Inner track boundary */}
             <path d="M 580 80 L 240 80 A 60 60 0 0 0 240 200 L 580 200" fill="url(#infieldGrad)" stroke="#5A9A48" strokeWidth="2" />
 
             {/* Racing line */}
-            <path d="M 580 60 L 220 60 A 80 80 0 0 0 220 220 L 580 220" fill="none" stroke="#1A1B23" strokeWidth="1.5" strokeDasharray="10 5" opacity="0.12" />
+            <path d="M 580 60 L 220 60 A 80 80 0 0 0 220 220 L 580 220" fill="none" stroke={surface === 'asphalt' ? '#FFFFFF' : '#1A1B23'} strokeWidth="1.5" strokeDasharray="10 5" opacity={surface === 'asphalt' ? '0.45' : '0.12'} />
 
             {/* Direction arrows */}
-            <line x1="480" y1="55" x2="400" y2="55" stroke="#1A1B23" strokeWidth="2" markerEnd="url(#arrowhead)" opacity="0.3" />
+            <line x1="480" y1="55" x2="400" y2="55" stroke={surface === 'asphalt' ? '#FFFFFF' : '#1A1B23'} strokeWidth="2" markerEnd="url(#arrowhead)" opacity="0.3" />
             <text x="440" y="35" textAnchor="middle" fontSize="10" fill="#6B7280" fontWeight="500">Front Stretch</text>
 
-            <line x1="400" y1="225" x2="480" y2="225" stroke="#1A1B23" strokeWidth="2" markerEnd="url(#arrowhead)" opacity="0.3" />
+            <line x1="400" y1="225" x2="480" y2="225" stroke={surface === 'asphalt' ? '#FFFFFF' : '#1A1B23'} strokeWidth="2" markerEnd="url(#arrowhead)" opacity="0.3" />
             <text x="440" y="252" textAnchor="middle" fontSize="10" fill="#6B7280" fontWeight="500">Back Stretch</text>
 
             {/* S/F Line */}
-            <line x1="540" y1="40" x2="540" y2="80" stroke="#1A1B23" strokeWidth="3" opacity="0.5" />
+            <line x1="540" y1="40" x2="540" y2="80" stroke={surface === 'asphalt' ? '#FFFFFF' : '#1A1B23'} strokeWidth="3" opacity="0.5" />
             <text x="540" y="30" textAnchor="middle" fontSize="9" fill="#6B7280" fontWeight="bold">S/F</text>
 
             {/* Zone dividers */}

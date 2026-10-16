@@ -56,6 +56,7 @@ function renderUI(file: string, states: unknown[], environment: typeof environme
     if (id === '@/components/NativeSubscriptionControls') return {
       __esModule: true, default: () => React.createElement('button', {}, 'Existing native subscription controls'),
     };
+    if (id === '@/components/PlanSelection') return { __esModule: true, default: () => React.createElement('section', {}, 'Choose Your OnlyFast Plan Rookie Pro Teams Continue Free') };
     if (id === '@/components/StripeBuyButton') return {
       __esModule: true, default: () => React.createElement('button', {}, 'Existing Stripe checkout'),
     };
@@ -110,18 +111,14 @@ for (const environment of environments) {
       assert.ok(subscription.includes(label));
       const upgrade = renderUI('pages/Upgrade.tsx', [user, false, false, null, false, account], environment);
 
-      if (environment.ios) {
-        assert.match(subscription, /Current Plan:/);
-        assert.doesNotMatch(subscription, /<button|<a\b|admin@|Stripe|upgrade|change plan|manage|store|purchase/i);
-        assert.match(upgrade, new RegExp(`Current Plan: ${label}`));
-        assert.doesNotMatch(upgrade, /checkout|admin@|Stripe|upgrade|change plan|manage|store|purchase|choose/i);
-        assert.doesNotMatch(settings, /manage billing|cancel billing|admin@onlyfast/);
-      } else {
-        if (label !== 'Admin') {
-          assert.match(subscription, environment.native ? /Existing native subscription controls/ : /Upgrade Subscription/);
-        }
-        assert.match(upgrade, environment.native ? /Existing native subscription controls/ : /Existing Stripe checkout/);
+      assert.match(subscription, /Current plan/);
+      assert.match(subscription, /View Plans and included features/);
+      assert.match(upgrade, /Choose Your OnlyFast Plan Rookie Pro Teams Continue Free/);
+      if (label !== 'Admin') {
+        assert.match(subscription, environment.native ? /Existing native subscription controls/ : /Upgrade Subscription/);
       }
+      if (environment.native) assert.doesNotMatch(upgrade, /Existing Stripe checkout/);
+
     });
   }
 }

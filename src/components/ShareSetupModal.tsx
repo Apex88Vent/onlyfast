@@ -1,3 +1,6 @@
+import { useMembershipRevision } from '@/hooks/useMembershipRevision';
+import LockedFeatureNotice from './LockedFeatureNotice';
+import { setupClassLabel } from '@/lib/setupLibrary';
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -12,10 +15,12 @@ interface ShareSetupModalProps {
 }
 
 const ShareSetupModal: React.FC<ShareSetupModalProps> = ({ isOpen, onClose, setup, user }) => {
+  useMembershipRevision();
   const [shareCode, setShareCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
+  const [exportLocked, setExportLocked] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
@@ -111,7 +116,7 @@ const ShareSetupModal: React.FC<ShareSetupModalProps> = ({ isOpen, onClose, setu
   const handleSaveAsPdf = () => {
     if (!setup) return;
     if (!user || !hasFeatureAccess(readMembership(user.user_metadata || {}), 'setupExport')) {
-      alert('PDF export is available on Pro and Team plans.');
+      setExportLocked(true);
       return;
     }
     const ok = openSetupPdf(setup, { shareCode });
@@ -124,6 +129,7 @@ const ShareSetupModal: React.FC<ShareSetupModalProps> = ({ isOpen, onClose, setu
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="share-modal-title">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
       <div ref={modalRef} className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 z-10">
+        {exportLocked && <LockedFeatureNotice message="Setup Export is a Pro feature. Export your setups as PDFs with Pro or Teams. It is unavailable on Rookie." onDismiss={() => setExportLocked(false)} />}
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <h2 id="share-modal-title" className="text-lg font-bold text-[#1A1B23] flex items-center gap-2">
@@ -156,7 +162,7 @@ const ShareSetupModal: React.FC<ShareSetupModalProps> = ({ isOpen, onClose, setu
             }`}>
               {setup?.setup_type === 'main' ? 'Main Event' : setup?.setup_type === 'heat' ? 'Heat' : 'Base'}
             </span>
-            <span>{setup?.race_class}</span>
+            <span>{setupClassLabel(setup?.race_class)}</span>
             <span>{setup?.race_date}</span>
           </div>
         </div>

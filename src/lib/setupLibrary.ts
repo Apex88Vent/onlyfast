@@ -1,9 +1,10 @@
+import { ROAD_RACING_CLASS_CONFIGS } from './roadRacingSetupSchemas.ts';
 import type { ClassConfig, ClassSection, FieldDef } from './classConfigs.ts';
 import { PAVEMENT_FIELD_GROUPS, pavementLegendsSchema, pavementLateModelSchema, pavementModifiedSchema, pavementCompactSchema } from './pavementSetupSchemas.ts';
 
 export type SetupCategory = 'dirt_oval' | 'pavement_oval' | 'road_course' | 'motorcycle' | 'rc';
 export const SETUP_CATEGORY_LABELS: Record<SetupCategory, string> = {
-  dirt_oval: 'Dirt Track Oval', pavement_oval: 'Pavement Oval', road_course: 'Road Course', motorcycle: 'Motorcycle', rc: 'RC',
+  dirt_oval: 'Dirt Track Oval', pavement_oval: 'Pavement Oval', road_course: 'Road Racing', motorcycle: 'Motorcycle', rc: 'RC',
 };
 
 // Units follow existing explicit-unit fields (psi, inches, lb and °F). There
@@ -155,6 +156,8 @@ add('RC Oval', 'rc', 'rc', [...rc.filter(g => g !== 'antiRollBars'), 'rcDiff2wd'
 
 add('Winged Sprint Cars', 'dirt_oval', 'oval', ['session', 'ovalWeights', 'sprintChassis', 'sprintCorners', 'sprintWing', 'gearing', 'brakes'], 'Winged sprint car referenced by the existing class icon registry');
 
+Object.assign(EXPANDED_CLASS_CONFIGS, ROAD_RACING_CLASS_CONFIGS);
+
 export const EXPANDED_CAR_CLASSES = Object.keys(EXPANDED_CLASS_CONFIGS);
 export function isDevelopmentClass(name?: string | null): boolean {
   return EXPANDED_CAR_CLASSES.some(c => c.toLowerCase() === (name || '').trim().toLowerCase());
@@ -162,4 +165,8 @@ export function isDevelopmentClass(name?: string | null): boolean {
 export function areSetupSheetsCompatible(source?: string, target?: string): boolean {
   if (isDevelopmentClass(source) || isDevelopmentClass(target)) return (source || '').trim().toLowerCase() === (target || '').trim().toLowerCase();
   return (source === 'Custom Car') === (target === 'Custom Car');
+}
+
+export function setupClassLabel(id?: string | null): string {
+  return ROAD_RACING_CLASS_CONFIGS[id || '']?.name || id || '';
 }

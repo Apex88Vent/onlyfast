@@ -1,3 +1,4 @@
+import { setupClassLabel } from '@/lib/setupLibrary';
 import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -68,7 +69,8 @@ const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBac
     load();
     const onUpdated = () => load();
     window.addEventListener('subscription-updated', onUpdated);
-    return () => { cancelled = true; window.removeEventListener('subscription-updated', onUpdated); };
+    window.addEventListener('membership-updated', onUpdated);
+    return () => { cancelled = true; window.removeEventListener('subscription-updated', onUpdated); window.removeEventListener('membership-updated', onUpdated); };
   }, [hasExperimentalFullAccess, user]);
 
 
@@ -184,8 +186,8 @@ const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBac
             {/* Center - Car Type Badge */}
             {selectedCar && (
               <div className="hidden sm:flex items-center gap-2">
-                <span className="bg-[#00A8E8]/10 text-[#00A8E8] px-4 py-1.5 rounded-full text-sm font-semibold border border-[#00A8E8]/20" aria-label={`Selected car class: ${selectedCar}`}>
-                  {selectedCar}
+                <span className="bg-[#00A8E8]/10 text-[#00A8E8] px-4 py-1.5 rounded-full text-sm font-semibold border border-[#00A8E8]/20" aria-label={`Selected car class: ${setupClassLabel(selectedCar)}`}>
+                  {setupClassLabel(selectedCar)}
                 </span>
                 {onBackToCarSelect && (
                   <button

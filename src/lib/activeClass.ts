@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseUrl, supabaseKey } from '@/lib/supabase';
 
 export interface ActiveClassState {
   active_class: string | null;
@@ -7,6 +7,10 @@ export interface ActiveClassState {
   next_eligible_at: string | null;
   can_change: boolean;
   unlimited: boolean;
+  active_discipline: string | null;
+  onboarding_step: 'tutorial' | 'discipline' | 'vehicle' | 'plan' | 'complete';
+  onboarding_discipline: string | null;
+  onboarding_race_class: string | null;
 }
 
 const asState = (value: unknown): ActiveClassState => {
@@ -18,8 +22,42 @@ const asState = (value: unknown): ActiveClassState => {
     next_eligible_at: row?.next_eligible_at || null,
     can_change: row?.can_change !== false,
     unlimited: row?.unlimited === true,
+    active_discipline: row?.active_discipline || null,
+    onboarding_step: row?.onboarding_step || (row?.active_class ? 'complete' : 'tutorial'),
+    onboarding_discipline: row?.onboarding_discipline || null,
+    onboarding_race_class: row?.onboarding_race_class || null,
   };
 };
+
+// Bind mutations to the account that initiated the action. A login/account
+// switch during an await must never apply the previous screen's selection to
+// the new account. The captured JWT is used only for this request.
+async function racingMutation(name: string, args: Record<string, unknown>, expectedUserId?: string) {
+  if (!expectedUserId) return supabase.rpc(name, args);
+  const { data, error } = await supabase.auth.getSession();
+  if (error || !data.session || data.session.user.id !== expectedUserId) throw new Error('CLASS_AUTH_REQUIRED');
+  const response = await fetch(`${supabaseUrl}/rest/v1/rpc/${name}`, {
+    method: 'POST', headers: { apikey: supabaseKey, Authorization: `Bearer ${data.session.access_token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(args),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.message || 'Your racing selection could not be saved.');
+  return { data: result, error: null };
+}
+
+export async function saveOnboardingProgress(step: 'discipline' | 'vehicle' | 'plan', discipline?: string, car?: string, expectedUserId?: string): Promise<ActiveClassState> {
+  const { data, error } = await racingMutation('save_racing_onboarding_progress', {
+    p_step: step, p_discipline: discipline || null, p_class: car || null,
+  }, expectedUserId);
+  if (error) throw error;
+  return asState(data);
+}
+
+export async function completeRacingOnboarding(expectedUserId?: string): Promise<ActiveClassState> {
+  const { data, error } = await racingMutation('complete_racing_onboarding', {}, expectedUserId);
+  if (error) throw error;
+  return asState(data);
+}
 
 export const sameClass = (a?: string | null, b?: string | null) =>
   (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase();
@@ -42,8 +80,8 @@ export async function initializeActiveClass(car: string): Promise<ActiveClassSta
   return asState(data);
 }
 
-export async function changeActiveClass(car: string): Promise<ActiveClassState> {
-  const { data, error } = await supabase.rpc('change_active_race_class', { p_new_class: car });
+export async function changeActiveClass(car: string, expectedUserId?: string): Promise<ActiveClassState> {
+  const { data, error } = await racingMutation('change_active_race_class', { p_new_class: car }, expectedUserId);
   if (error) {
     if (import.meta.env.DEV) console.error('[class-change] change failed', { code: error.code, message: error.message });
     throw error;

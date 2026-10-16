@@ -8,7 +8,7 @@
 //  The user prints this window and chooses "Save as PDF" — no external deps.
 // ════════════════════════════════════════════════════════════════════════════
 import { getClassConfig, FieldDef } from '@/lib/classConfigs';
-import { isDevelopmentClass } from '@/lib/setupLibrary';
+import { isDevelopmentClass, setupClassLabel } from '@/lib/setupLibrary';
 import { canAccessSetupClass } from '@/lib/setupLibraryAccess';
 import { rowWithLibraryFields, SETUP_LIBRARY_KEY } from '@/lib/setupLibraryStorage';
 
@@ -115,7 +115,7 @@ export function buildSetupPdfHtml(setup: any, meta: SetupPdfMeta = {}): string {
   const setupTitle =
     setup.setup_name || setup.track_name || 'Race Setup';
   const sub = [
-    setup.race_class,
+    setupClassLabel(setup.race_class),
     setup.track_name && setup.track_name !== setupTitle ? setup.track_name : null,
     setup.race_date,
   ].filter(has);

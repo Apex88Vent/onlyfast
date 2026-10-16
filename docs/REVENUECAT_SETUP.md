@@ -1,5 +1,9 @@
 # OnlyFast native subscriptions: implementation and rollout
 
+> Updated pre-build status: see [REVENUECAT_PREBUILD_REPORT.md](REVENUECAT_PREBUILD_REPORT.md).
+> This is a future rollout guide. No dashboard, store, deployment, or enablement actions are authorized for this pre-build update.
+> Review legacy grants and the pending authorization migration before releasing the updated app.
+
 Status: implemented locally, **not deployed or store-tested**. Native purchasing
 is disabled until `VITE_REVENUECAT_ENABLED=true`. The app still needs configured
 store products, RevenueCat, a rebuilt Median app, and sandbox acceptance tests.
@@ -103,8 +107,8 @@ Set these **Supabase Edge Function secrets**, never `VITE_` variables:
 | `REVENUECAT_SECRET_API_KEY` | RevenueCat secret API key usable with REST v1 `GET /subscribers/{UUID}` |
 | `REVENUECAT_WEBHOOK_AUTHORIZATION` | A long random value including the prefix, e.g. `Bearer <random-secret>`; copy exactly into RevenueCat's webhook configuration |
 | `REVENUECAT_APP_IDS` | Comma-separated RevenueCat iOS/Android app IDs, not bundle/package identifiers |
-| `REVENUECAT_PRO_ENTITLEMENT_ID` | `pro` by default |
-| `REVENUECAT_TEAM_ENTITLEMENT_ID` | `team` by default; must differ from Pro |
+| `REVENUECAT_PRO_ENTITLEMENT_ID` | `OnlyFast Pro` by default |
+| `REVENUECAT_TEAM_ENTITLEMENT_ID` | `OnlyFast Teams` by default; must differ from Pro |
 | `REVENUECAT_ALLOW_SANDBOX` | `true` in isolated staging for TestFlight/Play testing; default false in production |
 
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are supplied by Supabase's runtime.

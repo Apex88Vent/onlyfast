@@ -1,22 +1,25 @@
 import { CUSTOM_CAR, CUSTOM_CAR_DISCIPLINES } from '@/lib/customCar';
 import React, { useState, useRef, useEffect } from 'react';
-import { AVAILABLE_CAR_CLASSES, CLASS_CONFIGS } from '@/lib/classConfigs';
+import { CLASS_CONFIGS } from '@/lib/classConfigs';
 import { ArrowLeft, Check } from 'lucide-react';
-// The explicitly flagged experimental account can click into every
-// "Coming Soon" discipline/class. Other users still see them locked.
 import { useBetaFeatures } from '@/hooks/useBetaFeatures';
-import { canAccessSetupLibrary, getDisciplineSetupClasses } from '@/lib/setupLibraryAccess';
+import { getDisciplineSetupClasses } from '@/lib/setupLibraryAccess';
 import { EXPANDED_CLASS_CONFIGS, type SetupCategory } from '@/lib/setupLibrary';
+import PlanSelection from './PlanSelection';
 
 interface OnboardingFlowProps {
-  onComplete: (car: string) => void;
+  onComplete: (car: string) => void | Promise<void>;
   error?: string;
+  userId?: string;
+  initialStep?: 'discipline' | 'vehicle' | 'plan';
+  initialDiscipline?: string | null;
+  initialClass?: string | null;
+  onProgress?: (step: 'discipline' | 'vehicle' | 'plan', discipline?: string, car?: string) => Promise<void>;
 }
 
 
 // Unlocked classes. Pro Stock & Pure Stock are now unlocked; Non-Wing Sprint
 // Cars is locked again (Coming Soon). Lightning Sprints remains usable.
-const ENABLED_CLASSES = AVAILABLE_CAR_CLASSES;
 
 
 
@@ -72,7 +75,7 @@ const disciplines = [
   {
     key: 'dirt_oval',
     name: 'Dirt Track Oval',
-    description: 'Short track oval racing on dirt surfaces. Configure chassis setups for optimal performance on clay and dirt.',
+    description: 'Master changing surfaces, find your grip, and dial in your setup for every lap.',
     enabled: true,
     icon: (
       <svg width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true">
@@ -85,33 +88,32 @@ const disciplines = [
   {
     key: 'pavement_oval',
     name: 'Pavement Oval',
-    description: 'Asphalt oval racing from short tracks to superspeedways. Setup optimization for pavement grip.',
-    enabled: false,
+    description: 'Fine-tune handling, balance, and speed to maximize performance on paved ovals.',
+    enabled: true,
     icon: (
       <svg width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true">
-        <ellipse cx="24" cy="24" rx="20" ry="14" stroke="currentColor" strokeWidth="3" fill="none" />
-        <ellipse cx="24" cy="24" rx="12" ry="7" stroke="currentColor" strokeWidth="2" fill="none" opacity="0.4" />
-        <rect x="14" y="22" width="20" height="4" rx="1" fill="currentColor" opacity="0.3" />
+        <ellipse cx="24" cy="24" rx="20" ry="14" stroke="#00A8E8" strokeWidth="3" fill="none" />
+        <ellipse cx="24" cy="24" rx="12" ry="7" stroke="#00A8E8" strokeWidth="2" fill="none" opacity="0.4" />
+        <rect x="14" y="22" width="20" height="4" rx="1" fill="#00A8E8" opacity="0.3" />
       </svg>
     ),
   },
   {
     key: 'road_course',
-    name: 'Road Course',
-    description: 'Left and right turns on paved road courses. Comprehensive setup for multi-directional handling.',
-    enabled: false,
+    name: 'Road Racing',
+    description: 'Perfect your setup for braking, cornering, and acceleration across technical road courses.',
+    enabled: true,
     icon: (
       <svg width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true">
-        <path d="M8 36 C8 36 12 12 24 12 C36 12 40 36 40 36" stroke="currentColor" strokeWidth="3" fill="none" strokeLinecap="round" />
-        <path d="M14 36 C14 36 18 18 24 18 C30 18 34 36 34 36" stroke="currentColor" strokeWidth="2" fill="none" opacity="0.4" strokeLinecap="round" />
-        <circle cx="24" cy="12" r="3" fill="currentColor" opacity="0.5" />
+        {/* Simplified Silverstone-inspired loop, straights and corner complex. */}
+        <path d="M22 42 L28 31 Q30 28 33 29 L36 27 L34 23 L29 22 Q26 22 26 25 L24 28 L11 33 Q6 35 5 30 L5 25 Q5 22 8 20 L9 10 Q9 6 13 6 L25 7 Q28 7 28 10 L31 12 L30 15 L35 17 Q37 18 38 22 L43 34 Q44 37 40 39 L30 42 L25 44 Q23 44 22 42 Z" stroke="#00A8E8" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     ),
   },
   {
     key: 'motorcycle',
-    name: 'Motorcycle',
-    description: 'Flat track, motocross, and road racing motorcycle setup tracking and optimization.',
+    name: 'Motorcycle Racing',
+    description: 'Optimize suspension, traction, and handling for peak performance on two wheels.',
     enabled: false,
     icon: (
       <svg width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true">
@@ -124,8 +126,8 @@ const disciplines = [
   },
   {
     key: 'rc',
-    name: 'RC',
-    description: 'Radio-controlled car racing setup management. Dial in your RC chassis for competition.',
+    name: 'RC Racing',
+    description: 'Dial in suspension, gearing, and handling to get the most from your RC racer.',
     enabled: false,
     icon: (
       <svg width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true">
@@ -140,16 +142,19 @@ const disciplines = [
   },
 ];
 
-const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error }) => {
-  // Plan selection no longer happens during onboarding — selecting a car/class
-  // takes the user straight into the app. The subscription page only appears
-  // the first time the user tries to save a setup (handled in SetupDashboard).
-  const [step, setStep] = useState<2 | 3>(2);
-  const [selectedDiscipline, setSelectedDiscipline] = useState('');
-  // The existing user-ID-backed experimental account and feature flag gate
-  // unlock development disciplines/classes after authorization loads.
+const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error, userId, initialStep, initialDiscipline, initialClass, onProgress }) => {
+  const savedDiscipline = disciplines.find(d => d.key === initialDiscipline || d.name === initialDiscipline
+    || d.name === ({ 'Road Course': 'Road Racing', Motorcycle: 'Motorcycle Racing', RC: 'RC Racing' }[initialDiscipline || '']))
+    || disciplines.find(d => d.key === EXPANDED_CLASS_CONFIGS[initialClass || '']?.category);
+  const savedClassDiscipline = disciplines.find(d => d.key === EXPANDED_CLASS_CONFIGS[initialClass || '']?.category);
+  const unavailableSelection = savedDiscipline?.enabled === false || savedClassDiscipline?.enabled === false;
+  const [step, setStep] = useState<2 | 3 | 4>(unavailableSelection ? 2 : initialStep === 'plan' ? 4 : initialStep === 'vehicle' ? 3 : 2);
+  const [selectedDiscipline, setSelectedDiscipline] = useState(unavailableSelection ? '' : savedDiscipline?.name || initialDiscipline || '');
+  const [selectedClass, setSelectedClass] = useState(unavailableSelection ? '' : initialClass || '');
+  const [saving, setSaving] = useState(false);
+  const [progressError, setProgressError] = useState('');
+  const pending = useRef(false);
   const betaAccess = useBetaFeatures();
-  const testBypass = canAccessSetupLibrary(betaAccess);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -159,11 +164,23 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error }) =>
   const steps = [
     { num: 2, label: 'Discipline' },
     { num: 3, label: 'Car' },
+    { num: 4, label: 'Plan' },
   ];
 
-  const chooseDiscipline = (discipline: string) => {
-    setSelectedDiscipline(discipline);
-    setStep(3);
+  const advance = async (next: 2 | 3 | 4, discipline = selectedDiscipline, car = selectedClass) => {
+    if (pending.current) return;
+    if (next !== 2 && !disciplines.find(d => d.name === discipline)?.enabled) return;
+    if (next === 4 && disciplines.find(d => d.key === EXPANDED_CLASS_CONFIGS[car]?.category)?.enabled === false) return;
+    pending.current = true;
+    setSaving(true);
+    setProgressError('');
+    try {
+      await onProgress?.(next === 2 ? 'discipline' : next === 3 ? 'vehicle' : 'plan', disciplines.find(d => d.name === discipline)?.key, next === 4 ? car : undefined);
+      setSelectedDiscipline(discipline);
+      setSelectedClass(next === 4 ? car : '');
+      setStep(next);
+    } catch { setProgressError('Your selection could not be saved. Please try again.'); }
+    finally { pending.current = false; setSaving(false); }
   };
 
 
@@ -178,7 +195,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error }) =>
             className="h-28 sm:h-36 w-auto mx-auto mb-2"
           />
 
-          <p className="text-[#6B7280] text-base sm:text-lg">Your Smart Setup Solutions</p>
+          <p className="text-[#6B7280] text-base sm:text-lg">Race Smarter. Finish Faster.</p>
         </div>
 
         {/* Progress */}
@@ -204,7 +221,8 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error }) =>
 
 
         {/* Step 2: Discipline */}
-        {error && <p className="mb-4 text-sm text-red-600" role="alert">{error}</p>}
+        {(error || progressError) && <p className="mb-4 text-sm text-red-600" role="alert">{error || progressError}</p>}
+        {saving && <p className="mb-4 text-sm text-[#6B7280]" role="status">Saving your selection…</p>}
         {step === 2 && (
           <section aria-labelledby="step2-heading">
             <div className="flex items-center gap-3 mb-6">
@@ -219,9 +237,10 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error }) =>
             <div className="space-y-4">
               {disciplines.map(disc => (
                 <div key={disc.key} className="relative">
-                  {(disc.enabled || testBypass) ? (
+                  {disc.enabled && getDisciplineSetupClasses(disc.key as SetupCategory, betaAccess).length > 0 ? (
                     <button
-                      onClick={() => chooseDiscipline(disc.name)}
+                      onClick={() => advance(3, disc.name)}
+                      disabled={saving}
                       className="w-full bg-white rounded-2xl border-2 border-[#E5E7EB] hover:border-[#00A8E8] p-5 sm:p-7 transition-all group shadow-sm hover:shadow-lg hover:shadow-[#00A8E8]/10 focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
                       aria-label={`${disc.name} - ${disc.description}`}
                     >
@@ -232,11 +251,12 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error }) =>
                         <div className="text-left">
                           <h3 className="text-xl font-bold text-[#1A1B23] group-hover:text-[#00A8E8] transition-colors">
                             {disc.name}
+                            {(disc.key === 'road_course' || disc.key === 'pavement_oval') && <span className="ml-2 inline-flex align-middle rounded border border-[#00A8E8]/20 bg-[#00A8E8]/10 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-[#00A8E8]">BETA</span>}
                           </h3>
-                          <p className="text-[#6B7280] mt-1">
+                          <p className="text-[#6B7280] text-sm sm:text-base mt-1">
                             {disc.description}
                           </p>
-                          <p className="text-gray-400 text-sm mt-2" aria-disabled="true">Custom Car — Coming Soon</p>
+                          {disc.key !== 'road_course' && <p className="text-gray-400 text-sm mt-2" aria-disabled="true">Custom Car — Coming Soon</p>}
                         </div>
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#9CA3AF] group-hover:text-[#00A8E8] transition-colors flex-shrink-0" aria-hidden="true">
                           <polyline points="9 18 15 12 9 6" />
@@ -245,28 +265,28 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error }) =>
                     </button>
                   ) : (
                     <div
-                      className="relative w-full bg-gray-100 rounded-2xl border-2 border-gray-200 p-8 opacity-60 cursor-not-allowed overflow-hidden select-none"
+                      className="relative w-full bg-gray-100 rounded-2xl border-2 border-gray-200 p-5 sm:p-7 cursor-not-allowed overflow-hidden select-none"
                       aria-disabled="true"
                       aria-label={`${disc.name} - Coming Soon`}
                     >
                       {/* Diagonal "Coming Soon" overlay */}
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10" aria-hidden="true">
                         <div
-                          className="bg-gray-500/80 text-white font-bold text-lg tracking-widest uppercase px-16 py-2 whitespace-nowrap"
+                          className="bg-gray-500/80 text-white font-bold text-sm sm:text-lg tracking-widest uppercase text-center px-16 py-2 whitespace-nowrap"
                           style={{ transform: 'rotate(-18deg)', minWidth: '120%' }}
                         >
-                          Coming Soon
+                          COMING SOON
                         </div>
                       </div>
-                      <div className="flex items-center gap-6 text-gray-400">
-                        <div className="w-20 h-20 bg-gray-200 rounded-2xl flex items-center justify-center flex-shrink-0" aria-hidden="true">
+                      <div className="flex items-center gap-4 sm:gap-6 text-gray-400 opacity-60">
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-200 rounded-2xl flex items-center justify-center flex-shrink-0" aria-hidden="true">
                           {disc.icon}
                         </div>
                         <div className="text-left">
                           <h3 className="text-xl font-bold text-gray-400">
                             {disc.name}
                           </h3>
-                          <p className="text-gray-400 mt-1">
+                          <p className="text-[#6B7280] text-sm sm:text-base mt-1">
                             {disc.description}
                           </p>
                         </div>
@@ -284,7 +304,8 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error }) =>
           <section aria-labelledby="step3-heading">
             <div className="flex items-center gap-3 mb-6">
               <button
-                onClick={() => setStep(2)}
+                onClick={() => advance(2)}
+                disabled={saving}
                 className="text-[#6B7280] hover:text-[#00A8E8] transition-colors p-1 rounded focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
                 aria-label="Go back to discipline selection"
               >
@@ -302,15 +323,16 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error }) =>
                 const discipline = disciplines.find(d => d.name === selectedDiscipline);
                 const isEnabled = className === CUSTOM_CAR
                   ? CUSTOM_CAR_DISCIPLINES[discipline?.key || ''] === true
-                  : ENABLED_CLASSES.includes(className) || testBypass;
+                  : Boolean(config);
 
                 if (isEnabled) {
                   return (
                     <button
                       key={className}
-                      onClick={() => onComplete(className)}
+                      onClick={() => advance(4, selectedDiscipline, className)}
+                      disabled={saving}
                       className="bg-white rounded-2xl border-2 border-[#E5E7EB] hover:border-[#00A8E8] p-6 transition-all group shadow-sm hover:shadow-lg hover:shadow-[#00A8E8]/10 text-left focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
-                      aria-label={`${className} - ${config?.description || ''}`}
+                      aria-label={`${config?.name || className} - ${config?.description || ''}`}
                     >
                       <div className="w-16 h-16 bg-[#00A8E8]/10 rounded-xl overflow-hidden flex items-center justify-center mb-4 group-hover:bg-[#00A8E8]/20 transition-colors" aria-hidden="true">
                         <img
@@ -322,7 +344,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error }) =>
                         />
                       </div>
                       <h3 className="text-lg font-bold text-[#1A1B23] group-hover:text-[#00A8E8] transition-colors">
-                        {className}
+                        {config?.name || className}
                       </h3>
                       <p className="text-[#6B7280] text-sm mt-1">
                         {config?.description || ''}
@@ -369,6 +391,10 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error }) =>
             </div>
           </section>
         )}
+        {step === 4 && <PlanSelection userId={userId} onBack={() => advance(3)} onComplete={() => {
+          if (disciplines.find(d => d.name === selectedDiscipline)?.enabled
+            && disciplines.find(d => d.key === EXPANDED_CLASS_CONFIGS[selectedClass]?.category)?.enabled !== false) return onComplete(selectedClass);
+        }} />}
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import { setupClassLabel } from '@/lib/setupLibrary';
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -21,7 +22,7 @@ const FIELD_GROUPS = [
     fields: [
       { key: 'track_name', label: 'Track Name', type: 'text' },
       { key: 'race_date', label: 'Date', type: 'text' },
-      { key: 'race_class', label: 'Class', type: 'text' },
+      { key: 'race_class', label: 'Class', type: 'text', format: setupClassLabel },
       { key: 'setup_type', label: 'Setup Type', type: 'text', format: (v: string) => v === 'main' ? 'Main Event' : v === 'heat' ? 'Heat' : 'Base' },
       { key: 'track_condition', label: 'Condition', type: 'text' },
       { key: 'temperature', label: 'Temp (°F)', type: 'number' },
@@ -278,7 +279,7 @@ ${printContent.innerHTML}</body></html>`);
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${setup.setup_type === 'main' ? 'bg-[#00A8E8]/10 text-[#00A8E8]' : setup.setup_type === 'heat' ? 'bg-amber-100 text-amber-700' : 'bg-[#F0F0F2] text-[#6B7280]'}`}>
                       {setup.setup_type === 'main' ? 'Main' : setup.setup_type === 'heat' ? 'Heat' : 'Base'}
                     </span>
-                    <span className="text-xs text-[#9CA3AF]">{setup.race_class}</span>
+                    <span className="text-xs text-[#9CA3AF]">{setupClassLabel(setup.race_class)}</span>
                     <span className="text-xs text-[#9CA3AF]">{setup.race_date}</span>
                   </div>
                 </button>

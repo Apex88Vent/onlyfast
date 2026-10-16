@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { authorizationMatches, mapRevenueCatSnapshot, webhookUserIds, type SubscriberResponse } from '../supabase/functions/_shared/revenuecat.ts';
+import { authorizationMatches, mapRevenueCatSnapshot, revenueCatConfig, webhookUserIds, type SubscriberResponse } from '../supabase/functions/_shared/revenuecat.ts';
 import { NativePurchaseController, NativePurchaseError, type RevenueCatBridge } from '../src/lib/nativePurchaseController.ts';
 import { isMedianUserAgent, nativePlatform } from '../src/lib/nativeEnvironment.ts';
 
@@ -142,4 +142,22 @@ test('Median rejected response objects retain cancellation and useful error mess
   await assert.rejects(controller.run('a', 'purchase'), error => error instanceof NativePurchaseError && error.cancelled);
   bridge.restorePurchases = async () => { throw { success: false, error: { code: 'STORE_ERROR', message: 'Store unavailable' } }; };
   await assert.rejects(controller.run('a', 'restore'), /Store unavailable/);
+});
+
+test('absent feature flag blocks purchases and restore before any bridge call', async () => {
+  let calls = 0;
+  const controller = new NativePurchaseController(async () => { calls++; throw new Error('Must not reach bridge'); }, () => 'public-key', () => false);
+  await assert.rejects(controller.run('a', 'purchase'), /coming soon/);
+  await assert.rejects(controller.run('a', 'restore'), /coming soon/);
+  assert.equal(calls, 0);
+});
+
+test('default entitlements match OnlyFast and Teams wins when both are granted', () => {
+  const configured = revenueCatConfig(key => key === 'REVENUECAT_SECRET_API_KEY' ? 'server-test-key' : undefined);
+  assert.equal(configured.proEntitlement, 'OnlyFast Pro');
+  assert.equal(configured.teamEntitlement, 'OnlyFast Teams');
+  const body = subscriber('OnlyFast Pro');
+  Object.assign(body.subscriber.entitlements, subscriber('OnlyFast Teams').subscriber.entitlements);
+  Object.assign(body.subscriber.subscriptions, subscriber('OnlyFast Teams').subscriber.subscriptions);
+  assert.equal(mapRevenueCatSnapshot(body, configured, now).plan, 'teams');
 });

@@ -25,6 +25,8 @@ export function mapRevenueCatSnapshot(body: SubscriberResponse, config: RevenueC
     { id: config.teamEntitlement, plan: 'teams' },
     { id: config.proEntitlement, plan: 'pro' },
   ];
+  const activeEntitlementIds: string[] = [];
+  let selected: { plan: string; status: string; product_id: string; store: string; expires_at: string; observed_at: string } | null = null;
   for (const candidate of candidates) {
     const entitlement = body.subscriber.entitlements[candidate.id];
     if (!entitlement) continue;
@@ -41,21 +43,23 @@ export function mapRevenueCatSnapshot(body: SubscriberResponse, config: RevenueC
     }
     const expires = Math.max(...dates.map(Date.parse));
     if (expires <= now) continue;
-    return {
+    activeEntitlementIds.push(candidate.id);
+    selected ??= {
       plan: candidate.plan, status: 'active', product_id: entitlement.product_identifier,
-      entitlement_ids: [candidate.id], store: subscription.store,
+      store: subscription.store,
       expires_at: new Date(expires).toISOString(),
       observed_at: new Date(body.request_date_ms).toISOString(),
     };
   }
+  if (selected) return { ...selected, entitlement_ids: activeEntitlementIds };
   return { plan: 'free', status: 'expired', product_id: null, entitlement_ids: [],
     store: null, expires_at: null, observed_at: new Date(body.request_date_ms).toISOString() };
 }
 
 export function revenueCatConfig(env: (key: string) => string | undefined): RevenueCatConfig {
   const apiKey = env('REVENUECAT_SECRET_API_KEY');
-  const proEntitlement = env('REVENUECAT_PRO_ENTITLEMENT_ID') || 'pro';
-  const teamEntitlement = env('REVENUECAT_TEAM_ENTITLEMENT_ID') || 'team';
+  const proEntitlement = env('REVENUECAT_PRO_ENTITLEMENT_ID') || 'OnlyFast Pro';
+  const teamEntitlement = env('REVENUECAT_TEAM_ENTITLEMENT_ID') || 'OnlyFast Teams';
   if (!apiKey || proEntitlement === teamEntitlement) throw new Error('RevenueCat configuration missing or invalid');
   return { apiKey, proEntitlement, teamEntitlement, allowSandbox: env('REVENUECAT_ALLOW_SANDBOX') === 'true' };
 }

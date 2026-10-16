@@ -1,3 +1,4 @@
+import { setupClassLabel } from '@/lib/setupLibrary';
 import React, { useState, useEffect, useMemo } from 'react';
 import { isMedianIOSApp } from '@/lib/paymentVisibility';
 import { supabase } from '@/lib/supabase';
@@ -385,7 +386,7 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
               {groups.map(group => {
                 const isLocked = classLocksEnabled && Boolean(group.raceClass) &&
                   group.raceClass.trim().toLowerCase() !== activeClass.trim().toLowerCase();
-                const subtitleParts = [group.raceClass, group.trackName, group.org].filter(p => p && p.trim() !== '');
+                const subtitleParts = [setupClassLabel(group.raceClass), group.trackName, group.org].filter(p => p && p.trim() !== '');
                 const orderedSetups = group.isBaseSetup
                   ? [...group.setups]
                   : resolveSavedRaceWeekendSessions(group.setups as RaceWeekendSessionRow[])
@@ -448,7 +449,8 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
                       </button>}
                     </div>
 
-                    {isLocked && !isMedianIOSApp && (
+                    {isLocked && <p className="mb-3 text-xs text-[#6B7280]">Locked — Switch back to this vehicle to access this setup.</p>}
+                    {isLocked && (
                       <button
                         onClick={(event) => { event.stopPropagation(); onUpgrade(); }}
                         className="mb-3 text-xs font-semibold text-[#00A8E8] underline-offset-4 hover:underline focus:outline-none focus:ring-2 focus:ring-[#00A8E8] rounded"

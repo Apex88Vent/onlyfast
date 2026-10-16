@@ -155,22 +155,29 @@ async function resolveEffectiveTier(admin: any, user: any): Promise<MembershipTi
   }
   if (email && adminEmails.includes(email)) return 'team';
   if (user?.app_metadata?.has_admin_full_access === true) return 'team';
-  if (user?.user_metadata?.has_admin_full_access === true) return 'team';
+  // User-editable metadata must never authorize paid access.
+  const grant = user?.app_metadata || {};
+  const grantActive = !grant.promo_access_expires_at || Date.parse(grant.promo_access_expires_at) > Date.now();
+  const grantLevel = grantActive ? String(grant.promo_access_level || '').toLowerCase() : '';
+  if (['team', 'teams', 'admin', 'admin_full_access'].includes(grantLevel)) return 'team';
 
   const { data, error } = await admin
     .from('user_subscriptions')
-    .select('plan, status')
+    .select('plan, status, subscription_source, revenuecat_expires_at')
     .eq('user_id', user.id)
     .maybeSingle();
 
-  if (error || !data) return 'rookie';
+  if (error) throw error;
+  if (!data) return grantLevel === 'pro' ? 'pro' : 'rookie';
 
+  const nativeExpired = data.subscription_source === 'revenuecat' && !(Date.parse(data.revenuecat_expires_at) > Date.now());
+  if (nativeExpired) return grantLevel === 'pro' ? 'pro' : 'rookie';
   const status = String(data.status || '').trim().toLowerCase();
-  if (status !== 'active' && status !== 'trialing') return 'rookie';
+  if (status !== 'active' && status !== 'trialing') return grantLevel === 'pro' ? 'pro' : 'rookie';
 
   const plan = normalizePlan(data.plan);
   if (plan === 'team') return 'team';
-  if (plan === 'pro') return 'pro';
+  if (plan === 'pro' || grantLevel === 'pro') return 'pro';
   return 'rookie';
 }
 

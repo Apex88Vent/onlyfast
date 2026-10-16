@@ -252,7 +252,7 @@ const ChassisSetupForm: React.FC<ChassisSetupFormProps> = ({ data, customFields,
 
   return (
     <div className="space-y-6">
-      {config.developmentOnly && <p className="text-xs font-semibold text-[#00A8E8]">Development setup sheet · {config.name}</p>}
+      {config.developmentOnly && config.category !== 'road_course' && <p className="text-xs font-semibold text-[#00A8E8]">Development setup sheet · {config.name}</p>}
       {isPavement && <p id={`${prefix}-weight-calculation-note`} className="text-xs text-[#6B7280]">
         Weight totals calculate from all four corner weights when complete. With incomplete weights, enter totals manually.
       </p>}
@@ -341,7 +341,7 @@ const ChassisSetupForm: React.FC<ChassisSetupFormProps> = ({ data, customFields,
           </h3>
           {section.layout === 'four-corners' ? <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {(['lf', 'rf', 'lr', 'rr'] as const).map(corner => <CornerCard key={corner}
-              title={{ lf: 'Left Front (LF)', rf: 'Right Front (RF)', lr: 'Left Rear (LR)', rr: 'Right Rear (RR)' }[corner]}
+              title={section.cornerTitles?.[corner] || { lf: 'Left Front (LF)', rf: 'Right Front (RF)', lr: 'Left Rear (LR)', rr: 'Right Rear (RR)' }[corner]}
               cornerPrefix={corner} color={corner.endsWith('f') ? '#00A8E8' : '#6B7280'} legendId={`${prefix}-${corner}-legend`}
               fields={section.fields.filter(f => f.key.startsWith(`${corner}_`)).map(f => ({ ...f,
                 key: f.key.slice(3), label: f.label.replace(/^(LF|RF|LR|RR) /, '') }))}

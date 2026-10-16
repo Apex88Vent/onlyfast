@@ -1,3 +1,5 @@
+import LockedFeatureNotice from './LockedFeatureNotice';
+import { setupClassLabel } from '@/lib/setupLibrary';
 import CustomCarSetupForm, { useCustomCarTemplate } from './CustomCarSheet';
 import { CUSTOM_CAR, CUSTOM_SHEET_KEY, customSheetFromRow, readCustomSheet, snapshotCustomSheet, emptyCustomSheet } from '@/lib/customCar';
 import React, { useState, useEffect, useCallback, useId, useRef } from 'react';
@@ -82,6 +84,7 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
       if (raw) {
         const parsed = JSON.parse(raw);
         const draftClass = parsed.template?.raceClass;
+        if (getEffectiveTier(readMembership(user?.user_metadata || {})) !== 'team' && draftClass && draftClass.trim().toLowerCase() !== selectedCar.trim().toLowerCase()) throw new Error('Inactive vehicle');
         if (!canAccessSetupClass(draftClass) || !areSetupSheetsCompatible(draftClass, selectedCar)) throw new Error('Different sheet type');
         if ((selectedCar === CUSTOM_CAR || draftClass === CUSTOM_CAR) && draftClass !== selectedCar) throw new Error('Different sheet type');
         if (parsed.template) setTemplate({ ...emptyTemplate(), ...parsed.template });
@@ -270,11 +273,12 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
       }
 
       const perm = checkSavePermission({
+        activeCarType: selectedCar,
         tier,
         kind: 'base_template',
         isExistingSave: !!editingId,
         existingRaceWeekendCount: 0,
-        existingBaseSetupCount: templates.length,
+        existingBaseSetupCount: templates.filter(t => String(t.race_class || '').trim().toLowerCase() === selectedCar.trim().toLowerCase()).length,
         existingCarTypes,
         newCarType,
       });
@@ -568,7 +572,7 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
               <option value="">Blank base setup</option>
               {compatibleTemplates.map(t => (
                 <option key={t.id} value={t.id}>
-                  {(t.setup_name || 'Untitled').replace(/^\[BASE TEMPLATE\]\s*/, '')} ({t.race_class || 'No class'})
+                  {(t.setup_name || 'Untitled').replace(/^\[BASE TEMPLATE\]\s*/, '')} ({setupClassLabel(t.race_class) || 'No class'})
                 </option>
               ))}
             </select>
@@ -588,7 +592,7 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
           placeholder="e.g. Late Model Dry Slick Baseline"
           className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-lg focus:ring-2 focus:ring-[#00A8E8] focus:border-[#00A8E8] outline-none transition-all text-[#1A1B23] bg-[#F9FAFB] text-sm font-medium"
         />
-        <p className="text-xs text-[#9CA3AF] mt-1.5">Class: <span className="font-medium text-[#6B7280]">{template.raceClass || selectedCar || 'Not set'}</span></p>
+        <p className="text-xs text-[#9CA3AF] mt-1.5">Class: <span className="font-medium text-[#6B7280]">{setupClassLabel(template.raceClass || selectedCar) || 'Not set'}</span></p>
       </section>
 
       {/* Chassis form */}
@@ -628,9 +632,9 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
       <div className="sticky bottom-4 bg-white border border-[#E5E7EB] rounded-xl shadow-lg p-3 flex items-center justify-between gap-3 flex-wrap">
         <div aria-live="polite" className="flex-1 min-w-0">
           {message && (
-            <span className={`text-sm font-medium ${message.toLowerCase().includes('error') ? 'text-red-600' : 'text-green-700'}`}>
-              {message}
-            </span>
+            <div className={`text-sm font-medium ${message.toLowerCase().includes('error') ? 'text-red-600' : 'text-green-700'}`}>
+              {/upgrade|require.*(?:Pro|Teams)/i.test(message) ? <LockedFeatureNotice message={message} onDismiss={() => setMessage('')} /> : message}
+            </div>
           )}
           {!message && (
             <span className="text-xs text-[#9CA3AF]">

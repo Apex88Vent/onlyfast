@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { readMembership } from '@/lib/membership';
+import { DEFAULT_MEMBERSHIP } from '@/lib/membership';
 import LegalModal from './LegalModal';
 
 
@@ -95,9 +95,8 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           setError('Please enter a nickname.');
           return;
         }
-        // Carry over the plan/promo the user picked during onboarding so it
-        // persists on the account across logout/login & devices.
-        const membership = readMembership();
+        // New accounts must not inherit another account's device-wide cache.
+        const membership = DEFAULT_MEMBERSHIP;
         const { data, error } = await supabase.auth.signUp({
           email,
           password,

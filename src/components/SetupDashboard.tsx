@@ -1,3 +1,7 @@
+import { useMembershipRevision } from '@/hooks/useMembershipRevision';
+import LockedFeatureNotice from './LockedFeatureNotice';
+import { setupClassLabel, EXPANDED_CLASS_CONFIGS } from '@/lib/setupLibrary';
+import { ROAD_TRACK_KEYS, emptyRoadTrackFeedback } from '@/lib/roadTrackFeedback';
 import CustomCarSetupForm, { useCustomCarTemplate } from './CustomCarSheet';
 import { CUSTOM_CAR, CUSTOM_SHEET_KEY, customSheetFromRow, readCustomSheet, snapshotCustomSheet, emptyCustomSheet } from '@/lib/customCar';
 import { areSetupSheetsCompatible, isDevelopmentClass } from '@/lib/setupLibrary';
@@ -10,6 +14,8 @@ import { User } from '@supabase/supabase-js';
 import TrackInfoSection from './TrackInfoSection';
 import ChassisSetupForm from './ChassisSetupForm';
 import DirtOvalTrack from './DirtOvalTrack';
+import RoadCourseTrack from './RoadCourseTrack';
+import PavementOvalTrack from './PavementOvalTrack';
 import HandlingFeedback from './HandlingFeedback';
 import CustomFieldManager, { CustomField } from './CustomFieldManager';
 import SavedSetups from './SavedSetups';
@@ -65,6 +71,7 @@ import RookieAdSlot from './RookieAdSlot';
 import { shouldShowAds } from '@/lib/ads';
 import {
   createNewRaceWeekendSessions,
+  getDefaultRaceSessionLabels,
   DEFAULT_RACE_SESSION_ORDER,
   DEFAULT_RACE_SESSION_TYPES,
   isDefaultRaceSessionType,
@@ -115,7 +122,7 @@ const readCarNumber = (user: User | null | undefined, override?: string): string
 type SetupType = RaceSessionType;
 
 // Default display names + canonical session_order for the built-in slots.
-const TAB_LABELS: Record<SetupType, { full: string; short: string }> = {
+const DEFAULT_TAB_LABELS: Record<SetupType, { full: string; short: string }> = {
   base: { full: 'Hot Laps Setup', short: 'Hot Laps' },
   heat: { full: 'Heat Setup', short: 'Heat' },
   main: { full: 'Main Event Setup', short: 'Main Event' },
@@ -342,6 +349,14 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   onUpgrade,
   landingRequest = 0,
 }) => {
+  useMembershipRevision();
+  const defaults = getDefaultRaceSessionLabels(selectedCar);
+  const TAB_LABELS = {
+    ...DEFAULT_TAB_LABELS,
+    base: { full: `${defaults.base} Setup`, short: defaults.base },
+    heat: { full: `${defaults.heat} Setup`, short: defaults.heat },
+    main: { full: `${defaults.main} Setup`, short: defaults.main },
+  };
   const { template: customCarTemplate, initialSheet } = useCustomCarTemplate();
   const { hasBetaFeature, testerKind } = useBetaFeatures();
   const onlyLapsLinkingEnabled =
@@ -447,6 +462,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
 
   const prefix = useId();
   const currentSetup = setups[activeTab];
+  const trackCategory = EXPANDED_CLASS_CONFIGS[currentSetup.raceClass || selectedCar]?.category;
   const carNumber = readCarNumber(user, carNumberOverride);
   const effectiveTier = getEffectiveTier(readMembership(user?.user_metadata || {}));
   const currentClassSaveRestricted = classLocksEnabled &&
@@ -515,6 +531,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       if (raw) {
         const parsed = JSON.parse(raw);
         const draftClass = parsed.setups?.base?.raceClass;
+        if (classLocksEnabled && draftClass && draftClass.trim().toLowerCase() !== selectedCar.trim().toLowerCase()) throw new Error('Inactive vehicle');
         if (!canAccessSetupClass(draftClass) || !areSetupSheetsCompatible(draftClass, selectedCar)) throw new Error('Different sheet type');
         if ((selectedCar === CUSTOM_CAR || draftClass === CUSTOM_CAR) && draftClass !== selectedCar) throw new Error('Different sheet type');
         if (parsed.setups) {
@@ -582,12 +599,11 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       setActiveTab('base');
       return;
     }
-    // Apply the selected class to EVERY slot (including extra sessions) without
-    // dropping any slot — spread prev so extra sessions are never wiped.
+    // Fill empty slots without relabeling any historical session or setup.
     setSetups(prev => {
       const next = { ...prev };
       (Object.keys(next) as SetupType[]).forEach(t => {
-        next[t] = { ...next[t], raceClass: selectedCar || next[t].raceClass };
+        next[t] = { ...next[t], raceClass: next[t].raceClass || selectedCar };
       });
       return next;
     });
@@ -596,7 +612,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
 
   useEffect(() => {
     if (user) fetchSavedForCopy();
-  }, [user, refreshTrigger]);
+  }, [user, refreshTrigger, selectedCar]);
 
   useEffect(() => {
     setCarNumberOverride(readCarNumber(user));
@@ -885,6 +901,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       'trackName', 'raceDate', 'raceClass', 'trackCondition',
       'latitude', 'longitude', 'temperature', 'humidity', 'windSpeed', 'windDirection',
       'entry_handling', 'mid_handling', 'exit_handling',
+      ...ROAD_TRACK_KEYS,
       'session_fastest_lap', 'session_slowest_lap',
       'session_started', 'session_finished',
       'notes', 'setup_name',
@@ -896,6 +913,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       [activeTab]: {
         ...source,
         // Reset session-specific fields for the new session
+        ...emptyRoadTrackFeedback(),
         entry_handling: '',
         mid_handling: '',
         exit_handling: '',
@@ -981,6 +999,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   };
 
   const buildPayload = (s: SetupState, tabKey: SetupType, name?: string) => {
+    if (classLocksEnabled && s.raceClass && s.raceClass.trim().toLowerCase() !== selectedCar.trim().toLowerCase()) throw new Error('Locked — Switch back to this vehicle to access this setup.');
     if (!canAccessSetupClass(s.raceClass || selectedCar)) throw new Error('This setup class is available only to the OnlyFast test account.');
     if ((s.raceClass || selectedCar) === CUSTOM_CAR && readCustomSheet(s[CUSTOM_SHEET_KEY])?.sections.some(section => section.fields.some(f => !f.label.trim()))) {
       throw new Error('Give every Custom Car field a name before saving.');
@@ -1001,7 +1020,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
 
       track_name: s.trackName || '',
       race_date: s.raceDate || new Date().toISOString().split('T')[0],
-      race_class: classLocksEnabled ? selectedCar : (s.raceClass || selectedCar),
+      race_class: s.raceClass || selectedCar,
       track_shape: s.trackShape || null,
       track_length: s.trackLength || null,
 
@@ -1222,6 +1241,8 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
           existingRows = data || [];
         }
 
+        existingRows = existingRows.filter((r: any) => !classLocksEnabled ||
+          String(r.race_class || '').trim().toLowerCase() === selectedCar.trim().toLowerCase());
         const rows = (existingRows || []).filter(
           (r: any) => (r.setup_type || 'base') !== 'base_template'
         );
@@ -1249,6 +1270,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
         const newCarType = currentSetup.raceClass || selectedCar || '';
 
         const perm = checkSavePermission({
+          activeCarType: selectedCar,
           tier,
           kind: 'race_weekend',
           isExistingSave: fileExists,
@@ -1283,9 +1305,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
           if (isRaceWeekendEditLocked(tier, earliest)) {
             if (!silent) {
               setSaveMessage(
-                isMedianIOSApp
-                  ? 'This race weekend is locked (over 48 hours old) and can no longer be edited on the Rookie plan. It stays viewable and can still be deleted.'
-                  : 'This race weekend is locked (over 48 hours old) and can no longer be edited on the Rookie plan. It stays viewable and can still be deleted. Upgrade to Pro to remove the 48-hour lock.'
+                'This race weekend is locked (over 48 hours old) and can no longer be edited on the Rookie plan. It stays viewable and can still be deleted. Upgrade to Pro to remove the 48-hour lock.'
               );
               setTimeout(() => setSaveMessage(''), 8000);
             }
@@ -1557,16 +1577,16 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   // Load the whole "file" — all rows sharing the same setup_name
   const handleLoadSetup = async (setup: any) => {
     if (!canAccessSetupClass(setup.race_class)) return;
-    if (isBaseTemplateSetup(setup)) {
-      setBaseTemplateToEdit(setup);
-      setActiveView('create-base');
-      return;
-    }
     if (
       classLocksEnabled &&
       String(setup?.race_class || '').trim().toLowerCase() !== selectedCar.trim().toLowerCase()
     ) {
       setClassLockNoticeOpen(true);
+      return;
+    }
+    if (isBaseTemplateSetup(setup)) {
+      setBaseTemplateToEdit(setup);
+      setActiveView('create-base');
       return;
     }
     if (user && setup?.id) {
@@ -1751,6 +1771,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       ...prev,
       [activeTab]: {
         ...source,
+        ...emptyRoadTrackFeedback(),
         entry_handling: '',
         mid_handling: '',
         exit_handling: '',
@@ -1780,6 +1801,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
         humidity: current.humidity,
         windSpeed: current.windSpeed,
         windDirection: current.windDirection,
+        ...emptyRoadTrackFeedback(),
         entry_handling: '',
         mid_handling: '',
         exit_handling: '',
@@ -1816,6 +1838,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
         humidity: current.humidity,
         windSpeed: current.windSpeed,
         windDirection: current.windDirection,
+        ...emptyRoadTrackFeedback(),
         entry_handling: '',
         mid_handling: '',
         exit_handling: '',
@@ -2400,7 +2423,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView, displayedRaceDate, displayedRaceQueryKey, displayedRaceTrack, refreshTrigger, user]);
 
-  const defaultWeekendSessions = createNewRaceWeekendSessions()
+  const defaultWeekendSessions = createNewRaceWeekendSessions(selectedCar)
     .map(session => ({ label: session.label, status: session.status }));
   const activeWeekendMatchesDisplayed = Boolean(
     displayedRace &&
@@ -3019,7 +3042,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
                   </p>
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
                     <span className="inline-flex items-center bg-[#F5F5F7] text-[#4B5563] px-2.5 py-1 rounded-full text-xs font-semibold border border-[#E5E7EB]">
-                      Class: {currentSetup.raceClass || selectedCar}
+                      Class: {setupClassLabel(currentSetup.raceClass || selectedCar)}
                     </span>
                     <button
                       onClick={onChangeClass}
@@ -3070,7 +3093,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                         <rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                       </svg>
-                      Copy {activeTab === 'heat' ? 'Hot Laps' : 'Heat'}
+                      Copy {labelForTab(activeTab === 'heat' ? 'base' : 'heat')}
                     </button>
                   )}
 
@@ -3241,14 +3264,21 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
 
               <RookieAdSlot placement="setup_track_conditions" user={user} />
 
-              <DirtOvalTrack
+              {trackCategory === 'road_course' ? <RoadCourseTrack data={currentSetup} onChange={handleChange} /> : trackCategory === 'pavement_oval' ? <PavementOvalTrack
                 entryHandling={currentSetup.entry_handling}
                 midHandling={currentSetup.mid_handling}
                 exitHandling={currentSetup.exit_handling}
                 onEntryChange={(v) => handleChange('entry_handling', v)}
                 onMidChange={(v) => handleChange('mid_handling', v)}
                 onExitChange={(v) => handleChange('exit_handling', v)}
-              />
+              /> : <DirtOvalTrack
+                entryHandling={currentSetup.entry_handling}
+                midHandling={currentSetup.mid_handling}
+                exitHandling={currentSetup.exit_handling}
+                onEntryChange={(v) => handleChange('entry_handling', v)}
+                onMidChange={(v) => handleChange('mid_handling', v)}
+                onExitChange={(v) => handleChange('exit_handling', v)}
+              />}
 
               {(currentSetup.raceClass || selectedCar) === CUSTOM_CAR ? <CustomCarSetupForm data={currentSetup} onChange={handleChange} /> : (
               <ChassisSetupForm
@@ -3293,7 +3323,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
                 midHandling={currentSetup.mid_handling}
                 exitHandling={currentSetup.exit_handling}
                 setupData={currentSetup}
-                raceClass={currentSetup.raceClass}
+                raceClass={currentSetup.raceClass || selectedCar}
                 user={user}
                 raceWeekendKey={savedMeta.name || undefined}
                 onlyfastSessionId={selectedSessionId}
@@ -3312,9 +3342,9 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3 flex-wrap" aria-live="polite">
               {saveMessage && (
-                <span className={`text-sm font-medium ${saveMessage.includes('Error') ? 'text-red-600' : saveMessage.includes('Offline') ? 'text-amber-600' : 'text-green-700'}`} role={saveMessage.includes('Error') ? 'alert' : 'status'}>
-                  {saveMessage}
-                </span>
+                <div className={`text-sm font-medium ${saveMessage.includes('Error') ? 'text-red-600' : saveMessage.includes('Offline') ? 'text-amber-600' : 'text-green-700'}`} role={saveMessage.includes('Error') ? 'alert' : 'status'}>
+                  {/upgrade|require.*(?:Pro|Teams)/i.test(saveMessage) ? <LockedFeatureNotice message={saveMessage} onDismiss={() => setSaveMessage('')} /> : saveMessage}
+                </div>
               )}
               {pendingCount > 0 && (
                 <span className="inline-flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 px-2.5 py-1 rounded-full text-xs font-semibold">
@@ -3581,10 +3611,10 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="class-lock-title">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
             <h2 id="class-lock-title" className="text-lg font-bold text-[#1A1B23]">This setup belongs to another class</h2>
-            <p className="mt-2 text-sm leading-6 text-[#6B7280]">{isMedianIOSApp ? 'Switch back to that class to use this setup.' : 'Switch back to that class to use this setup, or upgrade to Teams to unlock setups across all classes.'}</p>
+            <p className="mt-2 text-sm leading-6 text-[#6B7280]">Switch back to that class to use this setup, or upgrade to Teams to unlock setups across all classes.</p>
             <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
               <button onClick={() => setClassLockNoticeOpen(false)} className="rounded-lg px-4 py-2 text-sm font-medium text-[#6B7280] hover:bg-[#F5F5F7] focus:outline-none focus:ring-2 focus:ring-[#00A8E8]">Close</button>
-              {!isMedianIOSApp && <button onClick={onUpgrade} className="rounded-lg bg-[#00A8E8] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0090c7] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2">Upgrade to Teams</button>}
+              {<button onClick={onUpgrade} className="rounded-lg bg-[#00A8E8] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0090c7] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2">Upgrade to Teams</button>}
             </div>
           </div>
         </div>

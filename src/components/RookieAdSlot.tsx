@@ -1,6 +1,7 @@
 import React, { Suspense } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { shouldShowAds } from '@/lib/ads';
+import { isMedianIOSApp } from '@/lib/paymentVisibility';
 
 export type RookieAdPlacement =
   | 'home_middle'
@@ -32,7 +33,9 @@ const RookieAdSlot: React.FC<RookieAdSlotProps> = (props) => {
   }
 
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={props.placement === 'after_save_interstitial' || isMedianIOSApp ? null : (
+      <div aria-hidden="true" className={`h-[160px] w-full shrink-0 ${props.className || ''}`} />
+    )}>
       <RookieHouseAdContent {...props} />
     </Suspense>
   );

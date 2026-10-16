@@ -1,3 +1,4 @@
+import { useMembershipRevision } from '@/hooks/useMembershipRevision';
 import { CustomCarGate } from './CustomCarSheet';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -16,16 +17,16 @@ import LegalModal from './LegalModal';
 import ClassChangeModal from './ClassChangeModal';
 import { useNavigate } from 'react-router-dom';
 import { getEffectiveTier, readMembership } from '@/lib/membership';
-import { getActiveClassState, initializeActiveClass } from '@/lib/activeClass';
+import { getActiveClassState, saveOnboardingProgress, completeRacingOnboarding, type ActiveClassState } from '@/lib/activeClass';
 import { resetTestAccountData } from '@/lib/testAccount';
 import { useBetaFeatures } from '@/hooks/useBetaFeatures';
 import { BETA_FEATURES } from '@/lib/betaFeatures';
 import { isOnlyFastFilePickerOpen } from '@/lib/filePickerState';
 import { resolveAuthUiTransition } from '@/lib/authUiTransition';
 import { canAccessSetupClass } from '@/lib/setupLibraryAccess';
-import { isDevelopmentClass } from '@/lib/setupLibrary';
 
 const AppLayout: React.FC = () => {
+  useMembershipRevision();
   const navigate = useNavigate();
   const betaAccess = useBetaFeatures();
   const { hasBetaFeature, testerKind } = betaAccess;
@@ -41,6 +42,7 @@ const AppLayout: React.FC = () => {
   const [isLoadingSavedCar, setIsLoadingSavedCar] = useState(false);
   const [classSelectionUserId, setClassSelectionUserId] = useState<string | null | undefined>(undefined);
   const [classSelectionError, setClassSelectionError] = useState('');
+  const [onboardingState, setOnboardingState] = useState<ActiveClassState | null>(null);
   const [landingRequest, setLandingRequest] = useState(0);
   const [legalModal, setLegalModal] = useState<'privacy' | 'terms' | null>(null);
   const [showSplash, setShowSplash] = useState(() => !isOnlyFastFilePickerOpen());
@@ -59,23 +61,16 @@ const AppLayout: React.FC = () => {
   }, []);
 
   const markHowOnlyFastWorksComplete = useCallback(async () => {
+    if (!user) return;
+    setClassSelectionError('');
     try {
-      localStorage.setItem(howOnlyFastWorksStorageKey(user?.id), 'true');
-    } catch {/* ignore */}
-
-    if (user) {
-      try {
-        await supabase.auth.updateUser({
-          data: {
-            ...(user.user_metadata || {}),
-            onboarding_completed: true,
-          },
-        });
-      } catch {
-        // Non-fatal: local storage still prevents repeat prompts on this device.
-      }
+      const state = await saveOnboardingProgress('discipline', undefined, undefined, user.id);
+      if (authUserIdRef.current !== user.id) return;
+      setOnboardingState(state);
+    } catch {
+      setClassSelectionError('Your tutorial progress could not be saved. Please try again.');
+      return;
     }
-
     setShowHowOnlyFastWorks(false);
     setIsReplayingHowOnlyFastWorks(false);
     setHasCheckedHowOnlyFastWorks(true);
@@ -117,13 +112,10 @@ const AppLayout: React.FC = () => {
     setSelectedCar('');
     setIsOnboarded(false);
     setClassSelectionError('');
+    setOnboardingState(null);
     setLandingRequest(0);
     setUnlimitedClasses(null);
     if (!authenticatedUserId) {
-      try {
-        const saved = localStorage.getItem('onlyfast_car');
-        if (saved) applySelectedCar(saved);
-      } catch {/* Storage can be unavailable in restricted WebViews. */}
       setClassSelectionUserId(null);
       setIsLoadingSavedCar(false);
       return;
@@ -136,7 +128,12 @@ const AppLayout: React.FC = () => {
       try {
         try {
           const state = await getActiveClassState();
-          if (!cancelled) setUnlimitedClasses(state.unlimited);
+          if (!cancelled) {
+            setUnlimitedClasses(state.unlimited);
+            setOnboardingState(state);
+          }
+          // A persisted draft must finish plan selection before opening the app.
+          if (state.onboarding_step && state.onboarding_step !== 'complete') return;
           if (!cancelled && state.active_class) {
             applySelectedCar(state.active_class);
             return;
@@ -281,33 +278,44 @@ const AppLayout: React.FC = () => {
       return;
     }
 
+    if (onboardingState?.onboarding_step && onboardingState.onboarding_step !== 'tutorial') {
+      setShowHowOnlyFastWorks(false);
+      setHasCheckedHowOnlyFastWorks(true);
+      return;
+    }
+
     const completedInMetadata = Boolean(user?.user_metadata?.onboarding_completed);
     let completedLocally = false;
     try {
       completedLocally = localStorage.getItem(howOnlyFastWorksStorageKey(user?.id)) === 'true';
     } catch {/* ignore */}
 
-    const completed = completedInMetadata || completedLocally;
+    const completed = onboardingState?.onboarding_step === 'tutorial' ? false : completedInMetadata || completedLocally;
     setShowHowOnlyFastWorks(!completed);
     setHasCheckedHowOnlyFastWorks(true);
-  }, [authChecked, user, selectedCar, showSplash, isReplayingHowOnlyFastWorks, classSelectionUserId, authenticatedUserId, isLoadingSavedCar]);
+  }, [authChecked, user, selectedCar, showSplash, isReplayingHowOnlyFastWorks, classSelectionUserId, authenticatedUserId, isLoadingSavedCar, onboardingState]);
 
   const handleCarSelect = async (car: string) => {
     setClassSelectionError('');
     if (!canAccessSetupClass(car, betaAccess)) return;
-    if (!user) {
-      completeClassSelection(car);
-      return;
-    }
+    if (!user) return;
     try {
-      const state = await initializeActiveClass(car);
+      const state = await completeRacingOnboarding(user.id);
+      if (authUserIdRef.current !== user.id) return;
+      setOnboardingState(state);
       setUnlimitedClasses(state.unlimited);
       completeClassSelection(state.active_class || car);
     } catch {
-      setClassSelectionError(isDevelopmentClass(car)
-        ? 'Your class could not be saved. This development class requires the setup-library database migration. Please try again after it is applied.'
-        : 'Your class could not be saved. Please try again.');
+      setClassSelectionError('Onboarding could not be completed. Please try again.');
     }
+  };
+
+  const handleOnboardingProgress = async (step: 'discipline' | 'vehicle' | 'plan', discipline?: string, car?: string) => {
+    if (!user) throw new Error('Sign in to save your selection');
+    const state = await saveOnboardingProgress(step, discipline, car, user.id);
+    if (authUserIdRef.current !== user.id) throw new Error('Account changed');
+    setOnboardingState(state);
+    setClassSelectionError('');
   };
 
   const openClassChange = () => setClassChangeOpen(true);
@@ -331,6 +339,23 @@ const AppLayout: React.FC = () => {
     return <div className="min-h-screen bg-[#F5F5F7]" role="status" aria-label="Loading your racing profile" />;
   }
 
+  if (!user) {
+    return (
+      <AnnouncerProvider>
+        <div className="min-h-screen bg-[#F5F5F7] flex items-center justify-center p-6">
+          <main className="w-full max-w-md rounded-2xl border border-[#E5E7EB] bg-white p-8 text-center shadow-xl">
+            <img src="/onlyfast-logo.png" alt="OnlyFast" className="h-28 w-auto mx-auto mb-6" />
+            <h1 className="text-2xl font-bold text-[#1A1B23]">Welcome to OnlyFast</h1>
+            <p className="mt-3 text-[#6B7280]">Create an account or sign in to choose your discipline, vehicle and plan.</p>
+            <button onClick={() => setAuthModalOpen(true)} className="mt-6 w-full rounded-xl bg-[#00A8E8] px-5 py-3 font-bold text-white focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2">Create Account / Sign In</button>
+          </main>
+          <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
+          <CookieConsent />
+        </div>
+      </AnnouncerProvider>
+    );
+  }
+
   if (!hasCheckedHowOnlyFastWorks || showHowOnlyFastWorks) {
     return (
       <AnnouncerProvider>
@@ -343,6 +368,7 @@ const AppLayout: React.FC = () => {
             isReplay={isReplayingHowOnlyFastWorks}
           />
         )}
+        {classSelectionError && <p className="p-4 text-center text-sm text-red-600" role="alert">{classSelectionError}</p>}
         <AuthModal
           isOpen={authModalOpen}
           onClose={() => setAuthModalOpen(false)}
@@ -367,7 +393,11 @@ const AppLayout: React.FC = () => {
     return (
       <AnnouncerProvider>
         <SkipLink />
-        <OnboardingFlow onComplete={handleCarSelect} error={classSelectionError} />
+        <OnboardingFlow key={user.id} userId={user.id} onComplete={handleCarSelect} error={classSelectionError}
+          initialStep={onboardingState?.onboarding_step === 'vehicle' || onboardingState?.onboarding_step === 'plan' ? onboardingState.onboarding_step : 'discipline'}
+          initialDiscipline={onboardingState?.onboarding_discipline}
+          initialClass={onboardingState?.onboarding_race_class}
+          onProgress={handleOnboardingProgress} />
         <CookieConsent />
       </AnnouncerProvider>
     );

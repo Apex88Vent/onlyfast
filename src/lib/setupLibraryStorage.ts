@@ -1,5 +1,6 @@
 import { EXPANDED_CLASS_CONFIGS, isDevelopmentClass } from './setupLibrary.ts';
 import { calculatePavementWeights, normalizePavementToe } from './pavementSetupValues.ts';
+import { ROAD_TRACK_KEYS, readRoadHandling } from './roadTrackFeedback.ts';
 
 export const SETUP_LIBRARY_KEY = 'onlyfast_setup_library_v1';
 interface LibrarySnapshot { version: 1; race_class: string; values: Record<string, string> }
@@ -20,7 +21,9 @@ export function libraryFieldsFromRow(row: { race_class?: string; custom_fields?:
   // fields survive an older client's edit/copy. Reserved IDs cannot shadow
   // row identity, session information or custom-sheet data.
   const visibleKeys = new Set(EXPANDED_CLASS_CONFIGS[row.race_class!]?.extraSections.flatMap(s => s.fields.map(f => f.key)) || []);
+  if (EXPANDED_CLASS_CONFIGS[row.race_class!]?.category === 'road_course') ROAD_TRACK_KEYS.forEach(key => visibleKeys.add(key));
   const fields = Object.fromEntries(Object.entries(snapshot.values).filter(([key]) => visibleKeys.has(key)));
+  if (EXPANDED_CLASS_CONFIGS[row.race_class!]?.category === 'road_course') ROAD_TRACK_KEYS.forEach(key => { fields[key] = readRoadHandling(key, fields[key]); });
   if (EXPANDED_CLASS_CONFIGS[row.race_class!]?.category === 'pavement_oval') Object.assign(fields, normalizePavementToe(fields));
   return { ...fields, [SETUP_LIBRARY_KEY]: JSON.stringify(snapshot) };
 }
@@ -34,6 +37,7 @@ export function buildLibraryCustomFields(raceClass: string, state: Record<string
   }
   const values = { ...(prior?.values || {}) };
   for (const section of config.extraSections) for (const field of section.fields) values[field.key] = state[field.key] ?? '';
+  if (config.category === 'road_course') ROAD_TRACK_KEYS.forEach(key => { values[key] = readRoadHandling(key, state[key]); });
   if (config.category === 'pavement_oval') {
     Object.assign(values, normalizePavementToe(state));
     const calculated = calculatePavementWeights(state);

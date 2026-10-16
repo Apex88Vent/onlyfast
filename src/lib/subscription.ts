@@ -1,16 +1,12 @@
-// Subscription state derived from public.user_subscriptions (Stripe-backed).
-// Single source of truth for paid access EXCEPT the admin override, which
-// always unlocks everything regardless of Stripe status.
+// Subscription state derives from server-owned subscription rows and grants.
 
 import { supabase } from '@/lib/supabase';
+import { setTrustedAuthorization, clearTrustedMembership } from './trustedMembership';
 // The disposable experimental account can retain its legacy full-access mode
 // through an explicit account-level feature flag.
 import { isCurrentUserTestAccount } from '@/lib/testAccount';
 import {
   readMembership,
-  saveMembership,
-  DEFAULT_MEMBERSHIP,
-  type MembershipTier,
 } from '@/lib/membership';
 
 export type SubscriptionPlan = 'free' | 'pro' | 'teams';
@@ -24,6 +20,8 @@ export interface UserSubscriptionRow {
   stripe_price_id: string | null;
   stripe_checkout_session_id: string | null;
   subscription_source?: string | null;
+  revenuecat_expires_at?: string | null;
+  revenuecat_store?: string | null;
 }
 
 export interface AccountStatus {
@@ -47,10 +45,11 @@ export function isActivePaidRow(row: UserSubscriptionRow | null): boolean {
   const plan = (row.plan || '').toLowerCase();
   const status = (row.status || '').toLowerCase();
   const isPaidPlan = plan === 'pro' || plan === 'teams';
-  return isPaidPlan && ACTIVE_STATUSES.includes(status);
+  const expiredNative = row.subscription_source === 'revenuecat' && (!row.revenuecat_expires_at || Date.parse(row.revenuecat_expires_at) <= Date.now() || !Number.isFinite(Date.parse(row.revenuecat_expires_at)));
+  return isPaidPlan && ACTIVE_STATUSES.includes(status) && !expiredNative;
 }
 
-/** True when the RaeRae2020!!! admin override has been applied for this user. */
+/** True only for a server-approved administrator grant. */
 export function hasAdminOverride(metadata?: Record<string, any> | null): boolean {
   const m = readMembership(metadata);
   return m.has_admin_full_access === true;
@@ -69,7 +68,7 @@ export async function fetchUserSubscription(
 
   const { data, error } = await supabase
     .from('user_subscriptions')
-    .select('user_id, plan, status, stripe_customer_id, stripe_subscription_id, stripe_price_id, stripe_checkout_session_id, subscription_source')
+    .select('user_id, plan, status, stripe_customer_id, stripe_subscription_id, stripe_price_id, stripe_checkout_session_id, subscription_source, revenuecat_expires_at, revenuecat_store')
     .eq('user_id', uid)
     .maybeSingle();
 
@@ -104,12 +103,19 @@ export function deriveAccountStatus(
     return { label: 'Teams', plan: 'teams', isPaid: true, isAdmin: false, row };
   }
 
-  const isAdmin = hasAdminOverride(metadata);
+  const access = readMembership();
+  const isAdmin = access.has_admin_full_access;
 
   if (isAdmin) {
     return { label: 'Admin', plan: 'teams', isPaid: true, isAdmin: true, row };
   }
 
+
+  const promoActive = !!access.promo_access_level && (!access.promo_access_expires_at || Date.parse(access.promo_access_expires_at) > Date.now());
+  if (promoActive && (access.membership_tier === 'pro' || access.membership_tier === 'team')) {
+    const team = access.membership_tier === 'team';
+    return { label: team ? 'Teams' : 'Pro', plan: team ? 'teams' : 'pro', isPaid: true, isAdmin: false, row };
+  }
 
   if (isActivePaidRow(row)) {
     const plan = (row!.plan || '').toLowerCase() === 'teams' ? 'teams' : 'pro';
@@ -125,51 +131,19 @@ export function deriveAccountStatus(
   return { label: 'Free', plan: 'free', isPaid: false, isAdmin: false, row };
 }
 
-/**
- * Bridge the Stripe subscription (public.user_subscriptions) into the existing
- * membership tier the rest of the app gates on, so paid access reflects Stripe.
- *
- * Rules (kept intentionally narrow to avoid disturbing other app logic):
- *   - Admin override (RaeRae2020!!!) is never touched — admin keeps everything.
- *   - An unexpired promo grant is preserved — Stripe inactivity won't remove it.
- *   - Otherwise the tier mirrors Stripe: pro/teams when active/trialing, else rookie.
- *
- * Returns the resolved AccountStatus (reflecting Stripe, ignoring promo bridge).
- */
+/** Refresh the UI from server-owned subscription and grant records. */
 export async function syncMembershipFromSubscription(): Promise<AccountStatus | null> {
   const { data } = await supabase.auth.getSession();
-  const user = data?.session?.user;
-  if (!user) return null;
-
-  const meta = (user.user_metadata || {}) as Record<string, any>;
-  const current = readMembership(meta);
-
-  const row = await fetchUserSubscription(user.id);
-  const { data: latestSession } = await supabase.auth.getSession();
-  if (latestSession.session?.user.id !== user.id) return null;
-  const status = deriveAccountStatus(row, meta);
-
-  // Never override admin access.
-  if (current.has_admin_full_access) return status;
-
-  // Preserve an active (unexpired) promo grant.
-  const promoActive =
-    !!current.promo_access_level &&
-    (!current.promo_access_expires_at ||
-      new Date(current.promo_access_expires_at) > new Date());
-  if (promoActive) return status;
-
-  // Mirror Stripe into the membership tier when it differs.
-  const desiredTier: MembershipTier = isActivePaidRow(row)
-    ? (status.plan === 'teams' ? 'team' : 'pro')
-    : 'rookie';
-
-  if (current.membership_tier !== desiredTier) {
-    await saveMembership({
-      ...DEFAULT_MEMBERSHIP,
-      membership_tier: desiredTier,
-    }, user.id);
-  }
-
-  return status;
+  const user = data.session?.user;
+  if (!user) { clearTrustedMembership(); return null; }
+  clearTrustedMembership(user.id);
+  const [row, verified] = await Promise.all([
+    fetchUserSubscription(user.id),
+    supabase.auth.getUser(),
+  ]);
+  const { data: latest } = await supabase.auth.getSession();
+  if (latest.session?.user.id !== user.id) return null;
+  if (verified.error || verified.data.user?.id !== user.id) throw new Error('Could not verify membership identity');
+  setTrustedAuthorization(user.id, row, verified.data.user.app_metadata || {});
+  return deriveAccountStatus(row);
 }

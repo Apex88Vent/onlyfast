@@ -1,3 +1,5 @@
+import { useMembershipRevision } from '@/hooks/useMembershipRevision';
+import LockedFeatureNotice from './LockedFeatureNotice';
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -7,6 +9,8 @@ import {
   checkSetupAssistPermission,
 } from '@/lib/membership';
 import { ONLYLAPS_SESSION_LINK_CHANGED_EVENT } from '@/lib/onlylapsSessionScope';
+import { EXPANDED_CLASS_CONFIGS } from '@/lib/setupLibrary';
+import { ROAD_TRACK_ZONES, readRoadHandling, roadHandlingLabel } from '@/lib/roadTrackFeedback';
 
 interface HandlingFeedbackProps {
   entryHandling: string;
@@ -88,7 +92,7 @@ function telemetryReasonLabel(reason: string | null): string {
     formatting_failed: 'telemetry formatting failed',
     context_empty: 'formatted telemetry was empty',
   };
-  return reason ? labels[reason] || reason.replaceAll('_', ' ') : 'unknown';
+  return reason ? labels[reason] || reason.replace(/_/g, ' ') : 'unknown';
 }
 
 const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
@@ -102,7 +106,9 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
   onlyfastSessionId,
   onlyLapsTelemetryEnabled = false,
 }) => {
+  useMembershipRevision();
   const [suggestions, setSuggestions] = useState('');
+  const [suggestionsReady, setSuggestionsReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [whatIfMode, setWhatIfMode] = useState(false);
   const [whatIfQuestion, setWhatIfQuestion] = useState('');
@@ -121,7 +127,12 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
   const telemetryStatusRequestRef = useRef(0);
   const prefix = useId();
 
-  const hasHandling = entryHandling || midHandling || exitHandling;
+  const discipline = EXPANDED_CLASS_CONFIGS[raceClass]?.category || 'dirt_oval';
+  const handlingSummary = discipline === 'road_course'
+    ? ROAD_TRACK_ZONES.map(zone => ({ label: `${zone.section} ${zone.label}`, value: readRoadHandling(zone.key, setupData[zone.key]) }))
+    : [{ label: 'Entry', value: entryHandling }, { label: 'Mid', value: midHandling }, { label: 'Exit', value: exitHandling }];
+  const hasHandling = handlingSummary.some(item => !!item.value);
+  const toggleWhatIf = () => setWhatIfMode(mode => !mode);
 
   const importantFields = [
     'cross_weight', 'toe', 'front_ride_height', 'rear_ride_height', 'stagger',
@@ -381,6 +392,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
 
     setLoading(true);
     setSuggestions('');
+    setSuggestionsReady(false);
     setTelemetryRequestDebug(null);
     try {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -398,12 +410,14 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
           exit_handling: exitHandling,
           currentSetup: setupData,
           raceClass,
+          discipline,
           race_weekend_key: gate.key,
           onlyfast_session_id: activeTelemetrySessionId,
         }
       });
       if (data?.suggestion) {
         setSuggestions(data.suggestion);
+        setSuggestionsReady(true);
         setTelemetryRequestDebug(
           onlyLapsTelemetryEnabled
             ? readBetaTelemetryDebug(data.telemetry_debug)
@@ -457,6 +471,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
           exit_handling: exitHandling,
           currentSetup: setupData,
           raceClass,
+          discipline,
           whatIfQuestion: whatIfQuestion.trim(),
           race_weekend_key: gate.key,
           onlyfast_session_id: activeTelemetrySessionId,
@@ -608,25 +623,21 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
       </div>
 
       {/* Handling Summary */}
-      <div className="grid grid-cols-3 gap-3 mb-4" role="group" aria-label="Current handling feedback">
-        {[
-          { label: 'Entry', value: entryHandling },
-          { label: 'Mid', value: midHandling },
-          { label: 'Exit', value: exitHandling },
-        ].map(item => (
+      <div className={`grid ${discipline === 'road_course' ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-3'} gap-3 mb-4`} role="group" aria-label="Current handling feedback">
+        {handlingSummary.map(item => (
           <div key={item.label} className="bg-[#F9FAFB] rounded-lg p-3 text-center border border-[#E5E7EB]">
             <p className="text-xs text-[#6B7280] uppercase tracking-wider mb-1">{item.label}</p>
             <p className={`text-sm font-bold ${
-              item.value === 'loose' ? 'text-red-600' :
-              item.value === 'tight' ? 'text-blue-600' :
+              item.value === 'loose' || item.value === 'oversteer' || item.value === 'over_geared' ? 'text-red-600' :
+              item.value === 'tight' || item.value === 'understeer' || item.value === 'under_geared' ? 'text-blue-600' :
               item.value === 'perfect' ? 'text-green-700' :
               'text-[#9CA3AF]'
             }`}>
-              {item.value ? item.value.charAt(0).toUpperCase() + item.value.slice(1) : 'Not Set'}
+              {item.value ? discipline === 'road_course' ? roadHandlingLabel(item.value) : item.value.charAt(0).toUpperCase() + item.value.slice(1) : 'Not Set'}
               {/* Non-color cue */}
               {item.value && (
                 <span className="ml-1 text-xs font-normal" aria-hidden="true">
-                  {item.value === 'loose' ? '~' : item.value === 'tight' ? '|' : '+'}
+                  {item.value === 'loose' || item.value === 'oversteer' ? '~' : item.value === 'tight' || item.value === 'understeer' ? '|' : item.value === 'perfect' ? '+' : ''}
                 </span>
               )}
             </p>
@@ -661,7 +672,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
           )}
         </button>
         <button
-          onClick={() => setWhatIfMode(!whatIfMode)}
+          onClick={toggleWhatIf}
           aria-expanded={whatIfMode}
           aria-controls="what-if-panel"
           className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-colors border flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2 ${
@@ -683,7 +694,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="flex-shrink-0 mt-0.5">
             <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
-          <span>{assistNotice}</span>
+          <LockedFeatureNotice message={assistNotice} onDismiss={() => setAssistNotice('')} />
         </div>
       )}
 
@@ -703,6 +714,12 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
       )}
 
       {/* What-If Mode */}
+      {suggestionsReady && (
+        <button type="button" onClick={toggleWhatIf} aria-expanded={whatIfMode} aria-controls="what-if-panel"
+          className="mb-4 px-4 py-2.5 rounded-lg text-sm font-medium border border-[#00A8E8]/30 text-[#00A8E8] bg-[#00A8E8]/10 focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2">
+          What If?
+        </button>
+      )}
       {whatIfMode && (
         <div id="what-if-panel" className="border border-[#00A8E8]/20 rounded-xl p-4 bg-[#F9FAFB]">
           <h4 className="text-sm font-bold text-[#1A1B23] mb-2 flex items-center gap-2">

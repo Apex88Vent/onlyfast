@@ -30,8 +30,9 @@ export class NativePurchaseController {
   private purchasing = false;
   private bridge: () => Promise<RevenueCatBridge>;
   private apiKey: () => string;
-  constructor(bridge: () => Promise<RevenueCatBridge>, apiKey: () => string) {
-    this.bridge = bridge; this.apiKey = apiKey;
+  private enabled: () => boolean;
+  constructor(bridge: () => Promise<RevenueCatBridge>, apiKey: () => string, enabled: () => boolean = () => true) {
+    this.bridge = bridge; this.apiKey = apiKey; this.enabled = enabled;
   }
 
   private enqueue<T>(action: () => Promise<T>): Promise<T> {
@@ -88,10 +89,12 @@ export class NativePurchaseController {
   }
 
   async run(userId: string, action: 'purchase' | 'restore'): Promise<void> {
+    if (!this.enabled()) throw new Error('In-app subscriptions are coming soon.');
     if (this.purchasing) throw new Error('A store request is already open.');
     this.purchasing = true;
     try {
       await this.enqueue(async () => {
+        if (!this.enabled()) throw new Error('In-app subscriptions are coming soon.');
         const bridge = await this.identify(userId);
         let result: NativeResult;
         if (action === 'purchase') {

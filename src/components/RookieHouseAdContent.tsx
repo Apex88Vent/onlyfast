@@ -869,7 +869,7 @@ const RookieHouseAdContent: React.FC<RookieAdSlotProps> = ({
       aria-label={ariaCopy || 'View Pro upgrade'}
       onClick={handleUpgrade}
       className={[
-        'rookie-banner-ad group relative w-full overflow-hidden rounded-lg border p-3 text-left focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2 sm:p-3.5',
+        'rookie-banner-ad group relative h-[160px] w-full overflow-hidden rounded-lg border p-3 text-left focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2 sm:p-3.5',
         className,
       ].join(' ')}
       style={adStyle}
@@ -886,7 +886,7 @@ const RookieHouseAdContent: React.FC<RookieAdSlotProps> = ({
       <span className="rookie-banner-slash bottom-5" style={{ left: '38%' }} aria-hidden="true" />
 
       {/* Future ad network integration point: these animated OnlyFast house ads are placeholders. Replace this content with Media.net web ads, AdMob/native ads, or another approved revenue-generating ad provider later. Keep Rookie-only gating so paid users never load ad scripts. */}
-      <span className="relative z-[2] flex min-h-[64px] items-center gap-3 sm:min-h-[76px] sm:gap-4">
+      <span className="relative z-[2] flex h-full items-center gap-3 sm:gap-4">
         <span
           className="rookie-banner-visual relative flex h-20 w-28 shrink-0 items-center justify-center overflow-hidden text-white shadow-sm sm:h-24 sm:w-36"
           aria-hidden="true"

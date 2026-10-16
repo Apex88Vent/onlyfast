@@ -23,6 +23,65 @@
 //   }
 // Returns: { suggestion: string }
 
+const DIRT_HANDLING_TERMINOLOGY = 'On dirt track, Tight means the car does NOT want to turn: it pushes, understeers, or resists rotation. Loose means the rear steps out: it oversteers or is free. Never interpret tight as the front turning too well.';
+
+const SETUP_ASSIST_FORMAT_INSTRUCTIONS = 'Return the specified JSON structure for both setup suggestions and What If answers. Use plain text within each field, no headings, Markdown, numbering, or embedded lists. Summary briefly describes the handling/problem; recommended_changes lists prioritized actions; why_reasoning explains their mechanical basis; expected_effect describes likely effects; notes_cautions includes interactions, uncertainty and missing information. Keep advice practical, concise and specific to the supplied car and discipline; do not assume unavailable adjustments or invent setup values. If telemetry instructions require a Telemetry evidence: line, put that exact prefixed line in notes_cautions.';
+
+const ROAD_HANDLING_INSTRUCTIONS = 'For road racing, each named handling zone is an independent driver report. Keep Low Speed Turn Entry, Low Speed Turn Exit, High Speed Turn Entry, and High Speed Turn Exit separate; never substitute one speed or phase for another or collapse them into generic corner feedback. Prefix each recommended change, reasoning item, and expected effect with the exact affected zone label and its reported condition. Correlate the adjustment with that specific input and the supplied setup, explaining why it is relevant at that speed and phase. Distinguish braking/turn-in at entry from acceleration/unwinding at exit. Understeer means the front pushes or resists turning; oversteer means the rear steps out. Treat perfect as a zone to preserve, not an issue to fix. Treat not specified as unknown, never as an assumed problem. If an adjustment affects other zones, identify those zones and explain the trade-offs, particularly for zones reported perfect. High Speed S Turns is one combined zone. Straightaway feedback concerns gearing, not corner balance. Apply the same zone-specific correlation to What If answers.';
+
+const listSchema = { type: 'array', items: { type: 'string' } };
+const SETUP_ASSIST_RESPONSE_FORMAT = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'setup_assist', strict: true,
+    schema: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        summary: { type: 'string' }, recommended_changes: listSchema,
+        why_reasoning: listSchema, expected_effect: listSchema, notes_cautions: listSchema,
+      },
+      required: ['summary', 'recommended_changes', 'why_reasoning', 'expected_effect', 'notes_cautions'],
+    },
+  },
+};
+
+// Headings and lists are owned by the app, never by the model.
+function formatSetupAssistResponse(content: unknown): string | null {
+  if (typeof content !== 'string') return null;
+  let value: Record<string, unknown>;
+  try { value = JSON.parse(content); } catch { return null; }
+  if (!value || typeof value !== 'object' || Array.isArray(value) || typeof value.summary !== 'string') return null;
+  const sections = [
+    ['recommended_changes', 'Recommended Changes'], ['why_reasoning', 'Why / Reasoning'],
+    ['expected_effect', 'Expected Effect'], ['notes_cautions', 'Notes / Cautions'],
+  ];
+  if (sections.some(([key]) => !Array.isArray(value[key]) || (value[key] as unknown[]).some(item => typeof item !== 'string'))) return null;
+  const clean = (text: string) => text.replace(/[\r\n]+/g, ' ').replace(/^\s*(?:#{1,6}\s+|[-*]\s+|\d+[.)]\s+)/, '').replace(/[#*`]/g, '').trim();
+  if (!clean(value.summary)) return null;
+  return [`## Summary\n${clean(value.summary)}`, ...sections.map(([key, heading]) => {
+    const items = (value[key] as string[]).map(clean).filter(Boolean);
+    const lines = items.length ? items.map(item => /^Telemetry evidence:/i.test(item) ? item : `- ${item}`) : ['- None specified.'];
+    return `## ${heading}\n${lines.join('\n')}`;
+  })].join('\n\n');
+}
+
+function setupAssistDiscipline(value: unknown): string {
+  return value === 'road_course' ? 'road course racing' : value === 'pavement_oval' ? 'pavement oval racing' : 'dirt track oval racing';
+}
+
+function roadHandlingPrompt(setup: Record<string, unknown> | null | undefined): string {
+  const zones = [
+    ['road_low_speed_entry', 'Low Speed Turn Entry'], ['road_low_speed_exit', 'Low Speed Turn Exit'],
+    ['road_high_speed_entry', 'High Speed Turn Entry'], ['road_high_speed_exit', 'High Speed Turn Exit'],
+    ['road_high_speed_s_turns', 'High Speed S Turns (whole section)'], ['road_straightaway', 'Straightaway'],
+  ];
+  return zones.map(([key, label]) => {
+    const options = key === 'road_straightaway' ? ['over_geared', 'under_geared', 'perfect'] : ['understeer', 'oversteer', 'perfect'];
+    const value = setup?.[key];
+    return `- ${label}: ${typeof value === 'string' && options.includes(value) ? value.replace(/_/g, ' ') : 'not specified'}`;
+  }).join('\n');
+}
+
 export const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -114,11 +173,18 @@ Deno.serve(async (req) => {
       exit_handling,
       currentSetup,
       raceClass,
+      discipline,
       communityData,
       whatIfQuestion,
     } = body || {};
 
-    const setupDetails = buildSetupDetails(currentSetup, raceClass || '');
+    const racingDiscipline = setupAssistDiscipline(discipline);
+    const setupDetails = discipline === 'road_course' || discipline === 'pavement_oval'
+      ? 'Current Setup (only supplied fields; preserve their stated units):\n' + JSON.stringify(currentSetup || {})
+      : buildSetupDetails(currentSetup, raceClass || '');
+    const handlingFeedback = discipline === 'road_course'
+      ? roadHandlingPrompt(currentSetup)
+      : `- Corner Entry: ${entry_handling || 'not specified'}\n- Mid Corner: ${mid_handling || 'not specified'}\n- Corner Exit: ${exit_handling || 'not specified'}`;
     const communityContext = buildCommunityContext(communityData, raceClass || '');
 
     const classNote =
@@ -129,42 +195,38 @@ Deno.serve(async (req) => {
         : '';
 
     const prompt = whatIfQuestion
-      ? `You are an expert dirt track oval racing chassis setup consultant specializing in ${raceClass || 'dirt track'} cars. A racer wants to know what would happen if they made a specific change to their setup.
+      ? `You are an expert ${racingDiscipline} chassis setup consultant specializing in ${raceClass || 'dirt track'} cars. A racer wants to know what would happen if they made a specific change to their setup.
 
 ${setupDetails}
 
 Current Handling Feedback:
-- Corner Entry: ${entry_handling || 'not specified'}
-- Mid Corner: ${mid_handling || 'not specified'}
-- Corner Exit: ${exit_handling || 'not specified'}
+${handlingFeedback}
 ${communityContext}
 
 The racer asks: "${whatIfQuestion}"
 
 Based on their current setup and handling, explain:
 1. What effect this change would have on the car's handling
-2. How it would affect corner entry, mid-corner, and exit behavior
+2. How it would affect the supplied handling zones and gearing where relevant
 3. Whether this change would likely improve or worsen their current handling issues
 4. Any secondary effects or interactions with other setup components
 5. Your recommendation on whether to make this change
 
-Be specific, practical, and relate your answer to dirt track oval racing dynamics. Keep the response focused and actionable.`
-      : `You are an expert dirt track oval racing chassis setup consultant specializing in ${raceClass || 'dirt track'} cars. A racer needs help with their setup.
+Be specific, practical, and relate your answer to ${racingDiscipline} dynamics. Keep the response focused and actionable.`
+      : `You are an expert ${racingDiscipline} chassis setup consultant specializing in ${raceClass || 'dirt track'} cars. A racer needs help with their setup.
 
 ${setupDetails}
 
 Handling Feedback:
-- Corner Entry: ${entry_handling || 'not specified'}
-- Mid Corner: ${mid_handling || 'not specified'}
-- Corner Exit: ${exit_handling || 'not specified'}
+${handlingFeedback}
 ${communityContext}
 
-Based on this information, provide specific, actionable setup change suggestions. For each corner phase that is NOT "perfect", explain:
+Based on this information, provide specific, actionable setup change suggestions. For each supplied handling zone that is NOT "perfect", explain:
 1. What's happening mechanically
 2. Specific adjustments to make (with approximate values)
 3. Priority of changes (what to try first)
 
-Keep suggestions practical and specific to dirt track oval racing${classNote}. Format with clear headers for each phase. If a phase is "perfect", acknowledge it briefly and move on. Be concise but thorough.`;
+Keep suggestions practical and specific to ${racingDiscipline}${classNote}. Use the required structured response. If a phase is "perfect", acknowledge it briefly and move on. Be concise but thorough.`;
 
     const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -178,10 +240,11 @@ Keep suggestions practical and specific to dirt track oval racing${classNote}. F
           {
             role: 'system',
             content:
-              'You are an expert dirt track oval racing chassis setup consultant. Give practical, specific, mechanically-grounded advice.',
+              `You are an expert ${racingDiscipline} chassis setup consultant. ${DIRT_HANDLING_TERMINOLOGY} ${SETUP_ASSIST_FORMAT_INSTRUCTIONS} ${discipline === 'road_course' ? ROAD_HANDLING_INSTRUCTIONS : ''} Give practical, specific, mechanically-grounded advice.`,
           },
           { role: 'user', content: prompt },
         ],
+        response_format: SETUP_ASSIST_RESPONSE_FORMAT,
         temperature: 0.7,
       }),
     });
@@ -198,8 +261,12 @@ Keep suggestions practical and specific to dirt track oval racing${classNote}. F
     }
 
     const data = await aiResponse.json();
-    const suggestion =
-      data?.choices?.[0]?.message?.content?.trim() || 'Unable to generate suggestions at this time.';
+    const suggestion = formatSetupAssistResponse(data?.choices?.[0]?.message?.content);
+    if (!suggestion) {
+      return new Response(JSON.stringify({ error: 'Setup Assist returned an incomplete response. Please try again.' }), {
+        status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      });
+    }
 
     return new Response(JSON.stringify({ suggestion }), {
       headers: { 'Content-Type': 'application/json', ...corsHeaders },

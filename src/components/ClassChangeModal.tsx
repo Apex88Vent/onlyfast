@@ -1,18 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { isMedianIOSApp } from '@/lib/paymentVisibility';
 import type { User } from '@supabase/supabase-js';
-import { useBetaFeatures } from '@/hooks/useBetaFeatures';
-import { canAccessSetupClass, getSelectableSetupClasses } from '@/lib/setupLibraryAccess';
 import type { MembershipTier } from '@/lib/membership';
-import {
-  changeActiveClass,
-  formatEligibleDate,
-  getActiveClassState,
-  sameClass,
-} from '@/lib/activeClass';
+import { getDisciplineSetupClasses } from '@/lib/setupLibraryAccess';
+import { EXPANDED_CLASS_CONFIGS, SETUP_CATEGORY_LABELS, type SetupCategory } from '@/lib/setupLibrary';
+import { changeActiveClass, formatEligibleDate, getActiveClassState, sameClass } from '@/lib/activeClass';
 
-type Step = 'loading' | 'warning' | 'upgrade' | 'selector' | 'cooldown';
-
+type Step = 'loading' | 'warning' | 'selector' | 'cooldown';
 interface ClassChangeModalProps {
   isOpen: boolean;
   user: User | null;
@@ -23,186 +17,136 @@ interface ClassChangeModalProps {
   onUpgrade: () => void;
 }
 
-const ClassChangeModal: React.FC<ClassChangeModalProps> = ({
-  isOpen,
-  user,
-  tier,
-  currentClass,
-  onClose,
-  onChanged,
-  onUpgrade,
-}) => {
+const categoryFor = (car: string): SetupCategory => (EXPANDED_CLASS_CONFIGS[car]?.category || 'dirt_oval') as SetupCategory;
+const disciplineEnabled = (category: string) => category !== 'rc' && category !== 'motorcycle';
+const ClassChangeModal: React.FC<ClassChangeModalProps> = ({ isOpen, user, currentClass, onClose, onChanged, onUpgrade }) => {
   const [step, setStep] = useState<Step>('loading');
   const [selectedClass, setSelectedClass] = useState(currentClass);
+  const [discipline, setDiscipline] = useState<SetupCategory>(categoryFor(currentClass));
   const [nextEligibleAt, setNextEligibleAt] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [serverUnlimited, setServerUnlimited] = useState<boolean | null>(null);
+  const [unlimited, setUnlimited] = useState(false);
+  const [checked, setChecked] = useState(false);
+  const pending = useRef(false);
   const cancelRef = useRef<HTMLButtonElement>(null);
-  const clientUnlimited = tier === 'team';
-  const unlimited = serverUnlimited ?? clientUnlimited;
-  const betaAccess = useBetaFeatures();
-  const baseClasses = getSelectableSetupClasses(betaAccess);
-  const availableClasses = baseClasses.some(car => sameClass(car, currentClass))
-    ? baseClasses
-    : [currentClass, ...baseClasses].filter(car => car && canAccessSetupClass(car, betaAccess));
+  const currentUserId = useRef(user?.id);
+  currentUserId.current = user?.id;
+  const userId = user?.id;
+  const mounted = useRef(false);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  // Previously used class IDs remain selectable alongside the current sheets.
+  const availableClasses = disciplineEnabled(discipline) ? [...new Set([...getDisciplineSetupClasses(discipline),
+    ...Object.keys(EXPANDED_CLASS_CONFIGS).filter(car => EXPANDED_CLASS_CONFIGS[car].category === discipline)])] : [];
 
   useEffect(() => {
     if (!isOpen) return;
+    let cancelled = false;
     setSelectedClass(currentClass);
+    setDiscipline(categoryFor(currentClass));
     setError('');
     setNextEligibleAt(null);
-    setServerUnlimited(null);
-    if (!user) {
-      setStep(clientUnlimited ? 'selector' : 'warning');
+    setChecked(false);
+    setStep('loading');
+    if (!userId) {
+      setError('Please sign in to change your racing discipline or vehicle.');
+      setStep('selector');
       return;
     }
-
-    setStep('loading');
-    getActiveClassState()
-      .then(state => {
-        setServerUnlimited(state.unlimited);
-        if (state.unlimited) {
-          setStep('selector');
-        } else if (!state.can_change && state.next_eligible_at) {
-          setNextEligibleAt(state.next_eligible_at);
-          setStep('cooldown');
-        } else {
-          setStep('warning');
-        }
-      })
-      .catch(() => {
-        if (clientUnlimited) setStep('selector');
-        else setStep('warning');
-      });
-  }, [isOpen, currentClass, clientUnlimited, user]);
+    getActiveClassState().then(state => {
+      if (cancelled) return;
+      setUnlimited(state.unlimited);
+      setChecked(true);
+      setNextEligibleAt(state.next_eligible_at);
+      if (!state.unlimited && !state.can_change && state.next_eligible_at) setStep('cooldown');
+      else setStep('selector');
+    }).catch(() => {
+      if (cancelled) return;
+      setError('Your change eligibility could not be checked. Close this screen and try again.');
+      setStep('selector');
+    });
+    return () => { cancelled = true; };
+  }, [isOpen, currentClass, userId]);
 
   useEffect(() => {
     if (!isOpen) return;
     const timer = window.setTimeout(() => cancelRef.current?.focus(), 25);
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape' && !pending.current) onClose();
     };
     document.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.clearTimeout(timer);
-      document.removeEventListener('keydown', onKeyDown);
-    };
+    return () => { window.clearTimeout(timer); document.removeEventListener('keydown', onKeyDown); };
   }, [isOpen, step, onClose]);
 
   if (!isOpen) return null;
-
+  const close = () => { if (!pending.current) onClose(); };
   const confirmChange = async () => {
-    if (!selectedClass || sameClass(selectedClass, currentClass)) return;
+    if (!user || !checked || !selectedClass || !disciplineEnabled(discipline) || !disciplineEnabled(categoryFor(selectedClass)) || sameClass(selectedClass, currentClass) || pending.current) return;
+    const userId = user.id;
+    pending.current = true;
     setSaving(true);
     setError('');
     try {
-      if (user) await changeActiveClass(selectedClass);
-      onChanged(selectedClass);
+      const state = await changeActiveClass(selectedClass, userId);
+      if (!mounted.current || currentUserId.current !== userId) return;
+      onChanged(state.active_class || selectedClass);
       onClose();
     } catch (err: unknown) {
-      const message = err instanceof Error
-        ? err.message
-        : String((err as { message?: unknown } | null)?.message || '');
-      const cooldownValue = message.match(/CLASS_CHANGE_COOLDOWN:([^\s]+)/)?.[1];
-      if (cooldownValue) {
-        setNextEligibleAt(cooldownValue);
-        setStep('cooldown');
-      } else if (message.includes('CLASS_INVALID')) {
-        setError('That class is not available.');
-      } else if (message.includes('CLASS_AUTH_REQUIRED') || message.toLowerCase().includes('jwt')) {
-        setError('Please sign in again to change classes.');
-      } else {
-        setError('The class could not be changed. Please try again.');
-      }
-    } finally {
-      setSaving(false);
-    }
+      const message = err instanceof Error ? err.message : String((err as { message?: unknown } | null)?.message || '');
+      const next = message.match(/CLASS_CHANGE_COOLDOWN:([^\s]+)/)?.[1];
+      if (next) { setNextEligibleAt(next); setStep('cooldown'); }
+      else setError(message.includes('CLASS_AUTH_REQUIRED') ? 'Please sign in again to change vehicles.' : 'Your vehicle could not be changed. Please try again.');
+    } finally { pending.current = false; setSaving(false); }
   };
-
-  const title = step === 'warning'
-    ? 'Changing your class will lock other setups'
-    : step === 'selector'
-      ? 'Change class?'
-      : step === 'cooldown'
-        ? 'Class change unavailable'
-        : 'Change class';
 
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="class-change-title">
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
-      <div className="relative z-10 w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-        <h2 id="class-change-title" className="text-xl font-bold text-[#1A1B23]">{title}</h2>
-
-        {step === 'loading' && (
-          <p className="mt-3 text-sm text-[#6B7280]" role="status">Checking your class-change availability…</p>
-        )}
-
-        {step === 'warning' && (
-          <>
-            <p className="mt-3 text-sm leading-6 text-[#6B7280]">
-              Your current plan allows one active vehicle class. If you change classes, setups from your previous class will be locked until you switch back. Classes can only be changed once every 7 days.
-            </p>
-            {error && <p className="mt-3 text-sm text-red-600" role="alert">{error}</p>}
-            <div className="mt-6 flex justify-end gap-2">
-              <button ref={cancelRef} onClick={onClose} className="rounded-lg px-4 py-2 text-sm font-medium text-[#6B7280] hover:bg-[#F5F5F7] focus:outline-none focus:ring-2 focus:ring-[#00A8E8]">Cancel</button>
-              <button onClick={() => setStep('upgrade')} disabled={Boolean(error)} className="rounded-lg bg-[#00A8E8] px-5 py-2 text-sm font-semibold text-white hover:bg-[#0090c7] disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2">OK</button>
-            </div>
-          </>
-        )}
-
-        {step === 'upgrade' && (
-          <div className="mt-5 space-y-4">
-            {!isMedianIOSApp && <button onClick={onUpgrade} className="w-full rounded-xl bg-[#00A8E8] px-5 py-3 text-sm font-bold text-white hover:bg-[#0090c7] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2">
-              Upgrade to Teams for Unlimited Classes and Setups
-            </button>}
-            <button onClick={() => setStep('selector')} className="w-full text-sm font-semibold text-[#00A8E8] underline-offset-4 hover:underline focus:outline-none focus:ring-2 focus:ring-[#00A8E8] rounded">
-              Continue to Change Class
-            </button>
-            <button ref={cancelRef} onClick={onClose} className="w-full text-sm font-medium text-[#6B7280] hover:text-[#1A1B23] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] rounded">Cancel</button>
-          </div>
-        )}
-
-        {step === 'selector' && (
-          <>
-            {!unlimited && (
-              <p className="mt-3 text-sm text-[#6B7280]">Changing classes will lock saved setups from every other class until you switch back.</p>
-            )}
-            <label htmlFor="active-class-select" className="mt-5 block text-sm font-semibold text-[#374151]">Vehicle class</label>
-            <select
-              id="active-class-select"
-              value={selectedClass}
-              onChange={event => setSelectedClass(event.target.value)}
-              className="mt-2 w-full rounded-xl border border-[#D1D5DB] bg-white px-3 py-3 text-sm text-[#1A1B23] focus:border-[#00A8E8] focus:outline-none focus:ring-2 focus:ring-[#00A8E8]/30"
-            >
-              {availableClasses.map(car => (
-                <option key={car} value={car}>{car}{sameClass(car, currentClass) ? ' (Current)' : ''}</option>
-              ))}
-            </select>
-            {error && <p className="mt-3 text-sm text-red-600" role="alert">{error}</p>}
-            <div className="mt-6 flex justify-end gap-2">
-              <button ref={cancelRef} onClick={onClose} disabled={saving} className="rounded-lg px-4 py-2 text-sm font-medium text-[#6B7280] hover:bg-[#F5F5F7] disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[#00A8E8]">Cancel</button>
-              <button onClick={confirmChange} disabled={saving || sameClass(selectedClass, currentClass)} className="rounded-lg bg-[#00A8E8] px-5 py-2 text-sm font-semibold text-white hover:bg-[#0090c7] disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2">
-                {saving ? 'Changing…' : unlimited ? 'Change Class' : 'Confirm'}
-              </button>
-            </div>
-          </>
-        )}
-
-        {step === 'cooldown' && (
-          <>
-            <p className="mt-3 text-sm leading-6 text-[#6B7280]">
-              You can change classes again on <span className="font-semibold text-[#1A1B23]">{formatEligibleDate(nextEligibleAt)}</span>.
-            </p>
-            {!isMedianIOSApp && <button onClick={onUpgrade} className="mt-5 w-full rounded-xl bg-[#00A8E8] px-5 py-3 text-sm font-bold text-white hover:bg-[#0090c7] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2">
-              Upgrade to Teams for Unlimited Classes
-            </button>}
-            <button ref={cancelRef} onClick={onClose} className="mt-4 w-full text-sm font-medium text-[#6B7280] hover:text-[#1A1B23] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] rounded">Close</button>
-          </>
-        )}
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={close} aria-hidden="true" />
+      <div className="relative z-10 w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+        <h2 id="class-change-title" className="text-xl font-bold text-[#1A1B23]">{step === 'warning' ? 'Confirm vehicle change' : step === 'cooldown' ? 'Class change unavailable' : 'Change Discipline / Vehicle'}</h2>
+        {step === 'loading' && <p className="mt-3 text-sm text-[#6B7280]" role="status">Checking your change availability…</p>}
+        {step === 'selector' && <>
+          <label htmlFor="active-discipline-select" className="mt-5 block text-sm font-semibold text-[#374151]">Racing discipline
+            {(discipline === 'road_course' || discipline === 'pavement_oval') && <span className="ml-2 inline-flex align-middle rounded border border-[#00A8E8]/20 bg-[#00A8E8]/10 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-[#00A8E8]">BETA</span>}
+          </label>
+          <select id="active-discipline-select" value={discipline} disabled={saving || !checked}
+            onChange={event => { if (disciplineEnabled(event.target.value)) { setDiscipline(event.target.value as SetupCategory); setSelectedClass(''); } }}
+            className="mt-2 w-full rounded-xl border border-[#D1D5DB] bg-white px-3 py-3 text-sm text-[#1A1B23] focus:outline-none focus:ring-2 focus:ring-[#00A8E8]">
+            {Object.entries(SETUP_CATEGORY_LABELS).map(([key, name]) => <option key={key} value={key} disabled={!disciplineEnabled(key)}>{key === 'rc' ? 'RC Racing' : key === 'motorcycle' ? 'Motorcycle Racing' : name}{!disciplineEnabled(key) ? ' — COMING SOON' : key === 'road_course' || key === 'pavement_oval' ? ' — BETA' : ''}</option>)}
+          </select>
+          <label htmlFor="active-class-select" className="mt-5 block text-sm font-semibold text-[#374151]">Vehicle class</label>
+          <select id="active-class-select" value={selectedClass} disabled={saving || !checked}
+            onChange={event => setSelectedClass(event.target.value)}
+            className="mt-2 w-full rounded-xl border border-[#D1D5DB] bg-white px-3 py-3 text-sm text-[#1A1B23] focus:outline-none focus:ring-2 focus:ring-[#00A8E8]">
+            <option value="" disabled>Select a vehicle class</option>
+            {availableClasses.map(car => <option key={car} value={car}>{EXPANDED_CLASS_CONFIGS[car]?.name || car}{sameClass(car, currentClass) ? ' (Current)' : ''}</option>)}
+          </select>
+          {!unlimited && nextEligibleAt && <p className="mt-3 text-xs text-[#6B7280]">Next available change date: {formatEligibleDate(nextEligibleAt)}</p>}
+        </>}
+        {step === 'warning' && <div className="mt-3 space-y-3 text-sm leading-6 text-[#6B7280]">
+          <p>Changing your racing discipline or vehicle will lock your previously saved setups.</p>
+          <p>Your setups will NOT be deleted. They will remain saved and will become available again when you switch back to that vehicle.</p>
+          <p>You can only change vehicles once every 30 days.</p>
+          <p className="font-semibold text-[#1A1B23]">{EXPANDED_CLASS_CONFIGS[currentClass]?.name || currentClass} → {EXPANDED_CLASS_CONFIGS[selectedClass]?.name || selectedClass}</p>
+          <p>Do you want to continue?</p>
+        </div>}
+        {step === 'cooldown' && <>
+          <p className="mt-3 text-sm leading-6 text-[#6B7280]">You can only change your racing discipline or vehicle once every 30 days.</p>
+          <p className="mt-3 text-sm text-[#6B7280]">Your next available change date is <span className="font-semibold text-[#1A1B23]">{formatEligibleDate(nextEligibleAt)}</span>.</p>
+          {<button onClick={onUpgrade} className="mt-5 w-full rounded-xl bg-[#00A8E8] px-5 py-3 text-sm font-bold text-white">Upgrade to Teams for Unlimited Classes</button>}
+        </>}
+        {error && <p className="mt-3 text-sm text-red-600" role="alert">{error}</p>}
+        <div className="mt-6 flex justify-end gap-2">
+          <button ref={cancelRef} onClick={close} disabled={saving} className="rounded-lg px-4 py-2 text-sm font-medium text-[#6B7280] hover:bg-[#F5F5F7] focus:outline-none focus:ring-2 focus:ring-[#00A8E8]">{step === 'cooldown' ? 'Close' : 'Cancel'}</button>
+          {(step === 'selector' || step === 'warning') && <button
+            onClick={step === 'warning' || unlimited ? confirmChange : () => setStep('warning')}
+            disabled={saving || !checked || !selectedClass || sameClass(selectedClass, currentClass)}
+            className="rounded-lg bg-[#00A8E8] px-5 py-2 text-sm font-semibold text-white hover:bg-[#0090c7] disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2">
+            {saving ? 'Changing…' : step === 'warning' ? 'Confirm Change' : unlimited ? 'Change Class' : 'Continue'}
+          </button>}
+        </div>
       </div>
     </div>
   );
 };
-
 export default ClassChangeModal;

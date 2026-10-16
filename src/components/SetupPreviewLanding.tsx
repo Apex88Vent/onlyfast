@@ -1,3 +1,4 @@
+import { setupClassLabel } from '@/lib/setupLibrary';
 import { useState } from 'react';
 import HomeLanding, { type HomeAction } from './HomeLanding';
 import ChassisSetupForm from './ChassisSetupForm';
@@ -21,12 +22,12 @@ const SetupPreviewLanding = ({ selectedCar, onChangeClass }: {
 
   return <>
     <p className="px-4 py-3 text-center text-sm text-[#6B7280] bg-white border-b border-[#E5E7EB]">
-      Preview — selected class: {selectedCar}. No account data is changed.
+      Preview — selected class: {setupClassLabel(selectedCar)}. No account data is changed.
     </p>
     {notice && <p role="status" className="p-4 text-sm text-[#6B7280]">{notice}</p>}
     {editing ? <main className="p-4">
       <button type="button" className="mb-4 font-semibold text-[#00A8E8]" onClick={() => setEditing(false)}>Back to landing</button>
-      <h1 className="text-2xl font-bold text-[#1A1B23] mb-4">{selectedCar} Setup Sheet</h1>
+      <h1 className="text-2xl font-bold text-[#1A1B23] mb-4">{setupClassLabel(selectedCar)} Setup Sheet</h1>
       {selectedCar === CUSTOM_CAR ? <CustomSheetFields sheet={customSheet} onChange={setCustomSheet} editing /> :
         <ChassisSetupForm raceClass={selectedCar} data={values} customFields={[]}
           onChange={(key, value) => setValues(previous => ({ ...previous, [key]: value }))} />}

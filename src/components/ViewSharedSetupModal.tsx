@@ -1,3 +1,6 @@
+import { useMembershipRevision } from '@/hooks/useMembershipRevision';
+import LockedFeatureNotice from './LockedFeatureNotice';
+import { setupClassLabel } from '@/lib/setupLibrary';
 import { CustomSheetFields } from './CustomCarSheet';
 import { CUSTOM_CAR, customSheetFromRow, readCustomSheet, emptyCustomSheet } from '@/lib/customCar';
 import React, { useState, useEffect, useRef } from 'react';
@@ -56,9 +59,11 @@ const MiniTable: React.FC<{ rows: Array<[string, string]> }> = ({ rows }) => {
 };
 
 const ViewSharedSetupModal: React.FC<ViewSharedSetupModalProps> = ({ isOpen, onClose, user, onUpgrade }) => {
+  useMembershipRevision();
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [exportLocked, setExportLocked] = useState(false);
   const [setup, setSetup] = useState<any>(null);
   const [classLocked, setClassLocked] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -140,7 +145,7 @@ const ViewSharedSetupModal: React.FC<ViewSharedSetupModalProps> = ({ isOpen, onC
   const handlePdf = () => {
     if (!setup) return;
     if (!user || !hasFeatureAccess(readMembership(user.user_metadata || {}), 'setupExport')) {
-      alert('PDF export is available on Pro and Team plans.');
+      setExportLocked(true);
       return;
     }
     openSetupPdf(setup, { shareCode: setup.__share_code });
@@ -155,6 +160,7 @@ const ViewSharedSetupModal: React.FC<ViewSharedSetupModalProps> = ({ isOpen, onC
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="view-shared-title">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
       <div className="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 z-10 max-h-[90vh] overflow-y-auto">
+        {exportLocked && <LockedFeatureNotice message="Setup Export is a Pro feature. Export your setups as PDFs with Pro or Teams. It is unavailable on Rookie." onDismiss={() => setExportLocked(false)} />}
         <div className="flex items-center justify-between mb-4">
           <h2 id="view-shared-title" className="text-lg font-bold text-[#1A1B23] flex items-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00A8E8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -186,7 +192,7 @@ const ViewSharedSetupModal: React.FC<ViewSharedSetupModalProps> = ({ isOpen, onC
               aria-describedby={error ? 'share-code-error' : undefined}
             />
             {error && <p id="share-code-error" className="text-sm text-red-600 mt-2" role="alert">{error}</p>}
-            {classLocked && onUpgrade && !isMedianIOSApp && (
+            {classLocked && onUpgrade && (
               <button onClick={onUpgrade} className="mt-3 text-sm font-semibold text-[#00A8E8] underline-offset-4 hover:underline focus:outline-none focus:ring-2 focus:ring-[#00A8E8] rounded">
                 Upgrade to Teams
               </button>
@@ -221,7 +227,7 @@ const ViewSharedSetupModal: React.FC<ViewSharedSetupModalProps> = ({ isOpen, onC
               </div>
               <p className="font-bold text-[#1A1B23]">{setup.setup_name || setup.track_name || 'Shared Setup'}</p>
               <div className="flex flex-wrap gap-2 mt-1 text-xs text-[#6B7280]">
-                {has(setup.race_class) && <span>{setup.race_class}</span>}
+                {has(setup.race_class) && <span>{setupClassLabel(setup.race_class)}</span>}
                 {has(setup.track_name) && <span>· {setup.track_name}</span>}
                 {has(setup.race_date) && <span>· {setup.race_date}</span>}
               </div>

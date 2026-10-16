@@ -23,6 +23,7 @@ export interface ClassSection {
   icon: string; // SVG path or identifier
   fields: FieldDef[];
   layout?: 'four-corners';
+  cornerTitles?: Partial<Record<'lf' | 'rf' | 'lr' | 'rr', string>>;
 }
 
 export interface ClassConfig {

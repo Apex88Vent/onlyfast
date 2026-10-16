@@ -1,3 +1,5 @@
+import { EXPANDED_CLASS_CONFIGS } from './setupLibrary.ts';
+
 export const RACE_SESSION_TYPES = ['base', 'heat', 'main', 'extra1', 'extra2', 'extra3'] as const;
 
 export type RaceSessionType = typeof RACE_SESSION_TYPES[number];
@@ -10,6 +12,13 @@ export const DEFAULT_RACE_SESSION_LABELS: Record<'base' | 'heat' | 'main', strin
   heat: 'Heat',
   main: 'Main Event',
 };
+
+export function getDefaultRaceSessionLabels(raceClass?: string): typeof DEFAULT_RACE_SESSION_LABELS {
+  const category = EXPANDED_CLASS_CONFIGS[raceClass || '']?.category;
+  return category === 'road_course' || category === 'pavement_oval'
+    ? { base: 'Practice', heat: 'Qualifying', main: 'Race' }
+    : DEFAULT_RACE_SESSION_LABELS;
+}
 
 export const DEFAULT_RACE_SESSION_ORDER: Record<RaceSessionType, number> = {
   base: 1,
@@ -70,7 +79,7 @@ export const savedSessionLabel = (row: RaceWeekendSessionRow): string | null => 
     return savedLabel;
   }
   return isDefaultRaceSessionType(row.setup_type)
-    ? DEFAULT_RACE_SESSION_LABELS[row.setup_type]
+    ? getDefaultRaceSessionLabels(normalizeText(row.race_class))[row.setup_type]
     : null;
 };
 
@@ -124,11 +133,11 @@ export const resolveSavedRaceWeekendSessions = (
     );
 };
 
-export const createNewRaceWeekendSessions = (): ResolvedRaceWeekendSession[] =>
+export const createNewRaceWeekendSessions = (raceClass?: string): ResolvedRaceWeekendSession[] =>
   DEFAULT_RACE_SESSION_TYPES.map(setupType => ({
     id: null,
     setupType,
-    label: DEFAULT_RACE_SESSION_LABELS[setupType],
+    label: getDefaultRaceSessionLabels(raceClass)[setupType],
     order: DEFAULT_RACE_SESSION_ORDER[setupType],
     status: 'not-started',
     row: null,

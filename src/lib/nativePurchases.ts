@@ -23,10 +23,10 @@ async function getBridge(): Promise<RevenueCatBridge> {
 }
 
 export const nativePurchases = new NativePurchaseController(getBridge, () => {
-  const platform = nativePlatform(navigator.userAgent);
+  const platform = nativePlatform(navigator.userAgent, navigator.maxTouchPoints);
   return platform === 'ios' ? import.meta.env.VITE_REVENUECAT_IOS_API_KEY || '' :
     platform === 'android' ? import.meta.env.VITE_REVENUECAT_ANDROID_API_KEY || '' : '';
-});
+}, () => nativePurchasesEnabled);
 
 export async function syncNativeSubscription(userId: string): Promise<void> {
   const { data: session } = await supabase.auth.getSession();

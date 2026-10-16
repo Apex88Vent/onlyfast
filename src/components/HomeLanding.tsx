@@ -1,4 +1,6 @@
+import { setupClassLabel } from '@/lib/setupLibrary';
 import React from 'react';
+import { EXPANDED_CLASS_CONFIGS, SETUP_CATEGORY_LABELS, type SetupCategory } from '@/lib/setupLibrary';
 import { ArrowLeft, ArrowRight, BarChart3, CalendarDays, CheckCircle2, CircleDashed, Library, Plus, Save, Trophy, Wrench, type LucideIcon } from 'lucide-react';
 
 export type HomeAction = 'new-setup' | 'saved' | 'schedule' | 'todo' | 'parts' | 'library' | 'previous-race' | 'view-race-data' | 'next-race';
@@ -263,7 +265,7 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
                 type="button"
                 onClick={onChangeClass}
                 className="flex items-center justify-center gap-2 sm:gap-3 px-1 sm:px-2 rounded-lg hover:bg-[#F9FAFB] focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
-                aria-label={`Change current class from ${selectedCar}`}
+                aria-label={`Change current class from ${setupClassLabel(selectedCar)}`}
               >
                 {selectedCarIcon && (
                   <img
@@ -277,7 +279,8 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
                 )}
                 <div className="text-left min-w-0">
                   <div className="text-[#00A8E8] text-[12px] sm:text-sm font-semibold tracking-[0.08em] uppercase leading-tight">Current Car</div>
-                  <div className="text-[#1A1B23] text-sm sm:text-lg font-medium truncate">{selectedCar}</div>
+                  <div className="text-[#1A1B23] text-sm sm:text-lg font-medium truncate">{setupClassLabel(selectedCar)}</div>
+                  <div className="text-[#6B7280] text-xs truncate">{SETUP_CATEGORY_LABELS[(EXPANDED_CLASS_CONFIGS[selectedCar]?.category || 'dirt_oval') as SetupCategory]}</div>
                   {formattedCarNumber && (
                     <div className="text-[#4B5563] text-xs sm:text-sm font-medium truncate">{formattedCarNumber}</div>
                   )}

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { syncMembershipFromSubscription } from '@/lib/subscription';
+import { clearTrustedMembership } from '@/lib/trustedMembership';
 import { watchNativePurchases } from '@/lib/nativePurchases';
 
 interface AppContextType {
@@ -37,12 +38,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     sync();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      // USER_UPDATED can be emitted by saveMembership itself. Re-running the
-      // subscription bridge for that event feeds its own metadata write back
-      // into the bridge even though the Stripe-backed row did not change.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      clearTrustedMembership(session?.user.id || null);
+      // Profile-only changes do not alter subscription authorization.
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        sync();
+        setTimeout(sync, 0);
       }
     });
 
