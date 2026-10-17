@@ -25,6 +25,22 @@ import { isOnlyFastFilePickerOpen } from '@/lib/filePickerState';
 import { resolveAuthUiTransition } from '@/lib/authUiTransition';
 import { canAccessSetupClass } from '@/lib/setupLibraryAccess';
 
+// Intro navigation only: a confirmation link may open a second tab. Neither
+// marker authorizes access or completes discipline, class or plan selection.
+const guestTutorialKey = 'onlyfast_guest_tutorial_seen';
+const guestTutorialExpiryKey = 'onlyfast_guest_tutorial_expires_at';
+function hasSeenGuestTutorial() {
+  try { if (sessionStorage.getItem(guestTutorialKey) === 'true') return true; } catch { /* Optional navigation state. */ }
+  try { return Number(localStorage.getItem(guestTutorialExpiryKey)) > Date.now(); } catch { return false; }
+}
+function rememberGuestTutorial(seen: boolean) {
+  try { if (seen) sessionStorage.setItem(guestTutorialKey, 'true'); else sessionStorage.removeItem(guestTutorialKey); } catch { /* Optional navigation state. */ }
+  try {
+    if (seen) localStorage.setItem(guestTutorialExpiryKey, String(Date.now() + 24 * 60 * 60 * 1000));
+    else localStorage.removeItem(guestTutorialExpiryKey);
+  } catch { /* Optional navigation state. */ }
+}
+
 const AppLayout: React.FC = () => {
   useMembershipRevision();
   const navigate = useNavigate();
@@ -47,6 +63,7 @@ const AppLayout: React.FC = () => {
   const [legalModal, setLegalModal] = useState<'privacy' | 'terms' | null>(null);
   const [showSplash, setShowSplash] = useState(() => !isOnlyFastFilePickerOpen());
   const [authChecked, setAuthChecked] = useState(false);
+  const [guestTutorialFinished, setGuestTutorialFinished] = useState(hasSeenGuestTutorial);
   const authenticatedUserId = user?.id ?? null;
   const onboardingLoginEscapeRef = useRef(false);
   const authUserIdRef = useRef<string | null>(null);
@@ -63,7 +80,14 @@ const AppLayout: React.FC = () => {
   }, []);
 
   const markHowOnlyFastWorksComplete = useCallback(async () => {
-    if (!user || tutorialPending.current) return;
+    if (tutorialPending.current) return;
+    if (!user) {
+      rememberGuestTutorial(true);
+      setGuestTutorialFinished(true);
+      setShowHowOnlyFastWorks(false);
+      setHasCheckedHowOnlyFastWorks(true);
+      return;
+    }
     tutorialPending.current = true;
     setSavingTutorial(true);
     setClassSelectionError('');
@@ -84,8 +108,16 @@ const AppLayout: React.FC = () => {
   }, [user]);
 
   const handleHowOnlyFastWorksLogin = useCallback(() => {
+    if (!user) { void markHowOnlyFastWorksComplete(); return; }
     onboardingLoginEscapeRef.current = true;
     setAuthModalOpen(true);
+  }, [user, markHowOnlyFastWorksComplete]);
+
+  const returnToGuestTutorial = useCallback(() => {
+    rememberGuestTutorial(false);
+    setGuestTutorialFinished(false);
+    setShowHowOnlyFastWorks(true);
+    setHasCheckedHowOnlyFastWorks(true);
   }, []);
 
   const handleSplashComplete = useCallback(() => {
@@ -150,7 +182,19 @@ const AppLayout: React.FC = () => {
       let classLookupFailed = false;
       try {
         try {
-          const state = await getActiveClassState();
+          let state = await getActiveClassState();
+          if (cancelled) return;
+          // Transfer only the introductory step after authentication. An
+          // existing complete/vehicle/plan state always takes precedence.
+          if (guestTutorialFinished && state.onboarding_step === 'tutorial') {
+            setOnboardingState(state);
+            try {
+              state = await saveOnboardingProgress('discipline', undefined, undefined, authenticatedUserId);
+            } catch {
+              if (!cancelled) setClassSelectionError('Your tutorial progress could not be saved. Please try again.');
+              return;
+            }
+          }
           if (!cancelled) {
             setUnlimitedClasses(state.unlimited);
             setOnboardingState(state);
@@ -199,11 +243,15 @@ const AppLayout: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [authChecked, authenticatedUserId, applySelectedCar]);
+  }, [authChecked, authenticatedUserId, applySelectedCar, guestTutorialFinished]);
 
   // Auth state listener
   useEffect(() => {
+    let active = true;
+    let revision = 0;
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!active) return;
+      revision++;
       const isOnboardingLoginEscape = event === 'SIGNED_IN' && onboardingLoginEscapeRef.current;
       const authTransition = resolveAuthUiTransition({
         previousUserId: authUserIdRef.current,
@@ -231,6 +279,12 @@ const AppLayout: React.FC = () => {
       if (!session?.user) {
         setUnlimitedClasses(null);
       }
+      if (event === 'SIGNED_OUT') {
+        rememberGuestTutorial(false);
+        setGuestTutorialFinished(false);
+        setAuthModalOpen(false);
+        setIsReplayingHowOnlyFastWorks(false);
+      }
 
       if (event === 'SIGNED_IN') {
         if (isOnboardingLoginEscape) {
@@ -251,17 +305,20 @@ const AppLayout: React.FC = () => {
     });
 
     // Initial check
+    const initialRevision = revision;
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!active || revision !== initialRevision) return;
       authUserIdRef.current = session?.user?.id ?? null;
       setUser(session?.user ?? null);
       setAuthChecked(true);
       setHasCheckedHowOnlyFastWorks(false);
     }).catch(() => {
+      if (!active || revision !== initialRevision) return;
       authUserIdRef.current = null;
       setAuthChecked(true);
       setHasCheckedHowOnlyFastWorks(false);
     });
-    return () => subscription.unsubscribe();
+    return () => { active = false; subscription.unsubscribe(); };
   }, []);
 
   // Reset-on-login fallback for the disposable experimental account. Waiting
@@ -288,6 +345,12 @@ const AppLayout: React.FC = () => {
     if (showSplash || isReplayingHowOnlyFastWorks) return;
     if (!authChecked) return;
     if (classSelectionUserId !== authenticatedUserId || isLoadingSavedCar) return;
+
+    if (!user) {
+      setShowHowOnlyFastWorks(!guestTutorialFinished);
+      setHasCheckedHowOnlyFastWorks(true);
+      return;
+    }
 
     if (isOnlyFastFilePickerOpen()) {
       setShowHowOnlyFastWorks(false);
@@ -316,7 +379,7 @@ const AppLayout: React.FC = () => {
     const completed = onboardingState?.onboarding_step === 'tutorial' ? false : completedInMetadata || completedLocally;
     setShowHowOnlyFastWorks(!completed);
     setHasCheckedHowOnlyFastWorks(true);
-  }, [authChecked, user, selectedCar, showSplash, isReplayingHowOnlyFastWorks, classSelectionUserId, authenticatedUserId, isLoadingSavedCar, onboardingState]);
+  }, [authChecked, user, selectedCar, showSplash, isReplayingHowOnlyFastWorks, classSelectionUserId, authenticatedUserId, isLoadingSavedCar, onboardingState, guestTutorialFinished]);
 
   const handleCarSelect = async (car: string) => {
     setClassSelectionError('');
@@ -362,17 +425,11 @@ const AppLayout: React.FC = () => {
     return <div className="min-h-screen bg-[#F5F5F7]" role="status" aria-label="Loading your racing profile" />;
   }
 
-  if (!user) {
+  if (!user && guestTutorialFinished) {
     return (
       <AnnouncerProvider>
-        <div className="min-h-screen bg-[#F5F5F7] flex items-center justify-center p-6">
-          <main className="w-full max-w-md rounded-2xl border border-[#E5E7EB] bg-white p-8 text-center shadow-xl">
-            <img src="/onlyfast-logo.png" alt="OnlyFast" className="h-28 w-auto mx-auto mb-6" />
-            <h1 className="text-2xl font-bold text-[#1A1B23]">Welcome to OnlyFast</h1>
-            <p className="mt-3 text-[#6B7280]">Create an account or sign in to choose your discipline, vehicle and plan.</p>
-            <button onClick={() => setAuthModalOpen(true)} className="mt-6 w-full rounded-xl bg-[#00A8E8] px-5 py-3 font-bold text-white focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2">Create Account / Sign In</button>
-          </main>
-          <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
+        <div className="min-h-screen bg-[#F5F5F7]">
+          <AuthModal isOpen onClose={returnToGuestTutorial} />
           <CookieConsent />
         </div>
       </AnnouncerProvider>
@@ -390,6 +447,7 @@ const AppLayout: React.FC = () => {
             onLogin={handleHowOnlyFastWorksLogin}
             isReplay={isReplayingHowOnlyFastWorks}
             pending={savingTutorial}
+            skipLabel={user ? undefined : 'Skip to Sign In'}
           />
         )}
         {classSelectionError && <p className="p-4 text-center text-sm text-red-600" role="alert">{classSelectionError}</p>}
@@ -402,7 +460,7 @@ const AppLayout: React.FC = () => {
     );
   }
 
-  if (betaAccess.loading && (!isOnboarded || !canAccessSetupClass(selectedCar, betaAccess))) {
+  if (!user || (betaAccess.loading && (!isOnboarded || !canAccessSetupClass(selectedCar, betaAccess)))) {
     return (
       <AnnouncerProvider>
         <SkipLink />

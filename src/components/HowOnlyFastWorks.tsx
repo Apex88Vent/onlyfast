@@ -26,6 +26,7 @@ interface HowOnlyFastWorksProps {
   onLogin?: () => void;
   isReplay?: boolean;
   pending?: boolean;
+  skipLabel?: string;
 }
 
 const slides = [
@@ -133,6 +134,7 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
   onLogin,
   isReplay = false,
   pending = false,
+  skipLabel = 'Skip to discipline selection',
 }) => {
   const [index, setIndex] = useState(0);
   const [dragStartX, setDragStartX] = useState<number | null>(null);
@@ -142,8 +144,8 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
   const slide = slides[index];
   const Icon = slide.icon;
   const isFinal = index === slides.length - 1;
-  // Introductory guidance is optional. The parent persists only the move to
-  // discipline selection; Skip cannot complete the required racing profile.
+  // The parent decides the next required step. Skip cannot authenticate a
+  // guest or complete the required racing profile.
   const canSkip = !isFinal;
   const canShowLogin = Boolean(onLogin);
 
@@ -584,7 +586,7 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
                 disabled={pending}
                 className="rounded-full text-xs font-semibold text-[#6B7280] hover:text-[#00A8E8] hover:underline focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
               >
-                Skip to discipline selection
+                {skipLabel}
               </button>
               {canShowLogin && index !== 0 && (
                 <button
