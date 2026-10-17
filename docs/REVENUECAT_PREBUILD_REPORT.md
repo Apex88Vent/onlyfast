@@ -1,5 +1,10 @@
 # OnlyFast — RevenueCat pre-build report
 
+**Historical report:** see [Median sandbox readiness](MEDIAN_REVENUECAT_SANDBOX_READINESS.md)
+for the current native audit and purchase hold. The user reports the backend is now
+deployed. A frontend flag or published paywall cannot resolve the outstanding
+named-offering, localized catalog and physical-device requirements.
+
 Date: October 15, 2026. Changes are local and uncommitted. Nothing was deployed, published, activated, or changed in RevenueCat, Vercel, Apple, or Google. No live database migrations were executed. Existing workspace work was preserved.
 
 ## A. Files modified by this update

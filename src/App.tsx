@@ -23,6 +23,8 @@ import { BETA_FEATURES } from "./lib/betaFeatures";
 const queryClient = new QueryClient();
 const OnboardingPreview = lazy(() => import("./pages/OnboardingPreview"));
 const RookieAdSlotPreview = lazy(() => import("./pages/RookieAdSlotPreview"));
+const NativeSubscriptionTest = import.meta.env.MODE === 'native-sandbox'
+  ? lazy(() => import("./pages/NativeSubscriptionTest")) : null;
 
 const App = () => (
   <ThemeProvider defaultTheme="light">
@@ -44,6 +46,9 @@ const App = () => (
               <Route path="/privacy-policy" element={<PrivacyPolicy />} />
               <Route path="/delete-account" element={<DeleteAccount />} />
               <Route path="/support" element={<Support />} />
+              {NativeSubscriptionTest && <Route path="/native-subscription-test" element={
+                <Suspense fallback={<div aria-busy="true" />}><NativeSubscriptionTest /></Suspense>
+              } />}
               <Route
                 path="/onboarding-preview"
                 element={

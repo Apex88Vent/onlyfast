@@ -1,0 +1,2366 @@
+{
+  "audited_at": "2026-10-16",
+  "project_ref": "thpyjvwtfvfxiufchrxn",
+  "scope": "Schema metadata only; no table rows or customer data.",
+  "tables": [
+    {
+      "name": "beta_feature_definitions",
+      "columns": [
+        {
+          "name": "feature_key",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "maturity_stage",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        }
+      ],
+      "constraints": [
+        {
+          "name": "beta_feature_definitions_key_format",
+          "type": "c",
+          "definition": "CHECK ((((char_length(feature_key) >= 3) AND (char_length(feature_key) <= 100)) AND (feature_key ~ '^[a-z][a-z0-9_]*$'::text)))"
+        },
+        {
+          "name": "beta_feature_definitions_maturity_stage_check",
+          "type": "c",
+          "definition": "CHECK ((maturity_stage = ANY (ARRAY['experimental'::text, 'personal_beta'::text])))"
+        },
+        {
+          "name": "beta_feature_definitions_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (feature_key)"
+        }
+      ]
+    },
+    {
+      "name": "beta_tester_accounts",
+      "columns": [
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "is_test_account",
+          "type": "boolean",
+          "not_null": true
+        },
+        {
+          "name": "beta_features_enabled",
+          "type": "boolean",
+          "not_null": true
+        },
+        {
+          "name": "tester_kind",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        }
+      ],
+      "constraints": [
+        {
+          "name": "beta_tester_accounts_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (user_id)"
+        },
+        {
+          "name": "beta_tester_accounts_tester_kind_check",
+          "type": "c",
+          "definition": "CHECK ((tester_kind = ANY (ARRAY['experimental'::text, 'personal'::text])))"
+        },
+        {
+          "name": "beta_tester_accounts_user_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+        }
+      ]
+    },
+    {
+      "name": "onlyfast_onlylaps_session_links",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "onlyfast_session_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "onlylaps_session_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "link_method",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "match_confidence",
+          "type": "numeric(5,4)",
+          "not_null": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        }
+      ],
+      "constraints": [
+        {
+          "name": "onlyfast_onlylaps_links_confidence_range",
+          "type": "c",
+          "definition": "CHECK (((match_confidence IS NULL) OR ((match_confidence >= (0)::numeric) AND (match_confidence <= (1)::numeric))))"
+        },
+        {
+          "name": "onlyfast_onlylaps_links_method_nonempty",
+          "type": "c",
+          "definition": "CHECK ((length(btrim(link_method)) > 0))"
+        },
+        {
+          "name": "onlyfast_onlylaps_links_onlyfast_owner_fk",
+          "type": "f",
+          "definition": "FOREIGN KEY (onlyfast_session_id, user_id) REFERENCES race_setups(id, user_id) ON DELETE CASCADE"
+        },
+        {
+          "name": "onlyfast_onlylaps_links_onlylaps_owner_fk",
+          "type": "f",
+          "definition": "FOREIGN KEY (onlylaps_session_id, user_id) REFERENCES onlylaps_timing_sessions(id, user_id) ON DELETE CASCADE"
+        },
+        {
+          "name": "onlyfast_onlylaps_links_pair_unique",
+          "type": "u",
+          "definition": "UNIQUE (onlyfast_session_id, onlylaps_session_id)"
+        },
+        {
+          "name": "onlyfast_onlylaps_session_links_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "onlyfast_onlylaps_session_links_user_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+        }
+      ]
+    },
+    {
+      "name": "onlylaps_lap_sector_times",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "lap_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "timing_session_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "track_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "sector_index",
+          "type": "integer",
+          "not_null": true
+        },
+        {
+          "name": "duration_ms",
+          "type": "integer",
+          "not_null": false
+        },
+        {
+          "name": "crossing_timestamp",
+          "type": "timestamp with time zone",
+          "not_null": false
+        },
+        {
+          "name": "is_valid",
+          "type": "boolean",
+          "not_null": true
+        },
+        {
+          "name": "source_definition_version",
+          "type": "integer",
+          "not_null": false
+        },
+        {
+          "name": "source_kind",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        }
+      ],
+      "constraints": [
+        {
+          "name": "onlylaps_lap_sector_times_duration_ms_check",
+          "type": "c",
+          "definition": "CHECK (((duration_ms IS NULL) OR (duration_ms > 0)))"
+        },
+        {
+          "name": "onlylaps_lap_sector_times_lap_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (lap_id) REFERENCES onlylaps_lap_times(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "onlylaps_lap_sector_times_lap_id_sector_index_key",
+          "type": "u",
+          "definition": "UNIQUE (lap_id, sector_index)"
+        },
+        {
+          "name": "onlylaps_lap_sector_times_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "onlylaps_lap_sector_times_sector_index_check",
+          "type": "c",
+          "definition": "CHECK (((sector_index >= 1) AND (sector_index <= 5)))"
+        },
+        {
+          "name": "onlylaps_lap_sector_times_source_kind_check",
+          "type": "c",
+          "definition": "CHECK ((source_kind = ANY (ARRAY['track_default'::text, 'user_override'::text, 'generated_default'::text])))"
+        },
+        {
+          "name": "onlylaps_lap_sector_times_timing_session_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (timing_session_id) REFERENCES onlylaps_timing_sessions(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "onlylaps_lap_sector_times_track_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (track_id) REFERENCES onlylaps_track_maps(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "onlylaps_lap_sector_times_user_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+        }
+      ]
+    },
+    {
+      "name": "onlylaps_lap_times",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "timing_session_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "track_map_id",
+          "type": "uuid",
+          "not_null": false
+        },
+        {
+          "name": "lap_number",
+          "type": "integer",
+          "not_null": true
+        },
+        {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "not_null": false
+        },
+        {
+          "name": "ended_at",
+          "type": "timestamp with time zone",
+          "not_null": false
+        },
+        {
+          "name": "duration_ms",
+          "type": "integer",
+          "not_null": true
+        },
+        {
+          "name": "sector_times_ms",
+          "type": "jsonb",
+          "not_null": false
+        },
+        {
+          "name": "is_best",
+          "type": "boolean",
+          "not_null": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        },
+        {
+          "name": "is_valid",
+          "type": "boolean",
+          "not_null": true
+        },
+        {
+          "name": "excluded_reason",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "average_speed",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "max_speed",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "max_lateral_g",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "max_longitudinal_g",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "max_vertical_g",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "max_accel_g",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "max_braking_g",
+          "type": "double precision",
+          "not_null": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "onlylaps_lap_times_duration_ms_check",
+          "type": "c",
+          "definition": "CHECK ((duration_ms >= 0))"
+        },
+        {
+          "name": "onlylaps_lap_times_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "onlylaps_lap_times_timing_session_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (timing_session_id) REFERENCES onlylaps_timing_sessions(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "onlylaps_lap_times_timing_session_id_lap_number_key",
+          "type": "u",
+          "definition": "UNIQUE (timing_session_id, lap_number)"
+        },
+        {
+          "name": "onlylaps_lap_times_track_map_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (track_map_id) REFERENCES onlylaps_track_maps(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "onlylaps_lap_times_user_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+        }
+      ]
+    },
+    {
+      "name": "onlylaps_my_tracks",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "not_null": false
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "track_map_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "nickname",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "is_default",
+          "type": "boolean",
+          "not_null": false
+        },
+        {
+          "name": "last_used_at",
+          "type": "timestamp with time zone",
+          "not_null": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "onlylaps_my_tracks_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "onlylaps_my_tracks_track_map_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (track_map_id) REFERENCES onlylaps_track_maps(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "onlylaps_my_tracks_user_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "onlylaps_my_tracks_user_id_track_map_id_key",
+          "type": "u",
+          "definition": "UNIQUE (user_id, track_map_id)"
+        }
+      ]
+    },
+    {
+      "name": "onlylaps_sensor_calibrations",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "device_label",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "sensor_type",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "calibration_data",
+          "type": "jsonb",
+          "not_null": true
+        },
+        {
+          "name": "calibrated_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        }
+      ],
+      "constraints": [
+        {
+          "name": "onlylaps_sensor_calibrations_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "onlylaps_sensor_calibrations_user_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+        }
+      ]
+    },
+    {
+      "name": "onlylaps_session_analysis",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "session_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "summary_text",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "summary_json",
+          "type": "jsonb",
+          "not_null": true
+        },
+        {
+          "name": "driving_observations",
+          "type": "jsonb",
+          "not_null": true
+        },
+        {
+          "name": "corner_observations",
+          "type": "jsonb",
+          "not_null": true
+        },
+        {
+          "name": "sector_observations",
+          "type": "jsonb",
+          "not_null": true
+        },
+        {
+          "name": "consistency_observations",
+          "type": "jsonb",
+          "not_null": true
+        },
+        {
+          "name": "braking_observations",
+          "type": "jsonb",
+          "not_null": true
+        },
+        {
+          "name": "acceleration_observations",
+          "type": "jsonb",
+          "not_null": true
+        },
+        {
+          "name": "lateral_grip_observations",
+          "type": "jsonb",
+          "not_null": true
+        },
+        {
+          "name": "line_trajectory_observations",
+          "type": "jsonb",
+          "not_null": true
+        },
+        {
+          "name": "setup_relevant_observations",
+          "type": "jsonb",
+          "not_null": true
+        },
+        {
+          "name": "optimum_lap_time_ms",
+          "type": "bigint",
+          "not_null": false
+        },
+        {
+          "name": "optimum_lap",
+          "type": "jsonb",
+          "not_null": false
+        },
+        {
+          "name": "analysis_version",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "model_used",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        }
+      ],
+      "constraints": [
+        {
+          "name": "onlylaps_session_analysis_acceleration_shape",
+          "type": "c",
+          "definition": "CHECK ((jsonb_typeof(acceleration_observations) = ANY (ARRAY['array'::text, 'object'::text])))"
+        },
+        {
+          "name": "onlylaps_session_analysis_braking_shape",
+          "type": "c",
+          "definition": "CHECK ((jsonb_typeof(braking_observations) = ANY (ARRAY['array'::text, 'object'::text])))"
+        },
+        {
+          "name": "onlylaps_session_analysis_consistency_shape",
+          "type": "c",
+          "definition": "CHECK ((jsonb_typeof(consistency_observations) = ANY (ARRAY['array'::text, 'object'::text])))"
+        },
+        {
+          "name": "onlylaps_session_analysis_corner_shape",
+          "type": "c",
+          "definition": "CHECK ((jsonb_typeof(corner_observations) = ANY (ARRAY['array'::text, 'object'::text])))"
+        },
+        {
+          "name": "onlylaps_session_analysis_driving_shape",
+          "type": "c",
+          "definition": "CHECK ((jsonb_typeof(driving_observations) = ANY (ARRAY['array'::text, 'object'::text])))"
+        },
+        {
+          "name": "onlylaps_session_analysis_lateral_grip_shape",
+          "type": "c",
+          "definition": "CHECK ((jsonb_typeof(lateral_grip_observations) = ANY (ARRAY['array'::text, 'object'::text])))"
+        },
+        {
+          "name": "onlylaps_session_analysis_line_shape",
+          "type": "c",
+          "definition": "CHECK ((jsonb_typeof(line_trajectory_observations) = ANY (ARRAY['array'::text, 'object'::text])))"
+        },
+        {
+          "name": "onlylaps_session_analysis_optimum_lap_shape",
+          "type": "c",
+          "definition": "CHECK (((optimum_lap IS NULL) OR (jsonb_typeof(optimum_lap) = 'object'::text)))"
+        },
+        {
+          "name": "onlylaps_session_analysis_optimum_time_nonnegative",
+          "type": "c",
+          "definition": "CHECK (((optimum_lap_time_ms IS NULL) OR (optimum_lap_time_ms >= 0)))"
+        },
+        {
+          "name": "onlylaps_session_analysis_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "onlylaps_session_analysis_sector_shape",
+          "type": "c",
+          "definition": "CHECK ((jsonb_typeof(sector_observations) = ANY (ARRAY['array'::text, 'object'::text])))"
+        },
+        {
+          "name": "onlylaps_session_analysis_session_owner_fk",
+          "type": "f",
+          "definition": "FOREIGN KEY (session_id, user_id) REFERENCES onlylaps_timing_sessions(id, user_id) ON DELETE CASCADE"
+        },
+        {
+          "name": "onlylaps_session_analysis_setup_relevant_shape",
+          "type": "c",
+          "definition": "CHECK ((jsonb_typeof(setup_relevant_observations) = ANY (ARRAY['array'::text, 'object'::text])))"
+        },
+        {
+          "name": "onlylaps_session_analysis_summary_json_shape",
+          "type": "c",
+          "definition": "CHECK ((jsonb_typeof(summary_json) = 'object'::text))"
+        },
+        {
+          "name": "onlylaps_session_analysis_user_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "onlylaps_session_analysis_version_nonempty",
+          "type": "c",
+          "definition": "CHECK ((length(btrim(analysis_version)) > 0))"
+        },
+        {
+          "name": "onlylaps_session_analysis_version_unique",
+          "type": "u",
+          "definition": "UNIQUE (session_id, analysis_version)"
+        }
+      ]
+    },
+    {
+      "name": "onlylaps_telemetry_samples",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "not_null": true
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "timing_session_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "recorded_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        },
+        {
+          "name": "elapsed_ms",
+          "type": "integer",
+          "not_null": false
+        },
+        {
+          "name": "latitude",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "longitude",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "altitude_meters",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "accuracy_meters",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "speed_mps",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "heading_degrees",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "g_force_lateral",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "g_force_longitudinal",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "throttle_position",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "brake_pressure",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "raw",
+          "type": "jsonb",
+          "not_null": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        }
+      ],
+      "constraints": [
+        {
+          "name": "onlylaps_telemetry_samples_elapsed_ms_check",
+          "type": "c",
+          "definition": "CHECK (((elapsed_ms IS NULL) OR (elapsed_ms >= 0)))"
+        },
+        {
+          "name": "onlylaps_telemetry_samples_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "onlylaps_telemetry_samples_timing_session_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (timing_session_id) REFERENCES onlylaps_timing_sessions(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "onlylaps_telemetry_samples_user_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+        }
+      ]
+    },
+    {
+      "name": "onlylaps_telemetry_shares",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "owner_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "session_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "share_code",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        },
+        {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        },
+        {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "not_null": false
+        },
+        {
+          "name": "last_accessed_at",
+          "type": "timestamp with time zone",
+          "not_null": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "onlylaps_telemetry_shares_code_check",
+          "type": "c",
+          "definition": "CHECK ((share_code ~ '^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{8}$'::text))"
+        },
+        {
+          "name": "onlylaps_telemetry_shares_expiry_check",
+          "type": "c",
+          "definition": "CHECK ((expires_at > created_at))"
+        },
+        {
+          "name": "onlylaps_telemetry_shares_owner_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (owner_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "onlylaps_telemetry_shares_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "onlylaps_telemetry_shares_session_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (session_id) REFERENCES onlylaps_timing_sessions(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "onlylaps_telemetry_shares_share_code_key",
+          "type": "u",
+          "definition": "UNIQUE (share_code)"
+        }
+      ]
+    },
+    {
+      "name": "onlylaps_timing_sessions",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "track_map_id",
+          "type": "uuid",
+          "not_null": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "vehicle_name",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "session_type",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "not_null": false
+        },
+        {
+          "name": "ended_at",
+          "type": "timestamp with time zone",
+          "not_null": false
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "weather",
+          "type": "jsonb",
+          "not_null": false
+        },
+        {
+          "name": "device_info",
+          "type": "jsonb",
+          "not_null": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        },
+        {
+          "name": "session_name",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "corner_definitions",
+          "type": "jsonb",
+          "not_null": false
+        },
+        {
+          "name": "corner_analysis",
+          "type": "jsonb",
+          "not_null": false
+        },
+        {
+          "name": "corner_detection_version",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "corner_analysis_version",
+          "type": "text",
+          "not_null": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "onlylaps_timing_sessions_corner_analysis_check",
+          "type": "c",
+          "definition": "CHECK (((corner_analysis IS NULL) OR ((jsonb_typeof(corner_analysis) = 'object'::text) AND (jsonb_typeof((corner_analysis -> 'laps'::text)) = 'array'::text))))"
+        },
+        {
+          "name": "onlylaps_timing_sessions_corner_definitions_check",
+          "type": "c",
+          "definition": "CHECK (((corner_definitions IS NULL) OR ((jsonb_typeof(corner_definitions) = 'object'::text) AND (jsonb_typeof((corner_definitions -> 'corners'::text)) = 'array'::text))))"
+        },
+        {
+          "name": "onlylaps_timing_sessions_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "onlylaps_timing_sessions_session_name_check",
+          "type": "c",
+          "definition": "CHECK (((session_name IS NULL) OR ((session_name = btrim(session_name)) AND ((char_length(session_name) >= 1) AND (char_length(session_name) <= 80)) AND (session_name !~ '[[:cntrl:]<>]'::text))))"
+        },
+        {
+          "name": "onlylaps_timing_sessions_time_order",
+          "type": "c",
+          "definition": "CHECK (((ended_at IS NULL) OR (started_at IS NULL) OR (ended_at >= started_at)))"
+        },
+        {
+          "name": "onlylaps_timing_sessions_track_map_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (track_map_id) REFERENCES onlylaps_track_maps(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "onlylaps_timing_sessions_user_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+        }
+      ]
+    },
+    {
+      "name": "onlylaps_track_maps",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "source",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "center_latitude",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "center_longitude",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "track_length_meters",
+          "type": "numeric",
+          "not_null": false
+        },
+        {
+          "name": "geojson",
+          "type": "jsonb",
+          "not_null": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        },
+        {
+          "name": "track_name",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "area_key",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "center_lat",
+          "type": "double precision",
+          "not_null": true
+        },
+        {
+          "name": "center_lng",
+          "type": "double precision",
+          "not_null": true
+        },
+        {
+          "name": "bbox",
+          "type": "jsonb",
+          "not_null": true
+        },
+        {
+          "name": "outside_path",
+          "type": "jsonb",
+          "not_null": true
+        },
+        {
+          "name": "start_finish_path",
+          "type": "jsonb",
+          "not_null": true
+        },
+        {
+          "name": "inside_path",
+          "type": "jsonb",
+          "not_null": true
+        },
+        {
+          "name": "gps_summary",
+          "type": "jsonb",
+          "not_null": false
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "version",
+          "type": "integer",
+          "not_null": true
+        },
+        {
+          "name": "is_active",
+          "type": "boolean",
+          "not_null": true
+        },
+        {
+          "name": "supersedes_track_map_id",
+          "type": "uuid",
+          "not_null": false
+        },
+        {
+          "name": "track_type",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "track_shape",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "track_length",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "base_layer",
+          "type": "jsonb",
+          "not_null": false
+        },
+        {
+          "name": "preview_bounds",
+          "type": "jsonb",
+          "not_null": false
+        },
+        {
+          "name": "created_by",
+          "type": "uuid",
+          "not_null": false
+        },
+        {
+          "name": "facility_key",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "facility_name",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "corner_definitions",
+          "type": "jsonb",
+          "not_null": false
+        },
+        {
+          "name": "corner_detection_version",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "direction",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "estimated_length_meters",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "is_open_route",
+          "type": "boolean",
+          "not_null": true
+        },
+        {
+          "name": "representative_path_raw",
+          "type": "jsonb",
+          "not_null": true
+        },
+        {
+          "name": "representative_path_smoothed",
+          "type": "jsonb",
+          "not_null": true
+        },
+        {
+          "name": "automatic_start_finish_data",
+          "type": "jsonb",
+          "not_null": false
+        },
+        {
+          "name": "manual_start_finish_data",
+          "type": "jsonb",
+          "not_null": false
+        },
+        {
+          "name": "revision_history",
+          "type": "jsonb",
+          "not_null": true
+        }
+      ],
+      "constraints": [
+        {
+          "name": "onlylaps_track_maps_corner_definitions_check",
+          "type": "c",
+          "definition": "CHECK (((corner_definitions IS NULL) OR ((jsonb_typeof(corner_definitions) = 'object'::text) AND (jsonb_typeof((corner_definitions -> 'corners'::text)) = 'array'::text))))"
+        },
+        {
+          "name": "onlylaps_track_maps_created_by_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "onlylaps_track_maps_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "onlylaps_track_maps_supersedes_track_map_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (supersedes_track_map_id) REFERENCES onlylaps_track_maps(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "onlylaps_track_maps_track_shape_check",
+          "type": "c",
+          "definition": "CHECK (((track_shape IS NULL) OR (track_shape = ANY (ARRAY['paperclip_oval'::text, 'symmetrical_oval'::text, 'd_shaped_oval'::text, 'tri_oval'::text, 'egg_shaped_oval'::text, 'dogleg_oval'::text, 'flat_oval'::text, 'high_banked_oval'::text, 'short_track_oval'::text, 'custom_unknown'::text]))))"
+        },
+        {
+          "name": "onlylaps_track_maps_track_type_check",
+          "type": "c",
+          "definition": "CHECK (((track_type IS NULL) OR (track_type = ANY (ARRAY['dirt_oval'::text, 'pavement_oval'::text, 'road_course'::text]))))"
+        },
+        {
+          "name": "onlylaps_track_maps_user_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+        }
+      ]
+    },
+    {
+      "name": "onlylaps_track_sector_defaults",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "track_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "owner_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "sector_count",
+          "type": "integer",
+          "not_null": true
+        },
+        {
+          "name": "version",
+          "type": "integer",
+          "not_null": true
+        },
+        {
+          "name": "lines",
+          "type": "jsonb",
+          "not_null": true
+        },
+        {
+          "name": "confidence",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        }
+      ],
+      "constraints": [
+        {
+          "name": "onlylaps_track_sector_defaults_confidence_check",
+          "type": "c",
+          "definition": "CHECK ((confidence = ANY (ARRAY['high'::text, 'needs_confirmation'::text])))"
+        },
+        {
+          "name": "onlylaps_track_sector_defaults_line_count",
+          "type": "c",
+          "definition": "CHECK (((jsonb_typeof(lines) = 'array'::text) AND (jsonb_array_length(lines) = (sector_count - 1))))"
+        },
+        {
+          "name": "onlylaps_track_sector_defaults_owner_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (owner_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "onlylaps_track_sector_defaults_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "onlylaps_track_sector_defaults_sector_count_check",
+          "type": "c",
+          "definition": "CHECK (((sector_count >= 1) AND (sector_count <= 5)))"
+        },
+        {
+          "name": "onlylaps_track_sector_defaults_track_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (track_id) REFERENCES onlylaps_track_maps(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "onlylaps_track_sector_defaults_track_id_key",
+          "type": "u",
+          "definition": "UNIQUE (track_id)"
+        },
+        {
+          "name": "onlylaps_track_sector_defaults_version_check",
+          "type": "c",
+          "definition": "CHECK ((version > 0))"
+        }
+      ]
+    },
+    {
+      "name": "onlylaps_user_track_sectors",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "track_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "sector_count",
+          "type": "integer",
+          "not_null": true
+        },
+        {
+          "name": "source_default_version",
+          "type": "integer",
+          "not_null": false
+        },
+        {
+          "name": "version",
+          "type": "integer",
+          "not_null": true
+        },
+        {
+          "name": "lines",
+          "type": "jsonb",
+          "not_null": true
+        },
+        {
+          "name": "confidence",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        }
+      ],
+      "constraints": [
+        {
+          "name": "onlylaps_user_track_sectors_confidence_check",
+          "type": "c",
+          "definition": "CHECK ((confidence = ANY (ARRAY['high'::text, 'needs_confirmation'::text])))"
+        },
+        {
+          "name": "onlylaps_user_track_sectors_line_count",
+          "type": "c",
+          "definition": "CHECK (((jsonb_typeof(lines) = 'array'::text) AND (jsonb_array_length(lines) = (sector_count - 1))))"
+        },
+        {
+          "name": "onlylaps_user_track_sectors_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "onlylaps_user_track_sectors_sector_count_check",
+          "type": "c",
+          "definition": "CHECK (((sector_count >= 1) AND (sector_count <= 5)))"
+        },
+        {
+          "name": "onlylaps_user_track_sectors_track_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (track_id) REFERENCES onlylaps_track_maps(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "onlylaps_user_track_sectors_user_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "onlylaps_user_track_sectors_user_id_track_id_key",
+          "type": "u",
+          "definition": "UNIQUE (user_id, track_id)"
+        },
+        {
+          "name": "onlylaps_user_track_sectors_version_check",
+          "type": "c",
+          "definition": "CHECK ((version > 0))"
+        }
+      ]
+    },
+    {
+      "name": "parts_reference",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "not_null": false
+        },
+        {
+          "name": "part_type",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "part_number",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "ordered_from",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "cost",
+          "type": "numeric(10,2)",
+          "not_null": false
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        }
+      ],
+      "constraints": [
+        {
+          "name": "parts_reference_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "parts_reference_user_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+        }
+      ]
+    },
+    {
+      "name": "race_schedule",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "race_date",
+          "type": "date",
+          "not_null": true
+        },
+        {
+          "name": "track",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "organization",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "finishing_position",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "not_null": false
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "not_null": false
+        },
+        {
+          "name": "race_end_date",
+          "type": "date",
+          "not_null": false
+        },
+        {
+          "name": "race_class",
+          "type": "text",
+          "not_null": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "race_schedule_end_on_or_after_start",
+          "type": "c",
+          "definition": "CHECK (((race_end_date IS NULL) OR (race_end_date >= race_date)))"
+        },
+        {
+          "name": "race_schedule_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "race_schedule_user_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+        }
+      ]
+    },
+    {
+      "name": "race_setups",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        },
+        {
+          "name": "setup_type",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "setup_name",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "track_name",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "race_date",
+          "type": "date",
+          "not_null": false
+        },
+        {
+          "name": "race_class",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "track_condition",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "latitude",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "longitude",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "temperature",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "humidity",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "wind_speed",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "wind_direction",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "cross_weight",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "toe",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "toe_direction",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "front_ride_height",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "rear_ride_height",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "stagger",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "rf_caster",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "rf_camber",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "rf_pressure",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "rf_shock",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "rf_spring",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "rf_wheel_offset",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "rf_cw_turns",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "lf_caster",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "lf_camber",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "lf_pressure",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "lf_shock",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "lf_spring",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "lf_wheel_offset",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "lf_cw_turns",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "lr_tire_size",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "lr_pressure",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "lr_shock",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "lr_spring",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "lr_wheel_offset",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "lr_cw_turns",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "rr_tire_size",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "rr_pressure",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "rr_shock",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "rr_spring",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "rr_wheel_offset",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "rr_cw_turns",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "lr_trailing_arm",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "rr_trailing_arm",
+          "type": "double precision",
+          "not_null": false
+        },
+        {
+          "name": "third_link",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "panhard_bar",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "gear_ratio",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "entry_handling",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "mid_handling",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "exit_handling",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "session_fastest_lap",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "session_slowest_lap",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "custom_fields",
+          "type": "jsonb",
+          "not_null": false
+        },
+        {
+          "name": "timing_data",
+          "type": "jsonb",
+          "not_null": false
+        },
+        {
+          "name": "session_label",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "session_order",
+          "type": "integer",
+          "not_null": false
+        },
+        {
+          "name": "track_length",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "track_shape",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "race_schedule_id",
+          "type": "uuid",
+          "not_null": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "race_setups_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "race_setups_race_schedule_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (race_schedule_id) REFERENCES race_schedule(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "race_setups_user_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+        }
+      ]
+    },
+    {
+      "name": "setup_assist_usage",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "race_weekend_key",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "used_count",
+          "type": "integer",
+          "not_null": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        }
+      ],
+      "constraints": [
+        {
+          "name": "setup_assist_usage_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "setup_assist_usage_user_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "setup_assist_usage_user_id_race_weekend_key_key",
+          "type": "u",
+          "definition": "UNIQUE (user_id, race_weekend_key)"
+        }
+      ]
+    },
+    {
+      "name": "shared_setups",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "setup_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "shared_by",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "shared_by_email",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "share_code",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "is_public",
+          "type": "boolean",
+          "not_null": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        },
+        {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "not_null": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "shared_setups_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "shared_setups_setup_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (setup_id) REFERENCES race_setups(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "shared_setups_share_code_key",
+          "type": "u",
+          "definition": "UNIQUE (share_code)"
+        },
+        {
+          "name": "shared_setups_shared_by_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (shared_by) REFERENCES auth.users(id) ON DELETE CASCADE"
+        }
+      ]
+    },
+    {
+      "name": "timing_scan_usage",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "usage_month",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "used_count",
+          "type": "integer",
+          "not_null": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        }
+      ],
+      "constraints": [
+        {
+          "name": "timing_scan_usage_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "timing_scan_usage_usage_month_check",
+          "type": "c",
+          "definition": "CHECK ((usage_month ~ '^[0-9]{4}-[0-9]{2}$'::text))"
+        },
+        {
+          "name": "timing_scan_usage_used_count_check",
+          "type": "c",
+          "definition": "CHECK ((used_count >= 0))"
+        },
+        {
+          "name": "timing_scan_usage_user_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "timing_scan_usage_user_id_usage_month_key",
+          "type": "u",
+          "definition": "UNIQUE (user_id, usage_month)"
+        }
+      ]
+    },
+    {
+      "name": "user_feature_flags",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "feature_key",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "enabled",
+          "type": "boolean",
+          "not_null": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "not_null": true
+        }
+      ],
+      "constraints": [
+        {
+          "name": "user_feature_flags_feature_key_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (feature_key) REFERENCES beta_feature_definitions(feature_key) ON UPDATE CASCADE ON DELETE RESTRICT"
+        },
+        {
+          "name": "user_feature_flags_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "user_feature_flags_user_feature_unique",
+          "type": "u",
+          "definition": "UNIQUE (user_id, feature_key)"
+        },
+        {
+          "name": "user_feature_flags_user_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+        }
+      ]
+    },
+    {
+      "name": "user_subscriptions",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "not_null": true
+        },
+        {
+          "name": "stripe_customer_id",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "stripe_subscription_id",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "stripe_price_id",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "stripe_checkout_session_id",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "plan",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "not_null": true
+        },
+        {
+          "name": "current_period_end",
+          "type": "timestamp with time zone",
+          "not_null": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "not_null": false
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "not_null": false
+        },
+        {
+          "name": "subscription_source",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "revenuecat_app_user_id",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "revenuecat_product_id",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "revenuecat_entitlement_ids",
+          "type": "text[]",
+          "not_null": false
+        },
+        {
+          "name": "revenuecat_store",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "revenuecat_expires_at",
+          "type": "timestamp with time zone",
+          "not_null": false
+        },
+        {
+          "name": "revenuecat_event_id",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "revenuecat_last_event_at",
+          "type": "timestamp with time zone",
+          "not_null": false
+        },
+        {
+          "name": "active_race_class",
+          "type": "text",
+          "not_null": false
+        },
+        {
+          "name": "last_class_change_at",
+          "type": "timestamp with time zone",
+          "not_null": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "user_subscriptions_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "user_subscriptions_user_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "user_subscriptions_user_id_key",
+          "type": "u",
+          "definition": "UNIQUE (user_id)"
+        }
+      ]
+    }
+  ]
+}
