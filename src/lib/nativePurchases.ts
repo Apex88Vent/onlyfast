@@ -1,9 +1,14 @@
 import { supabase } from './supabase';
 import { hideExternalPayments } from './paymentVisibility';
 import { nativePlatform } from './nativeEnvironment';
-import { NativePurchaseController, type RevenueCatBridge } from './nativePurchaseController';
+import { NATIVE_PURCHASES_READY, NativePurchaseController, type RevenueCatBridge } from './nativePurchaseController';
+import { watchMembershipLifecycle } from './membershipLifecycle';
+import { clearTrustedMembership, getMembershipExpiration, notifyMembershipExpiration } from './trustedMembership';
+import { syncMembershipFromSubscription } from './subscription';
 
-export const nativePurchasesEnabled = hideExternalPayments && import.meta.env.VITE_REVENUECAT_ENABLED === 'true';
+// A build flag alone must not release the incomplete generic-paywall flow.
+// See docs/ONBOARDING_SUBSCRIPTION_INTEGRATION.md for the release bridge blocker.
+export const nativePurchasesEnabled = NATIVE_PURCHASES_READY && hideExternalPayments && import.meta.env.VITE_REVENUECAT_ENABLED === 'true';
 
 async function getBridge(): Promise<RevenueCatBridge> {
   const deadline = Date.now() + 8000;
@@ -28,49 +33,41 @@ export const nativePurchases = new NativePurchaseController(getBridge, () => {
     platform === 'android' ? import.meta.env.VITE_REVENUECAT_ANDROID_API_KEY || '' : '';
 }, () => nativePurchasesEnabled);
 
-export async function syncNativeSubscription(userId: string): Promise<void> {
+export async function syncNativeSubscription(userId: string, notify = true): Promise<void> {
   const { data: session } = await supabase.auth.getSession();
   if (session.session?.user.id !== userId) throw new Error('Your account changed. Please sign in again.');
-  const { error } = await supabase.functions.invoke('sync-revenuecat-subscription', { body: {} });
-  if (error) throw new Error('Your store request finished, but OnlyFast could not confirm access yet. Use Refresh subscription in a moment.');
+  const { data, error } = await supabase.functions.invoke('sync-revenuecat-subscription', {
+    body: {}, headers: { Authorization: `Bearer ${session.session.access_token}` },
+  });
+  if (error || data?.error) throw new Error('OnlyFast could not confirm store access yet. Use Refresh subscription in a moment.');
   const { data: current } = await supabase.auth.getSession();
   if (current.session?.user.id !== userId) throw new Error('Your account changed. Please sign in again.');
-  window.dispatchEvent(new CustomEvent('subscription-updated'));
+  if (notify) window.dispatchEvent(new CustomEvent('subscription-updated'));
 }
 
 // App-wide lifecycle: runs outside Supabase's auth callback to avoid auth locks.
 export function watchNativePurchases(): () => void {
-  if (!nativePurchasesEnabled) return () => {};
-  let active = true;
-  let currentUser: string | null = null;
-  let authRevision = 0;
-  const update = (id: string | null) => {
-    currentUser = id;
-    void nativePurchases.setUser(id).catch(() => { /* Controls surface actionable errors. */ });
-    if (id) setTimeout(() => {
-      if (active && currentUser === id) void syncNativeSubscription(id).catch(() => {});
-    }, 0);
-  };
-  const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-    if (event === 'USER_UPDATED') return;
-    authRevision++;
-    if (session?.user.id !== currentUser) update(session?.user.id ?? null);
-  });
-  const initialRevision = authRevision;
-  void supabase.auth.getSession().then(({ data }) => {
-    if (active && authRevision === initialRevision) update(data.session?.user.id ?? null);
-  });
-  const resume = () => {
-    if (document.visibilityState === 'visible' && currentUser) {
-      void syncNativeSubscription(currentUser).catch(() => {});
-    }
-  };
-  document.addEventListener('visibilitychange', resume);
-  window.addEventListener('focus', resume);
-  return () => {
-    active = false;
-    listener.subscription.unsubscribe();
-    document.removeEventListener('visibilitychange', resume);
-    window.removeEventListener('focus', resume);
-  };
+  return watchMembershipLifecycle({
+    session: async () => (await supabase.auth.getSession()).data.session?.user.id ?? null,
+    onAuthChange: listener => {
+      const { data } = supabase.auth.onAuthStateChange((_event, session) => listener(session?.user.id ?? null));
+      return () => data.subscription.unsubscribe();
+    },
+    clear: id => {
+      clearTrustedMembership(id);
+      if (nativePurchasesEnabled) void nativePurchases.setUser(id).catch(() => {});
+    },
+    refresh: async id => {
+      const status = await syncMembershipFromSubscription();
+      if ((await supabase.auth.getSession()).data.session?.user.id !== id) return;
+      // Existing native subscribers can refresh while new purchases are held.
+      // Stripe, Rookie and promotional memberships never trigger native billing.
+      if (hideExternalPayments && status?.row?.subscription_source === 'revenuecat') {
+        try { await syncNativeSubscription(id, false); }
+        finally { await syncMembershipFromSubscription(); }
+      }
+    },
+    expiresAt: getMembershipExpiration,
+    onExpiration: notifyMembershipExpiration,
+  }, window, document);
 }

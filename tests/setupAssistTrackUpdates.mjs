@@ -23,6 +23,10 @@ function compile(file, modules = {}) {
     if (name.startsWith('react/')) return qaRequire(name);
     if (name === '@/lib/roadTrackFeedback') return road;
     if (name === '@/lib/setupLibrary') return library;
+    if (name === '@/hooks/useMembershipRevision') return { useMembershipRevision: () => 0 };
+    if (name === './LockedFeatureNotice') return { __esModule: true, default: compile('LockedFeatureNotice.tsx', {
+      'react-router-dom': { Link: ({ to, children, ...props }) => React.createElement('a', { ...props, href: to }, children) },
+    }) };
     if (name in modules) return { __esModule: true, ...modules[name] };
     throw new Error(`Unstubbed dependency ${name}`);
   }, output, output.exports);

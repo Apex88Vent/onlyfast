@@ -5,12 +5,12 @@ import { NativePurchaseError } from '@/lib/nativePurchaseController';
 import { supabase } from '@/lib/supabase';
 
 async function loadStatus(userId: string) {
-  await syncMembershipFromSubscription();
-  const row = await fetchUserSubscription(userId);
+  const initial = await supabase.auth.getSession();
+  if (initial.data.session?.user.id !== userId) throw new Error('Your account changed. Please try again.');
+  const status = await syncMembershipFromSubscription();
   const { data } = await supabase.auth.getSession();
-  if (data.session?.user.id !== userId) throw new Error('Your account changed. Please try again.');
-  // Never derive this account's admin/promo state from another user's local cache.
-  return deriveAccountStatus(row, { membership_tier: 'rookie', ...data.session.user.user_metadata });
+  if (data.session?.user.id !== userId || !status) throw new Error('Your account changed. Please try again.');
+  return status;
 }
 
 export default function NativeSubscriptionControls({ userId, purchaseOnly = false, hidePurchase = false, purchaseLabel = 'View Pro and Teams subscriptions', onVerified }: {
@@ -21,10 +21,11 @@ export default function NativeSubscriptionControls({ userId, purchaseOnly = fals
   const [message, setMessage] = useState('');
   const [loadError, setLoadError] = useState(false);
   const generation = useRef(0);
+  const pending = useRef(false);
   useEffect(() => {
     const revision = ++generation.current;
     const generationRef = generation;
-    setAccount(null); setMessage(''); setBusy(false);
+    setAccount(null); setMessage(''); setBusy(false); setLoadError(false);
     const refresh = async () => {
       try {
         const status = await loadStatus(userId);
@@ -33,11 +34,27 @@ export default function NativeSubscriptionControls({ userId, purchaseOnly = fals
     };
     void refresh();
     window.addEventListener('subscription-updated', refresh);
-    return () => { generationRef.current++; window.removeEventListener('subscription-updated', refresh); };
+    window.addEventListener('membership-updated', refreshDisplay);
+    function refreshDisplay() {
+      // The lifecycle has already refreshed trusted membership. Reading it again
+      // through loadStatus would publish another event and recurse indefinitely.
+      void supabase.auth.getSession().then(({ data }) => {
+        if (generation.current === revision && data.session?.user.id === userId) {
+          setAccount(current => current ? deriveAccountStatus(current.row) : null);
+          void fetchUserSubscription(userId).then(async row => {
+            const current = await supabase.auth.getSession();
+            if (generation.current === revision && current.data.session?.user.id === userId) setAccount(deriveAccountStatus(row));
+          }).catch(() => {});
+        } else if (generation.current === revision) setAccount(null);
+      }).catch(() => {});
+    }
+    return () => { generationRef.current++; window.removeEventListener('subscription-updated', refresh); window.removeEventListener('membership-updated', refreshDisplay); };
   }, [userId]);
 
   const run = async (action: 'purchase' | 'restore' | 'refresh') => {
     if (action !== 'refresh' && !nativePurchasesEnabled) return;
+    if (pending.current) return;
+    pending.current = true;
     const revision = generation.current;
     setBusy(true); setMessage('');
     try {
@@ -55,25 +72,29 @@ export default function NativeSubscriptionControls({ userId, purchaseOnly = fals
         if (generation.current !== revision) return;
         await nativePurchases.run(userId, action);
       }
-      if (nativePurchasesEnabled) await syncNativeSubscription(userId);
-      else await syncMembershipFromSubscription();
+      if (nativePurchasesEnabled || account?.row?.subscription_source === 'revenuecat') await syncNativeSubscription(userId);
       const status = await loadStatus(userId);
       if (generation.current !== revision) return;
       setAccount(status); setLoadError(false);
-      if (status.isPaid && action === 'purchase') await onVerified?.();
+      if (status.isPaid && action !== 'refresh') await onVerified?.();
       setMessage(status.isPaid ? 'Your subscription is active.' : action === 'restore' ?
         'No active store subscription was found for this account. Check your store account and OnlyFast login.' :
         'No active subscription is confirmed yet. If you purchased, refresh in a moment.');
     } catch (error) {
       if (generation.current === revision) setMessage(error instanceof NativePurchaseError && error.cancelled ?
         'Purchase cancelled.' : error instanceof Error ? error.message : 'Unable to complete the request. Please try again.');
-    } finally { if (generation.current === revision) setBusy(false); }
+    } finally { pending.current = false; if (generation.current === revision) setBusy(false); }
   };
 
-  return <div className="space-y-3 text-center">
+  return <div className="space-y-3 text-center" aria-busy={busy}>
     {!purchaseOnly && <p className="text-sm font-semibold text-[#1A1B23]">
       {account ? `Current plan: ${account.label === 'Free' ? 'Rookie' : account.label}` :
         loadError ? 'Could not load your subscription.' : 'Loading subscription…'}
+    </p>}
+    {!purchaseOnly && account && <p className="text-xs text-[#6B7280]">
+      {account.isPaid ? account.row?.subscription_source === 'revenuecat' && account.row.revenuecat_expires_at && Date.parse(account.row.revenuecat_expires_at) > Date.now()
+        ? `Store access confirmed until ${new Date(account.row.revenuecat_expires_at).toLocaleString()}.`
+        : 'Your existing membership is active.' : 'Rookie is free. No subscription or payment is required.'}
     </p>}
     {!nativePurchasesEnabled && purchaseOnly ? <button disabled className="w-full rounded-xl bg-[#00A8E8] px-4 py-3 font-semibold text-white opacity-60">Coming Soon</button> : <>
       {account?.isPaid ? <p className="text-xs text-[#6B7280]">
@@ -93,6 +114,7 @@ export default function NativeSubscriptionControls({ userId, purchaseOnly = fals
         <button disabled={!nativePurchasesEnabled || busy} onClick={() => void run('restore')} className="text-sm font-semibold text-[#00A8E8] underline disabled:opacity-50">Restore Purchases</button>
         <button disabled={busy} onClick={() => void run('refresh')} className="text-sm text-[#6B7280] underline disabled:opacity-50">Refresh subscription</button>
       </div>}
+      {!purchaseOnly && !nativePurchasesEnabled && <p className="text-xs text-[#6B7280]">New store purchases and restoration are unavailable in this build. Existing memberships still work; refresh to check your access.</p>}
     </>}
     {message && <p role="status" className="text-sm text-[#374151]">{message}</p>}
   </div>;

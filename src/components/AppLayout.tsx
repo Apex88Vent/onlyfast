@@ -50,6 +50,8 @@ const AppLayout: React.FC = () => {
   const authenticatedUserId = user?.id ?? null;
   const onboardingLoginEscapeRef = useRef(false);
   const authUserIdRef = useRef<string | null>(null);
+  const tutorialPending = useRef(false);
+  const [savingTutorial, setSavingTutorial] = useState(false);
 
   const howOnlyFastWorksStorageKey = (userId?: string | null) =>
     userId ? `onlyfast_onboarding_completed_${userId}` : 'onlyfast_onboarding_completed_guest';
@@ -61,7 +63,9 @@ const AppLayout: React.FC = () => {
   }, []);
 
   const markHowOnlyFastWorksComplete = useCallback(async () => {
-    if (!user) return;
+    if (!user || tutorialPending.current) return;
+    tutorialPending.current = true;
+    setSavingTutorial(true);
     setClassSelectionError('');
     try {
       const state = await saveOnboardingProgress('discipline', undefined, undefined, user.id);
@@ -70,7 +74,7 @@ const AppLayout: React.FC = () => {
     } catch {
       setClassSelectionError('Your tutorial progress could not be saved. Please try again.');
       return;
-    }
+    } finally { tutorialPending.current = false; setSavingTutorial(false); }
     setShowHowOnlyFastWorks(false);
     setIsReplayingHowOnlyFastWorks(false);
     setHasCheckedHowOnlyFastWorks(true);
@@ -106,6 +110,25 @@ const AppLayout: React.FC = () => {
     applySelectedCar(car);
     setLandingRequest(request => request + 1);
   }, [applySelectedCar]);
+
+  // Membership can change while the app is open. Re-read the server's class
+  // allowance without resetting the chosen vehicle, editor or onboarding.
+  useEffect(() => {
+    if (!authenticatedUserId) return;
+    let active = true;
+    let revision = 0;
+    const refreshAllowance = async () => {
+      const request = ++revision;
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!active || request !== revision || data.session?.user.id !== authenticatedUserId) return;
+        const state = await getActiveClassState();
+        if (active && request === revision && authUserIdRef.current === authenticatedUserId) setUnlimitedClasses(state.unlimited);
+      } catch { /* Existing server-side class authorization remains authoritative. */ }
+    };
+    window.addEventListener('membership-updated', refreshAllowance);
+    return () => { active = false; window.removeEventListener('membership-updated', refreshAllowance); };
+  }, [authenticatedUserId]);
 
   useEffect(() => {
     if (!authChecked) return;
@@ -366,6 +389,7 @@ const AppLayout: React.FC = () => {
             onSkip={isReplayingHowOnlyFastWorks ? closeHowOnlyFastWorksReplay : markHowOnlyFastWorksComplete}
             onLogin={handleHowOnlyFastWorksLogin}
             isReplay={isReplayingHowOnlyFastWorks}
+            pending={savingTutorial}
           />
         )}
         {classSelectionError && <p className="p-4 text-center text-sm text-red-600" role="alert">{classSelectionError}</p>}

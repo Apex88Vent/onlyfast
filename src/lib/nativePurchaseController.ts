@@ -1,5 +1,8 @@
 // API verified against Median's official revenueCat plugin/types and demo.
-export type NativeResult = { success: boolean; error?: { code?: string; message?: string } };
+// Public hold belongs to the release code, independently of diagnostic builds
+// and environment flags. The named-offering release bridge is still required.
+export const NATIVE_PURCHASES_READY = false;
+export type NativeResult = { success: boolean; error?: { code?: string | number; message?: string } };
 export interface RevenueCatBridge {
   configure(params: { apiKey: string; appUserID: string }): Promise<NativeResult>;
   isInitialized(): Promise<{ initialized: boolean; apiKey?: string }>;
@@ -12,15 +15,18 @@ export interface RevenueCatBridge {
 
 export class NativePurchaseError extends Error {
   cancelled: boolean;
-  constructor(message: string, cancelled = false) { super(message); this.cancelled = cancelled; }
+  pending: boolean;
+  constructor(message: string, cancelled = false, pending = false) { super(message); this.cancelled = cancelled; this.pending = pending; }
 }
 
 function checked(result: NativeResult): void {
   if (result?.success === true && !result.error) return;
   const code = String(result?.error?.code || '').toLowerCase();
   const cancelled = code === '1' || /cancel/.test(code);
-  throw new NativePurchaseError(cancelled ? 'Purchase cancelled.' :
-    (result?.error?.message || 'The store could not complete this request. Please try again.'), cancelled);
+  const pending = code === '20' || /payment.?pending/.test(code);
+  throw new NativePurchaseError(cancelled ? 'Purchase cancelled.' : pending ?
+    'Payment is pending store approval. Do not purchase again. Use Refresh subscription after approval; access requires server confirmation.' :
+    (result?.error?.message || 'The store could not complete this request. Please try again.'), cancelled, pending);
 }
 
 export class NativePurchaseController {

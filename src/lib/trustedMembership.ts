@@ -25,6 +25,9 @@ let activeUser: string | null = null;
 let authorization: { row: Subscription | null; grants: Grants } | null = null;
 let revision = 0;
 export function getMembershipRevision() { return revision; }
+// Publish a time-based change even when a renewal lookup is offline. Every
+// reader recomputes expiration from the original server-authorized records.
+export function notifyMembershipExpiration() { changed(); }
 function changed() {
   revision++;
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('membership-updated'));
@@ -42,4 +45,13 @@ export function setTrustedAuthorization(userId: string, row: Subscription | null
 }
 export function getTrustedMembership(): MembershipState | null {
   return authorization ? resolveAuthorizedMembership(authorization.row, authorization.grants) : null;
+}
+
+export function getMembershipExpiration(): number | null {
+  if (!authorization) return null;
+  const values = [authorization.row?.subscription_source === 'revenuecat' ? authorization.row.revenuecat_expires_at : null,
+    authorization.grants.promo_access_expires_at];
+  const future = values.filter((value): value is string => typeof value === 'string')
+    .map(Date.parse).filter(value => Number.isFinite(value) && value > Date.now());
+  return future.length ? Math.min(...future) : null;
 }

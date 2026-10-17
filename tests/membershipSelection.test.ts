@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 
 const require = createRequire(import.meta.url);
-function renderPlans(native: boolean) {
+function renderPlans(native: boolean, allowWebCheckout = false) {
   const cache = new Map<string, any>();
   function load(file: string): any {
     if (cache.has(file)) return cache.get(file);
@@ -30,7 +30,7 @@ function renderPlans(native: boolean) {
     return mod.exports;
   }
   const Plan = load('components/PlanSelection.tsx').default;
-  return { html: renderToStaticMarkup(React.createElement(Plan, { userId: 'user', onComplete: () => {} })), limits: load('lib/membership.ts').tierLimits };
+  return { html: renderToStaticMarkup(React.createElement(Plan, { userId: 'user', onComplete: () => {}, allowWebCheckout })), limits: load('lib/membership.ts').tierLimits };
 }
 test('native-disabled membership shows all plans, free continuation, accurate limits, accessible locks', () => {
   const { html, limits } = renderPlans(true);
@@ -40,7 +40,7 @@ test('native-disabled membership shows all plans, free continuation, accurate li
   assert.doesNotMatch(html.match(/<button[^>]*>Continue Free<\/button>/)?.[0] || 'missing', /\sdisabled(?:=|>)/);
   assert.match(html, />Continue Free<\/button>/);
   assert.equal((html.match(/<button[^>]*disabled[^>]*>Coming Soon<\/button>/g) || []).length, 2);
-  assert.match(html, /Free Forever/); assert.doesNotMatch(html, /trial/i);
+  assert.match(html, /Free Forever/); assert.match(html, /Seven-day introductory trial where eligible/);
   assert.match(html, /role="table" aria-label="OnlyFast membership features"/);
   assert.match(html, /Locked/); assert.match(html, /Included/);
   assert.equal(limits.rookie.setupAssistsPerRaceWeekend, 1);
@@ -49,7 +49,13 @@ test('native-disabled membership shows all plans, free continuation, accurate li
   assert.equal(limits.pro.maxCars, 1); assert.equal(limits.team.maxCars, 'unlimited');
 });
 test('web membership retains separate Pro and Teams checkout choices', () => {
-  const { html } = renderPlans(false);
+  const { html } = renderPlans(false, true);
   assert.match(html, /Choose Pro/); assert.match(html, /Choose Teams/);
   assert.doesNotMatch(html, /Coming Soon/);
+});
+test('web onboarding keeps paid plans held without changing the existing web upgrade checkout', () => {
+  const { html } = renderPlans(false);
+  assert.equal((html.match(/<button[^>]*disabled[^>]*>Coming Soon<\/button>/g) || []).length, 2);
+  assert.doesNotMatch(html, />Choose Pro<|>Choose Teams</);
+  assert.match(html, />Continue Free<\/button>/);
 });

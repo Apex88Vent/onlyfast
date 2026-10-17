@@ -170,6 +170,12 @@ test('absent feature flag blocks purchases and restore before any bridge call', 
   assert.equal(calls, 0);
 });
 
+test('store-pending purchases remain pending and never resolve as confirmed access', async () => {
+  const { controller, bridge } = harness(); await controller.setUser('a');
+  bridge.presentPaywall = async () => ({ success: false, error: { code: 20 } });
+  await assert.rejects(controller.run('a', 'purchase'), error => error instanceof NativePurchaseError && error.pending && !error.cancelled && /server confirmation/.test(error.message));
+});
+
 test('default entitlements match OnlyFast and Teams wins when both are granted', () => {
   const configured = revenueCatConfig(key => key === 'REVENUECAT_SECRET_API_KEY' ? 'server-test-key' : undefined);
   assert.equal(configured.proEntitlement, 'OnlyFast Pro');

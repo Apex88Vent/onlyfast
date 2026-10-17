@@ -69,6 +69,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
 
 
   useEffect(() => {
+    let active = true;
     if (isOpen && user) {
       const meta: any = user.user_metadata || {};
       const localOverride = (() => {
@@ -86,20 +87,31 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
       setDeleteConfirmOpen(false);
 
       // Load subscription status from public.user_subscriptions.
+      setAccount(null);
       setSubLoading(true);
       fetchUserSubscription(user.id)
-        .then((row) => setAccount(deriveAccountStatus(row, meta)))
-        .catch(() => setAccount(deriveAccountStatus(null, meta)))
-        .finally(() => setSubLoading(false));
+        .then(async row => {
+          const { data } = await supabase.auth.getSession();
+          if (active && data.session?.user.id === user.id) setAccount(deriveAccountStatus(row));
+        })
+        .catch(() => { if (active) setSubError('Could not load your subscription. Please refresh and try again.'); })
+        .finally(() => { if (active) setSubLoading(false); });
     }
+    return () => { active = false; };
   }, [hasExperimentalFullAccess, isOpen, user]);
 
   useEffect(() => {
     if (!isOpen) return;
     let active = true;
-    const refresh = () => { void fetchUserSubscription(user.id).then(row => {
-      if (active) setAccount(deriveAccountStatus(row));
-    }).catch(() => {}); };
+    const refresh = () => {
+      void supabase.auth.getSession().then(async ({ data }) => {
+        if (!active || data.session?.user.id !== user.id) return;
+        setAccount(current => current ? deriveAccountStatus(current.row) : null);
+        const row = await fetchUserSubscription(user.id);
+        const current = await supabase.auth.getSession();
+        if (active && current.data.session?.user.id === user.id) setAccount(deriveAccountStatus(row));
+      }).catch(() => {});
+    };
     window.addEventListener('membership-updated', refresh);
     return () => { active = false; window.removeEventListener('membership-updated', refresh); };
   }, [isOpen, user.id]);

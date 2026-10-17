@@ -231,16 +231,14 @@ test('AppLayout saved-car loading is keyed by user ID, not Supabase User object 
   );
 });
 
-test('membership synchronization does not feed USER_UPDATED back into updateUser', () => {
+test('membership synchronization never writes profile metadata or feeds USER_UPDATED into updateUser', () => {
   const source = readFileSync(
-    new URL('../src/contexts/AppContext.tsx', import.meta.url),
+    new URL('../src/lib/subscription.ts', import.meta.url),
     'utf8',
   );
-  const authSyncCondition = source.match(/if \(event === 'SIGNED_IN'[\s\S]*?\) \{\s*setTimeout\(sync, 0\)/)?.[0] ?? '';
-
-  assert.match(authSyncCondition, /SIGNED_IN/);
-  assert.match(authSyncCondition, /TOKEN_REFRESHED/);
-  assert.doesNotMatch(authSyncCondition, /USER_UPDATED/);
+  assert.doesNotMatch(source, /updateUser\(|refreshSession\(/);
+  const provider = readFileSync(new URL('../src/contexts/AppContext.tsx', import.meta.url), 'utf8');
+  assert.match(provider, /useEffect\(\(\) => watchNativePurchases\(\), \[\]\)/);
 });
 
 test('BetaFeaturesProvider still revalidates auth data without owning global auth loading', () => {
@@ -257,7 +255,7 @@ test('BetaFeaturesProvider still revalidates auth data without owning global aut
 test('the three auth listeners keep separate responsibilities and clean up subscriptions', () => {
   const sources = [
     '../src/components/AppLayout.tsx',
-    '../src/contexts/AppContext.tsx',
+    '../src/lib/nativePurchases.ts',
     '../src/contexts/BetaFeaturesContext.tsx',
   ].map(path => readFileSync(new URL(path, import.meta.url), 'utf8'));
 

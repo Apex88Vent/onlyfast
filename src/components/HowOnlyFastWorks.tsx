@@ -25,9 +25,8 @@ interface HowOnlyFastWorksProps {
   onSkip?: () => void;
   onLogin?: () => void;
   isReplay?: boolean;
+  pending?: boolean;
 }
-
-const REQUIRED_SLIDE_COUNT = 5;
 
 const slides = [
   {
@@ -133,6 +132,7 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
   onSkip,
   onLogin,
   isReplay = false,
+  pending = false,
 }) => {
   const [index, setIndex] = useState(0);
   const [dragStartX, setDragStartX] = useState<number | null>(null);
@@ -142,7 +142,9 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
   const slide = slides[index];
   const Icon = slide.icon;
   const isFinal = index === slides.length - 1;
-  const canSkip = !isFinal && index >= REQUIRED_SLIDE_COUNT;
+  // Introductory guidance is optional. The parent persists only the move to
+  // discipline selection; Skip cannot complete the required racing profile.
+  const canSkip = !isFinal;
   const canShowLogin = Boolean(onLogin);
 
   useEffect(() => {
@@ -158,10 +160,12 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
   };
 
   const goNext = () => {
+    if (pending) return;
     if (!isFinal) setIndex((current) => Math.min(current + 1, slides.length - 1));
   };
 
   const goPrevious = () => {
+    if (pending) return;
     setIndex((current) => Math.max(current - 1, 0));
   };
 
@@ -208,7 +212,7 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F5F7] flex items-center justify-center px-4 py-6" role="main">
+    <div id="main-content" tabIndex={-1} className="min-h-screen bg-[#F5F5F7] flex items-center justify-center px-4 py-6" role="main">
       <style>{`
         @keyframes onlyfastSlideIn {
           from { opacity: 0; transform: translateX(22px); }
@@ -262,6 +266,7 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
           <button
             type="button"
             onClick={isReplay ? finish : skip}
+            disabled={pending}
             className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold text-[#6B7280] transition-colors hover:bg-[#F5F5F7] hover:text-[#1A1B23] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] ${
               isReplay || canSkip ? '' : 'invisible pointer-events-none'
             }`}
@@ -529,7 +534,7 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
         <div className="px-1 pt-5">
           <p className="mt-2 min-h-[72px] text-sm leading-6 text-[#6B7280]">{slide.text}</p>
 
-          <div className="mt-5 flex items-center justify-center gap-2" aria-label={`Slide ${index + 1} of ${slides.length}`}>
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-2" aria-label={`Slide ${index + 1} of ${slides.length}`}>
             {slides.map((item, dotIndex) => (
               <button
                 key={item.title}
@@ -537,7 +542,7 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
                 onClick={() => {
                   if (dotIndex <= index) setIndex(dotIndex);
                 }}
-                disabled={dotIndex > index}
+                disabled={pending || dotIndex > index}
                 className={`onlyfast-dot h-2.5 rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2 disabled:cursor-not-allowed ${
                   dotIndex === index ? 'w-8 bg-[#00A8E8]' : 'w-2.5 bg-[#D1D5DB]'
                 }`}
@@ -551,6 +556,7 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
           <button
             type="button"
             onClick={() => (isFinal ? finish() : goNext())}
+            disabled={pending}
             className="onlyfast-pulse mt-6 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#00A8E8] px-5 py-4 text-base font-black text-white transition-all hover:-translate-y-0.5 hover:bg-[#0090c7] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
             style={{ animation: 'onlyfastPulse 2.2s ease-in-out infinite' }}
           >
@@ -562,6 +568,7 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
             <button
               type="button"
               onClick={onLogin}
+              disabled={pending}
               className="mx-auto mt-4 flex items-center gap-1 rounded-full text-xs font-semibold text-[#007EAE] hover:text-[#00A8E8] hover:underline focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
             >
               <LogIn className="h-3.5 w-3.5" aria-hidden="true" />
@@ -574,14 +581,16 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
               <button
                 type="button"
                 onClick={skip}
+                disabled={pending}
                 className="rounded-full text-xs font-semibold text-[#6B7280] hover:text-[#00A8E8] hover:underline focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
               >
                 Skip to discipline selection
               </button>
-              {canShowLogin && (
+              {canShowLogin && index !== 0 && (
                 <button
                   type="button"
                   onClick={onLogin}
+                  disabled={pending}
                   className="flex items-center gap-1 rounded-full text-xs font-semibold text-[#007EAE] hover:text-[#00A8E8] hover:underline focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
                 >
                   <LogIn className="h-3.5 w-3.5" aria-hidden="true" />
@@ -595,6 +604,7 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
             <button
               type="button"
               onClick={onLogin}
+              disabled={pending}
               className="mx-auto mt-4 flex items-center gap-1 rounded-full text-xs font-semibold text-[#007EAE] hover:text-[#00A8E8] hover:underline focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
             >
               <LogIn className="h-3.5 w-3.5" aria-hidden="true" />

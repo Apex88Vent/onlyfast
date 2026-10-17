@@ -70,7 +70,7 @@ const App = compile('components/AppLayout.tsx', {
   './OnboardingFlow': { default: Selection },
   './HowOnlyFastWorks': { default: How },
   './Header': { default: ({ onOpenHowOnlyFastWorks }) => React.createElement('button', { onClick: onOpenHowOnlyFastWorks }, 'Replay help') },
-  './SetupDashboard': { default: ({ selectedCar, landingRequest }) => React.createElement('div', { 'data-landing': true, 'data-landing-request': landingRequest }, `Landing: ${selectedCar}`) },
+  './SetupDashboard': { default: ({ selectedCar, landingRequest, classLocksEnabled }) => React.createElement('div', { 'data-landing': true, 'data-landing-request': landingRequest, 'data-class-locks': classLocksEnabled }, `Landing: ${selectedCar}`) },
   './AuthModal': { default: Auth },
   './CookieConsent': { default: empty },
   './Footer': { default: empty },
@@ -87,7 +87,7 @@ const App = compile('components/AppLayout.tsx', {
       return { active_class: fixture.activeClass, unlimited: fixture.access === experiment, ...fixture.progress };
     },
     completeRacingOnboarding: async () => {
-      const car = fixture.progress.onboarding_race_class;
+      const car = fixture.progress.onboarding_race_class === 'GT3' ? 'road_gt3' : fixture.progress.onboarding_race_class;
       fixture.initializations.push(car);
       if (fixture.rejectClass) throw new Error('CLASS_INVALID');
       fixture.activeClass = car;
@@ -123,7 +123,7 @@ function reset(options = {}) {
   globalThis.localStorage = { getItem: key => store.get(key) || null, setItem: (key, value) => store.set(key, value), removeItem: key => store.delete(key) };
   globalThis.sessionStorage = { getItem: () => null, setItem() {} };
   globalThis.document = { addEventListener() {}, removeEventListener() {} };
-  globalThis.window = { setTimeout, clearTimeout };
+  globalThis.window = Object.assign(new EventTarget(), { setTimeout, clearTimeout });
   return store;
 }
 const buttons = root => root.findAllByType('button');
@@ -167,8 +167,7 @@ test('B/E: new user ignores stale class/membership; Skip exits to discipline sel
   assert.equal(landing(view.root), false);
   assert.deepEqual(fixture.initializations, []);
   assert.equal(buttons(view.root).some(b => text(b) === 'Close'), false);
-  assert.equal(buttons(view.root).find(b => text(b) === 'Skip').props['aria-hidden'], true);
-  await requiredSlides(view.root);
+  assert.equal(buttons(view.root).find(b => text(b) === 'Skip').props['aria-hidden'], false);
   await click(view.root, 'Skip');
   assert.ok(heading(view.root, 'Select Your Discipline'));
   assert.equal(landing(view.root), false);
@@ -193,6 +192,40 @@ test('D: every Continue advances one slide; final button ends at Select Discipli
   assert.deepEqual(fixture.metadataWrites, []);
   assert.equal(fixture.progress.onboarding_step, 'discipline');
   await act(async () => view.unmount());
+});
+
+test('Skip from the welcome slide persists only discipline progress and Rookie still requires class plus plan selection', async () => {
+  reset();
+  const view = await mount();
+  assert.equal(buttons(view.root).filter(b => text(b) === 'Already a member? Login here').length, 1);
+  assert.equal(view.root.findByProps({ role: 'main' }).props.id, 'main-content');
+  await click(view.root, 'Skip');
+  assert.deepEqual(fixture.progressWrites, [{ step: 'discipline', discipline: undefined, car: undefined }]);
+  assert.equal(landing(view.root), false);
+  await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith('Dirt Track Oval -')).props.onClick());
+  assert.equal(landing(view.root), false);
+  await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith('Dwarf Cars -')).props.onClick());
+  assert.ok(heading(view.root, 'Choose Your OnlyFast Plan'));
+  assert.equal(buttons(view.root).filter(b => text(b) === 'Coming Soon' && b.props.disabled && !b.props.onClick).length, 2);
+  assert.deepEqual(fixture.initializations, []);
+  await click(view.root, 'Continue Free');
+  assert.ok(landing(view.root));
+  await act(async () => view.unmount());
+  const returning = await mount();
+  assert.ok(landing(returning.root));
+  await act(async () => returning.unmount());
+});
+
+test('incomplete and mismatched saved plans return to the required discipline or class step', async () => {
+  for (const [discipline, car, title] of [[null, null, 'Select Your Discipline'],
+    ['dirt_oval', null, 'Select Your Car'], ['dirt_oval', 'road_gt3', 'Select Your Car']]) {
+    reset(); let view;
+    await act(async () => { view = create(React.createElement(Selection, { initialStep: 'plan', initialDiscipline: discipline,
+      initialClass: car, onComplete: () => assert.fail('Incomplete draft cannot complete') })); });
+    assert.ok(heading(view.root, title));
+    assert.equal(heading(view.root, 'Choose Your OnlyFast Plan'), false);
+    await act(async () => view.unmount());
+  }
 });
 
 test('C: flagged test@test.com sees three selectable disciplines, selects GT3; failed RPC cannot enter landing', async () => {
@@ -250,6 +283,21 @@ test('changing authenticated identity clears the previous class; token refresh p
   await act(async () => fixture.authListener('SIGNED_IN', { user: fixture.user }));
   assert.ok(heading(view.root, 'Welcome to OnlyFast'));
   assert.equal(landing(view.root), false);
+  await act(async () => view.unmount());
+});
+
+test('membership refresh updates server class allowance without replaying onboarding or changing the active vehicle', async () => {
+  reset({ activeClass: 'Dwarf Cars' });
+  const view = await mount();
+  assert.equal(view.root.findByProps({ 'data-landing': true }).props['data-class-locks'], true);
+  fixture.access = experiment;
+  await act(async () => window.dispatchEvent(new Event('membership-updated')));
+  assert.equal(view.root.findByProps({ 'data-landing': true }).props['data-class-locks'], false);
+  assert.equal(text(view.root.findByProps({ 'data-landing': true })), 'Landing: Dwarf Cars');
+  assert.deepEqual(fixture.progressWrites, []);
+  fixture.access = CLOSED_BETA_ACCESS;
+  await act(async () => window.dispatchEvent(new Event('membership-updated')));
+  assert.equal(view.root.findByProps({ 'data-landing': true }).props['data-class-locks'], true);
   await act(async () => view.unmount());
 });
 
@@ -401,7 +449,7 @@ test('unfinished discipline, vehicle and plan steps resume from server after rem
       for (const button of paid) { assert.equal(button.props.disabled, true); assert.equal(button.props.onClick, undefined); }
       await click(view.root, 'Continue Free');
       assert.ok(landing(view.root));
-      assert.deepEqual(fixture.initializations, ['GT3']);
+      assert.deepEqual(fixture.initializations, ['road_gt3']);
     }
     await act(async () => view.unmount());
   }
