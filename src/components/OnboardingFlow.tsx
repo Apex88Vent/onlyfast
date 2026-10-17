@@ -148,13 +148,17 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error, user
     || disciplines.find(d => d.key === EXPANDED_CLASS_CONFIGS[initialClass || '']?.category);
   const savedClassDiscipline = disciplines.find(d => d.key === EXPANDED_CLASS_CONFIGS[initialClass || '']?.category);
   const unavailableSelection = savedDiscipline?.enabled === false || savedClassDiscipline?.enabled === false;
-  const [step, setStep] = useState<2 | 3 | 4>(unavailableSelection ? 2 : initialStep === 'plan' ? 4 : initialStep === 'vehicle' ? 3 : 2);
+  const betaAccess = useBetaFeatures();
+  const validDiscipline = savedDiscipline?.enabled === true;
+  const savedClass = validDiscipline ? getDisciplineSetupClasses(savedDiscipline.key as SetupCategory, betaAccess)
+    .find(car => car === initialClass || EXPANDED_CLASS_CONFIGS[car]?.name === initialClass) || '' : '';
+  const validClass = Boolean(savedClass);
+  const [step, setStep] = useState<2 | 3 | 4>(unavailableSelection || !validDiscipline ? 2 : initialStep === 'plan' && validClass ? 4 : initialStep === 'vehicle' || initialStep === 'plan' ? 3 : 2);
   const [selectedDiscipline, setSelectedDiscipline] = useState(unavailableSelection ? '' : savedDiscipline?.name || initialDiscipline || '');
-  const [selectedClass, setSelectedClass] = useState(unavailableSelection ? '' : initialClass || '');
+  const [selectedClass, setSelectedClass] = useState(unavailableSelection ? '' : savedClass);
   const [saving, setSaving] = useState(false);
   const [progressError, setProgressError] = useState('');
   const pending = useRef(false);
-  const betaAccess = useBetaFeatures();
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -170,7 +174,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error, user
   const advance = async (next: 2 | 3 | 4, discipline = selectedDiscipline, car = selectedClass) => {
     if (pending.current) return;
     if (next !== 2 && !disciplines.find(d => d.name === discipline)?.enabled) return;
-    if (next === 4 && disciplines.find(d => d.key === EXPANDED_CLASS_CONFIGS[car]?.category)?.enabled === false) return;
+    if (next === 4 && !getDisciplineSetupClasses(disciplines.find(d => d.name === discipline)?.key as SetupCategory, betaAccess).includes(car)) return;
     pending.current = true;
     setSaving(true);
     setProgressError('');
@@ -391,9 +395,10 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error, user
             </div>
           </section>
         )}
-        {step === 4 && <PlanSelection userId={userId} onBack={() => advance(3)} onComplete={() => {
+        {step === 4 && <PlanSelection userId={userId} onBack={() => advance(3)} onComplete={async () => {
           if (disciplines.find(d => d.name === selectedDiscipline)?.enabled
-            && disciplines.find(d => d.key === EXPANDED_CLASS_CONFIGS[selectedClass]?.category)?.enabled !== false) return onComplete(selectedClass);
+            && getDisciplineSetupClasses(disciplines.find(d => d.name === selectedDiscipline)?.key as SetupCategory, betaAccess).includes(selectedClass)) return onComplete(selectedClass);
+          throw new Error('Choose a supported discipline and class first.');
         }} />}
       </div>
     </div>

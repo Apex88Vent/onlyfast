@@ -23,3 +23,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Offline generated staging workspace; source plan/baseline are tracked separately.
+/tmp/staging-database/
+/tmp/staging-migration-scaffold/
+/dist-native-sandbox/
+
+# Local QA files, credentials, screenshots in progress and generated builds.
+/tmp/

@@ -44,7 +44,7 @@ export function isActivePaidRow(row: UserSubscriptionRow | null): boolean {
   if (!row) return false;
   const plan = (row.plan || '').toLowerCase();
   const status = (row.status || '').toLowerCase();
-  const isPaidPlan = plan === 'pro' || plan === 'teams';
+  const isPaidPlan = plan === 'pro' || plan === 'teams' || plan === 'team';
   const expiredNative = row.subscription_source === 'revenuecat' && (!row.revenuecat_expires_at || Date.parse(row.revenuecat_expires_at) <= Date.now() || !Number.isFinite(Date.parse(row.revenuecat_expires_at)));
   return isPaidPlan && ACTIVE_STATUSES.includes(status) && !expiredNative;
 }
@@ -118,7 +118,7 @@ export function deriveAccountStatus(
   }
 
   if (isActivePaidRow(row)) {
-    const plan = (row!.plan || '').toLowerCase() === 'teams' ? 'teams' : 'pro';
+    const plan = ['team', 'teams'].includes((row!.plan || '').toLowerCase()) ? 'teams' : 'pro';
     return {
       label: plan === 'teams' ? 'Teams' : 'Pro',
       plan,

@@ -49,7 +49,7 @@ const Upgrade: React.FC = () => {
   return <main className="min-h-screen bg-[#F5F5F7] py-10 px-4">
     <div className="max-w-6xl mx-auto">
       <img src="/onlyfast-logo.png" alt="OnlyFast" className="h-16 mx-auto mb-8" />
-      <PlanSelection key={user.id} userId={user.id} onComplete={continueFree} onPaidComplete={() => navigate('/', { replace: true })} onBack={() => safeBack(navigate)} />
+      <PlanSelection key={user.id} userId={user.id} allowWebCheckout onComplete={continueFree} onPaidComplete={() => navigate('/', { replace: true })} onBack={() => safeBack(navigate)} />
       {hideExternalPayments && <div className="max-w-xl mx-auto mt-6 rounded-xl bg-white border p-4">
         <NativeSubscriptionControls key={user.id} userId={user.id} hidePurchase />
       </div>}

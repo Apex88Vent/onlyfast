@@ -17,6 +17,7 @@ import Support from "./pages/Support";
 import SafeBackHandler from "./components/SafeBackHandler";
 import BetaRoute from "./components/BetaRoute";
 import { BetaFeaturesProvider } from "./contexts/BetaFeaturesContext";
+import { AppProvider } from "./contexts/AppContext";
 import { BETA_FEATURES } from "./lib/betaFeatures";
 
 const queryClient = new QueryClient();
@@ -31,6 +32,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <BetaFeaturesProvider>
+            <AppProvider>
             <SafeBackHandler />
             <Routes>
               <Route path="/" element={<Index />} />
@@ -65,6 +67,7 @@ const App = () => (
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
+            </AppProvider>
           </BetaFeaturesProvider>
         </BrowserRouter>
       </TooltipProvider>

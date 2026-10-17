@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { PLANS } from '@/lib/membership';
 import MembershipComparison from './MembershipComparison';
 import MembershipPaidAction from './MembershipPaidAction';
@@ -10,6 +10,8 @@ interface PlanSelectionProps {
   onBack?: () => void;
   userId?: string;
   onPaidComplete?: () => void | Promise<void>;
+  /** Only the existing web upgrade page may open Stripe checkout. */
+  allowWebCheckout?: boolean;
 }
 
 const CheckIcon = () => (
@@ -18,15 +20,20 @@ const CheckIcon = () => (
   </svg>
 );
 
-const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userId, onPaidComplete }) => {
+const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userId, onPaidComplete, allowWebCheckout = false }) => {
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [checkoutTier, setCheckoutTier] = useState<'pro' | 'team' | null>(null);
   const submitting = useRef(false);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => { headingRef.current?.focus(); }, []);
   const handleContinue = async () => {
     if (submitting.current) return;
     submitting.current = true;
     setSaving(true);
+    setSaveError('');
     try { await onComplete(); }
+    catch { setSaveError('Your selection could not be saved. Please try again.'); }
     finally { submitting.current = false; setSaving(false); }
   };
 
@@ -47,7 +54,7 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userI
           </button>
         )}
         <div>
-          <h2 id="plan-heading" className="text-2xl font-bold text-[#1A1B23]">Choose Your OnlyFast Plan</h2>
+          <h2 id="plan-heading" ref={headingRef} tabIndex={-1} className="text-2xl font-bold text-[#1A1B23] outline-none">Choose Your OnlyFast Plan</h2>
           <p className="text-[#6B7280] text-sm">Start racing for free, or unlock more features with Pro and Teams.</p>
         </div>
       </div>
@@ -55,7 +62,8 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userI
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6 items-stretch">
         {PLANS.map((plan) => {
           const isRecommended = plan.recommended;
-          const comingSoon = plan.tier !== 'rookie' && hideExternalPayments && !nativePurchasesEnabled;
+          const comingSoon = plan.tier !== 'rookie' &&
+            (hideExternalPayments ? !nativePurchasesEnabled : !allowWebCheckout);
           return (
             <div
               key={plan.tier}
@@ -92,6 +100,7 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userI
               </div>
 
               <p className="text-sm text-[#6B7280] mb-4">{plan.description}</p>
+              {plan.tier !== 'rookie' && <p className="text-xs text-[#6B7280] mb-3">Seven-day introductory trial where eligible when store subscriptions launch. Store prices and eligibility will be shown before purchase.</p>}
               {plan.tier === 'rookie' && <p className="text-xs text-[#6B7280] mb-3">Setup export, leaderboard uploads and badges, and advanced profiles are locked. Pro or Teams unlocks them.</p>}
               <ul className="space-y-2 mb-6 flex-1">
                 {plan.synopsis.map((line, i) => (
@@ -122,6 +131,7 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userI
         })}
       </div>
 
+      {saveError && <p role="alert" className="mb-4 text-sm text-red-600">{saveError}</p>}
       <MembershipComparison />
       <p className="text-center text-xs text-[#9CA3AF] mt-4">
         Rookie is free forever. Existing paid memberships keep their current access.
