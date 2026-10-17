@@ -1,0 +1,301 @@
+{
+  "capturedAt": "2026-10-17T23:48:14.014Z",
+  "reviewedCommit": "86e794f440e84b658e170d190693ec7c76aa7eec",
+  "artifactSha256": "57DF5F7D3984A8E3C5AFC59D99A43407FB6A39E9D6F74BC1EF0E3D62A204AC9F",
+  "releaseSourceSha256": "0e745c25e5bb32b0b57b82c928c1b782434af8da41d4235eb476cb32cea3553f",
+  "releaseSourceUnchanged": true,
+  "runtime": {
+    "passed": true,
+    "startedAt": "2026-10-17T23:45:05.239Z",
+    "steps": [
+      {
+        "name": "native bridge capabilities",
+        "result": {
+          "protocolVersion": 1,
+          "status": "ok",
+          "platform": "android",
+          "transactionsEnabled": false
+        }
+      },
+      {
+        "name": "release bridge identified authenticated local UUID",
+        "result": {
+          "uuid": "local-tester-A"
+        }
+      },
+      {
+        "name": "native RevenueCat initialization and named Pro/Teams catalog A validated",
+        "result": true
+      },
+      {
+        "name": "native rejected mismatched authenticated UUID",
+        "result": {
+          "status": "error",
+          "code": "AUTH"
+        }
+      },
+      {
+        "name": "native rejected invalid session",
+        "result": {
+          "status": "error",
+          "code": "AUTH"
+        }
+      },
+      {
+        "name": "A → B authenticated account switch; delayed A result rejected",
+        "result": {
+          "a": "local-tester-A",
+          "b": "local-tester-B"
+        }
+      },
+      {
+        "name": "logged-out catalog rejected",
+        "result": true
+      },
+      {
+        "name": "B → logout → A retains correct authenticated identity",
+        "result": true
+      },
+      {
+        "name": "actual PlanSelection and NativeSubscriptionControls remain publicly held; Rookie free",
+        "result": true
+      },
+      {
+        "name": "native background/resume preserved authentication and refreshed named catalog",
+        "result": true
+      }
+    ],
+    "errors": [],
+    "catalogs": {
+      "a": {
+        "offeringIdentifier": "onlyfast_monthly_v1",
+        "catalogToken": "[ephemeral native catalog token omitted]",
+        "expiresAt": 1792281010523,
+        "packages": [
+          {
+            "plan": "pro",
+            "packageIdentifier": "$rc_monthly",
+            "productIdentifier": "pro:pro",
+            "formattedPrice": "$4.99",
+            "currencyCode": "USD",
+            "billingPeriod": "P1M",
+            "optionIdentifier": "pro",
+            "trialEligibility": "unknown",
+            "eligibilityNote": "Only Google Play-returned offer phases are shown. Final eligibility and terms are confirmed by Google Play before purchase.",
+            "pricingPhases": [
+              {
+                "billingPeriod": "P1M",
+                "billingCycleCount": 0,
+                "recurrenceMode": "INFINITE_RECURRING",
+                "price": {
+                  "formatted": "$4.99",
+                  "amountMicros": 4990000,
+                  "currencyCode": "USD"
+                }
+              }
+            ]
+          },
+          {
+            "plan": "teams",
+            "packageIdentifier": "$rc_custom_teams_monthly",
+            "productIdentifier": "teams:teams",
+            "formattedPrice": "$7.99",
+            "currencyCode": "USD",
+            "billingPeriod": "P1M",
+            "optionIdentifier": "teams",
+            "trialEligibility": "unknown",
+            "eligibilityNote": "Only Google Play-returned offer phases are shown. Final eligibility and terms are confirmed by Google Play before purchase.",
+            "pricingPhases": [
+              {
+                "billingPeriod": "P1M",
+                "billingCycleCount": 0,
+                "recurrenceMode": "INFINITE_RECURRING",
+                "price": {
+                  "formatted": "$7.99",
+                  "amountMicros": 7990000,
+                  "currencyCode": "USD"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "b": {
+        "offeringIdentifier": "onlyfast_monthly_v1",
+        "catalogToken": "[ephemeral native catalog token omitted]",
+        "expiresAt": 1792281012991,
+        "packages": [
+          {
+            "plan": "pro",
+            "packageIdentifier": "$rc_monthly",
+            "productIdentifier": "pro:pro",
+            "formattedPrice": "$4.99",
+            "currencyCode": "USD",
+            "billingPeriod": "P1M",
+            "optionIdentifier": "pro",
+            "trialEligibility": "unknown",
+            "eligibilityNote": "Only Google Play-returned offer phases are shown. Final eligibility and terms are confirmed by Google Play before purchase.",
+            "pricingPhases": [
+              {
+                "billingPeriod": "P1M",
+                "billingCycleCount": 0,
+                "recurrenceMode": "INFINITE_RECURRING",
+                "price": {
+                  "formatted": "$4.99",
+                  "amountMicros": 4990000,
+                  "currencyCode": "USD"
+                }
+              }
+            ]
+          },
+          {
+            "plan": "teams",
+            "packageIdentifier": "$rc_custom_teams_monthly",
+            "productIdentifier": "teams:teams",
+            "formattedPrice": "$7.99",
+            "currencyCode": "USD",
+            "billingPeriod": "P1M",
+            "optionIdentifier": "teams",
+            "trialEligibility": "unknown",
+            "eligibilityNote": "Only Google Play-returned offer phases are shown. Final eligibility and terms are confirmed by Google Play before purchase.",
+            "pricingPhases": [
+              {
+                "billingPeriod": "P1M",
+                "billingCycleCount": 0,
+                "recurrenceMode": "INFINITE_RECURRING",
+                "price": {
+                  "formatted": "$7.99",
+                  "amountMicros": 7990000,
+                  "currencyCode": "USD"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "aAfterSwitch": {
+        "offeringIdentifier": "onlyfast_monthly_v1",
+        "catalogToken": "[ephemeral native catalog token omitted]",
+        "expiresAt": 1792281014853,
+        "packages": [
+          {
+            "plan": "pro",
+            "packageIdentifier": "$rc_monthly",
+            "productIdentifier": "pro:pro",
+            "formattedPrice": "$4.99",
+            "currencyCode": "USD",
+            "billingPeriod": "P1M",
+            "optionIdentifier": "pro",
+            "trialEligibility": "unknown",
+            "eligibilityNote": "Only Google Play-returned offer phases are shown. Final eligibility and terms are confirmed by Google Play before purchase.",
+            "pricingPhases": [
+              {
+                "billingPeriod": "P1M",
+                "billingCycleCount": 0,
+                "recurrenceMode": "INFINITE_RECURRING",
+                "price": {
+                  "formatted": "$4.99",
+                  "amountMicros": 4990000,
+                  "currencyCode": "USD"
+                }
+              }
+            ]
+          },
+          {
+            "plan": "teams",
+            "packageIdentifier": "$rc_custom_teams_monthly",
+            "productIdentifier": "teams:teams",
+            "formattedPrice": "$7.99",
+            "currencyCode": "USD",
+            "billingPeriod": "P1M",
+            "optionIdentifier": "teams",
+            "trialEligibility": "unknown",
+            "eligibilityNote": "Only Google Play-returned offer phases are shown. Final eligibility and terms are confirmed by Google Play before purchase.",
+            "pricingPhases": [
+              {
+                "billingPeriod": "P1M",
+                "billingCycleCount": 0,
+                "recurrenceMode": "INFINITE_RECURRING",
+                "price": {
+                  "formatted": "$7.99",
+                  "amountMicros": 7990000,
+                  "currencyCode": "USD"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "afterResume": {
+        "offeringIdentifier": "onlyfast_monthly_v1",
+        "catalogToken": "[ephemeral native catalog token omitted]",
+        "expiresAt": 1792281063108,
+        "packages": [
+          {
+            "plan": "pro",
+            "packageIdentifier": "$rc_monthly",
+            "productIdentifier": "pro:pro",
+            "formattedPrice": "$4.99",
+            "currencyCode": "USD",
+            "billingPeriod": "P1M",
+            "optionIdentifier": "pro",
+            "trialEligibility": "unknown",
+            "eligibilityNote": "Only Google Play-returned offer phases are shown. Final eligibility and terms are confirmed by Google Play before purchase.",
+            "pricingPhases": [
+              {
+                "billingPeriod": "P1M",
+                "billingCycleCount": 0,
+                "recurrenceMode": "INFINITE_RECURRING",
+                "price": {
+                  "formatted": "$4.99",
+                  "amountMicros": 4990000,
+                  "currencyCode": "USD"
+                }
+              }
+            ]
+          },
+          {
+            "plan": "teams",
+            "packageIdentifier": "$rc_custom_teams_monthly",
+            "productIdentifier": "teams:teams",
+            "formattedPrice": "$7.99",
+            "currencyCode": "USD",
+            "billingPeriod": "P1M",
+            "optionIdentifier": "teams",
+            "trialEligibility": "unknown",
+            "eligibilityNote": "Only Google Play-returned offer phases are shown. Final eligibility and terms are confirmed by Google Play before purchase.",
+            "pricingPhases": [
+              {
+                "billingPeriod": "P1M",
+                "billingCycleCount": 0,
+                "recurrenceMode": "INFINITE_RECURRING",
+                "price": {
+                  "formatted": "$7.99",
+                  "amountMicros": 7990000,
+                  "currencyCode": "USD"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "observations": {
+      "origin": "http://127.0.0.1:8086",
+      "path": "/",
+      "navigationCount": 0,
+      "publicPurchasesReady": false,
+      "nativeTransactionsEnabled": false,
+      "purchasesInvoked": 0,
+      "restoresInvoked": 0,
+      "operationCounts": {
+        "capabilities": 8,
+        "identify": 9,
+        "catalog": 4,
+        "invalidate": 3,
+        "clear": 1
+      },
+      "completedAt": "2026-10-17T23:45:17.417Z"
+    }
+  }
+}

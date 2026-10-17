@@ -1,5 +1,11 @@
 # Native RevenueCat release preparation — 2026-10-17
 
+Follow-up: the main-source Android bridge has now passed actual emulator catalog,
+identity, account-switch and background/resume checks. See
+[Android runtime validation](ANDROID_RELEASE_BRIDGE_RUNTIME_VALIDATION.md).
+No additional purchase or restore was performed; the preparation record below
+describes the original `86e794f4` work.
+
 Prepared on `codex/native-revenuecat-release`, from production main `9ae29d685bc68c265ef2c363e0943acb49573c3e`, in a new isolated worktree. No merge, push, deployment, store upload, production subscription write, or additional transaction was performed. Public purchases and restoration remain held.
 
 ## Reused and verified
