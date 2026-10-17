@@ -369,7 +369,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 onClick={() => { setMode('signup'); setError(''); setSuccess(''); }}
                 className="text-sm text-[#00A8E8] hover:underline focus:outline-none focus:ring-2 focus:ring-[#00A8E8] rounded px-2 py-1 block w-full"
               >
-                Don't have an account? Sign up
+                Create Account
               </button>
             )}
             {mode === 'signup' && (

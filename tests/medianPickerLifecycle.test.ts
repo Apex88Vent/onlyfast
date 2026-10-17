@@ -223,7 +223,7 @@ test('AppLayout saved-car loading is keyed by user ID, not Supabase User object 
   assert.match(source, /\.eq\('user_id', authenticatedUserId\)/);
   assert.match(
     source,
-    /\}, \[authChecked, authenticatedUserId, applySelectedCar\]\)/,
+    /\}, \[authChecked, authenticatedUserId, applySelectedCar, guestTutorialFinished\]\)/,
   );
   assert.doesNotMatch(
     source,

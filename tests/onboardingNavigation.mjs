@@ -50,13 +50,19 @@ const planSource = readFileSync(new URL('../src/lib/membership.ts', import.meta.
 new Function('exports', ts.transpileModule(planSource, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText)(membershipExports);
 const Plan = compile('components/PlanSelection.tsx', { '@/lib/membership': membershipExports, './MembershipComparison': { default: empty }, './MembershipPaidAction': { default: empty }, '@/lib/paymentVisibility': { hideExternalPayments: true }, '@/lib/nativePurchases': { nativePurchasesEnabled: false } });
 const Selection = compile('components/OnboardingFlow.tsx', { './PlanSelection': { default: Plan } });
-const Auth = ({ isOpen, onClose }) => isOpen ? React.createElement('button', { onClick: onClose }, 'Dismiss login') : null;
+const Auth = ({ isOpen, onClose }) => {
+  const [signup, setSignup] = React.useState(false);
+  return isOpen ? React.createElement('div', null,
+    React.createElement('h2', null, signup ? 'Create Account' : 'Sign In'),
+    React.createElement('button', { onClick: () => setSignup(true) }, 'Create Account'),
+    React.createElement('button', { onClick: onClose }, 'Dismiss login')) : null;
+};
 const App = compile('components/AppLayout.tsx', {
   './CustomCarSheet': { CustomCarGate: wrapper },
   '@/lib/supabase': { supabase: {
     auth: {
       onAuthStateChange: handler => { fixture.authListener = handler; return { data: { subscription: { unsubscribe() {} } } }; },
-      getSession: async () => ({ data: { session: fixture.user ? { user: fixture.user } : null } }),
+      getSession: async () => fixture.initialSession || ({ data: { session: fixture.user ? { user: fixture.user } : null } }),
       updateUser: async ({ data }) => { fixture.metadataWrites.push(data); fixture.user = { ...fixture.user, user_metadata: data }; fixture.authListener('USER_UPDATED', { user: fixture.user }); return { data: { user: fixture.user }, error: null }; },
     },
     from: () => {
@@ -79,8 +85,9 @@ const App = compile('components/AppLayout.tsx', {
   'react-router-dom': { useNavigate: () => () => { throw new Error('Unexpected route redirect'); } },
   '@/lib/membership': { getEffectiveTier: () => 'rookie', readMembership: () => ({}) },
   '@/lib/activeClass': {
-    getActiveClassState: async () => { if (fixture.offline) throw new Error('Offline'); return fixture.deferredState || { active_class: fixture.activeClass, unlimited: fixture.access === experiment, ...fixture.progress }; },
+    getActiveClassState: async () => { assert.ok(fixture.user, 'Guests cannot read account onboarding state'); if (fixture.offline) throw new Error('Offline'); return fixture.deferredState || { active_class: fixture.activeClass, unlimited: fixture.access === experiment, ...fixture.progress }; },
     saveOnboardingProgress: async (step, discipline, car) => {
+      assert.ok(fixture.user, 'Guests cannot write account onboarding state');
       if (fixture.rejectProgress) throw new Error('Offline');
       fixture.progressWrites.push({ step, discipline, car });
       fixture.progress = { onboarding_step: step, onboarding_discipline: discipline, onboarding_race_class: car };
@@ -121,7 +128,8 @@ function reset(options = {}) {
   fixture = { user: { id: 'new-id', user_metadata: {} }, activeClass: null, savedClass: null, access: CLOSED_BETA_ACCESS, betaLoading: false, metadataWrites: [], initializations: [], progress: {}, progressWrites: [], ...options };
   const store = new Map(Object.entries(options.storage || {}));
   globalThis.localStorage = { getItem: key => store.get(key) || null, setItem: (key, value) => store.set(key, value), removeItem: key => store.delete(key) };
-  globalThis.sessionStorage = { getItem: () => null, setItem() {} };
+  const session = new Map(Object.entries(options.session || {}));
+  globalThis.sessionStorage = { getItem: key => session.get(key) || null, setItem: (key, value) => session.set(key, value), removeItem: key => session.delete(key) };
   globalThis.document = { addEventListener() {}, removeEventListener() {} };
   globalThis.window = Object.assign(new EventTarget(), { setTimeout, clearTimeout });
   return store;
@@ -260,14 +268,22 @@ test('unconfigured legacy user goes to restored discipline selection', async () 
 test('login from onboarding rechecks the new account; dismissing login does not complete onboarding', async () => {
   reset({ user: null });
   const view = await mount();
-  await click(view.root, 'Create Account / Sign In');
+  assert.ok(heading(view.root, 'Welcome to OnlyFast'));
+  assert.equal(text(view.root).includes('Create an account or sign in to choose your discipline'), false);
+  await click(view.root, 'Already a member? Login here');
+  assert.ok(heading(view.root, 'Sign In'));
   await click(view.root, 'Dismiss login');
   assert.ok(heading(view.root, 'Welcome to OnlyFast'));
   assert.deepEqual(fixture.metadataWrites, []);
-  await click(view.root, 'Create Account / Sign In');
+  await click(view.root, 'Skip');
+  assert.deepEqual(fixture.progressWrites, []);
+  await click(view.root, 'Create Account');
+  assert.ok(heading(view.root, 'Create Account'));
   fixture.user = { id: 'signed-up-id', user_metadata: {} };
+  fixture.progress = { onboarding_step: 'tutorial' };
   await act(async () => fixture.authListener('SIGNED_IN', { user: fixture.user }));
-  assert.ok(heading(view.root, 'Welcome to OnlyFast'));
+  assert.ok(heading(view.root, 'Select Your Discipline'));
+  assert.deepEqual(fixture.progressWrites, [{ step: 'discipline', discipline: undefined, car: undefined }]);
   assert.equal(landing(view.root), false);
   await act(async () => view.unmount());
 });
@@ -283,6 +299,113 @@ test('changing authenticated identity clears the previous class; token refresh p
   await act(async () => fixture.authListener('SIGNED_IN', { user: fixture.user }));
   assert.ok(heading(view.root, 'Welcome to OnlyFast'));
   assert.equal(landing(view.root), false);
+  await act(async () => view.unmount());
+});
+
+for (const action of ['finish', 'skip']) {
+  test(`guest ${action}: original tutorial → existing auth → signup → discipline/class → free plan → landing`, async () => {
+    reset({ user: null, progress: { onboarding_step: 'tutorial' } });
+    const view = await mount();
+    assert.ok(heading(view.root, 'Welcome to OnlyFast'));
+    assert.ok(buttons(view.root).some(b => text(b) === 'Let’s Get Faster'));
+    if (action === 'finish') {
+      await requiredSlides(view.root);
+      for (let i = 0; i < 6; i++) await click(view.root, 'Continue');
+      await click(view.root, 'Select My Discipline');
+    } else await click(view.root, 'Skip');
+    assert.ok(heading(view.root, 'Sign In'));
+    assert.equal(heading(view.root, 'Welcome to OnlyFast'), false);
+    assert.equal(heading(view.root, 'Select Your Discipline'), false);
+    assert.deepEqual(fixture.progressWrites, []);
+    assert.deepEqual(fixture.initializations, []);
+    await click(view.root, 'Create Account');
+    fixture.user = { id: `signup-${action}`, user_metadata: {} };
+    await act(async () => fixture.authListener('SIGNED_IN', { user: fixture.user }));
+    assert.ok(heading(view.root, 'Select Your Discipline'));
+    assert.equal(heading(view.root, 'Welcome to OnlyFast'), false);
+    assert.equal(landing(view.root), false);
+    await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith('Dirt Track Oval -')).props.onClick());
+    await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith('Dwarf Cars -')).props.onClick());
+    assert.ok(heading(view.root, 'Choose Your OnlyFast Plan'));
+    assert.equal(buttons(view.root).filter(b => text(b) === 'Coming Soon' && b.props.disabled && !b.props.onClick).length, 2);
+    assert.deepEqual(fixture.initializations, []);
+    await click(view.root, 'Continue Free');
+    assert.ok(landing(view.root));
+    await act(async () => view.unmount());
+    const returning = await mount();
+    assert.ok(landing(returning.root));
+    await act(async () => returning.unmount());
+  });
+}
+
+test('guest navigation survives email-confirmation wait/reload but never overrides a saved account step', async () => {
+  reset({ user: null, progress: { onboarding_step: 'tutorial' } });
+  let view = await mount();
+  await click(view.root, 'Skip');
+  await click(view.root, 'Create Account');
+  // Registration requiring email confirmation has not authenticated a user.
+  assert.deepEqual(fixture.progressWrites, []);
+  await act(async () => view.unmount());
+  sessionStorage.removeItem('onlyfast_guest_tutorial_seen'); // Email link opens another tab.
+  view = await mount();
+  assert.ok(heading(view.root, 'Sign In'));
+  assert.equal(heading(view.root, 'Welcome to OnlyFast'), false);
+  fixture.user = { id: 'verified', user_metadata: {} };
+  fixture.progress = { onboarding_step: 'vehicle', onboarding_discipline: 'road_course' };
+  await act(async () => fixture.authListener('SIGNED_IN', { user: fixture.user }));
+  assert.ok(heading(view.root, 'Select Your Car'));
+  assert.deepEqual(fixture.progressWrites, []);
+  assert.equal(landing(view.root), false);
+  await act(async () => view.unmount());
+});
+
+test('completed account signs in directly to landing; logout/account switch clears the previous racing profile', async () => {
+  reset({ user: null });
+  const view = await mount();
+  await click(view.root, 'Already a member? Login here');
+  fixture.user = { id: 'completed', user_metadata: {} };
+  fixture.activeClass = 'Dwarf Cars';
+  fixture.progress = { onboarding_step: 'complete' };
+  await act(async () => fixture.authListener('SIGNED_IN', { user: fixture.user }));
+  assert.ok(landing(view.root));
+  assert.deepEqual(fixture.progressWrites, []);
+  fixture.user = null;
+  await act(async () => fixture.authListener('SIGNED_OUT', null));
+  assert.ok(heading(view.root, 'Welcome to OnlyFast'));
+  assert.equal(landing(view.root), false);
+  await click(view.root, 'Skip');
+  fixture.user = { id: 'other', user_metadata: {} };
+  fixture.activeClass = null;
+  fixture.progress = { onboarding_step: 'plan', onboarding_discipline: 'road_course', onboarding_race_class: 'road_gt3' };
+  await act(async () => fixture.authListener('SIGNED_IN', { user: fixture.user }));
+  assert.ok(heading(view.root, 'Choose Your OnlyFast Plan'));
+  assert.equal(landing(view.root), false);
+  assert.deepEqual(fixture.progressWrites, []);
+  await act(async () => view.unmount());
+});
+
+test('late initial session cannot restore an earlier identity after sign-in', async () => {
+  let resolveInitial;
+  reset({ user: null, initialSession: new Promise(resolve => { resolveInitial = resolve; }) });
+  const view = await mount();
+  fixture.user = { id: 'current', user_metadata: {} };
+  fixture.activeClass = 'road_gt3';
+  fixture.progress = { onboarding_step: 'complete' };
+  await act(async () => fixture.authListener('SIGNED_IN', { user: fixture.user }));
+  assert.ok(landing(view.root));
+  await act(async () => resolveInitial({ data: { session: { user: { id: 'old', user_metadata: {} } } } }));
+  assert.ok(landing(view.root));
+  assert.equal(text(view.root.findByProps({ 'data-landing': true })), 'Landing: road_gt3');
+  await act(async () => view.unmount());
+});
+
+test('navigation storage cannot complete an unconfigured account or authorize paid access', async () => {
+  reset({ session: { onlyfast_guest_tutorial_seen: 'true' }, progress: { onboarding_step: 'tutorial' } });
+  const view = await mount();
+  assert.ok(heading(view.root, 'Select Your Discipline'));
+  assert.equal(landing(view.root), false);
+  assert.deepEqual(fixture.initializations, []);
+  assert.deepEqual(fixture.metadataWrites, []);
   await act(async () => view.unmount());
 });
 
