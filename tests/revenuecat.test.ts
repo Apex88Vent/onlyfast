@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { authorizationMatches, mapRevenueCatSnapshot, revenueCatConfig, webhookUserIds, type SubscriberResponse } from '../supabase/functions/_shared/revenuecat.ts';
-import { NativePurchaseController, NativePurchaseError, type RevenueCatBridge } from '../src/lib/nativePurchaseController.ts';
 import { isMedianUserAgent, nativePlatform } from '../src/lib/nativeEnvironment.ts';
 
 const config = { apiKey: 'server-test-key', proEntitlement: 'pro', teamEntitlement: 'team', allowSandbox: false };
@@ -89,92 +88,7 @@ test('webhook authorization rejects missing and incorrect secrets', () => {
   assert.equal(authorizationMatches('Bearer right', 'Bearer right'), true);
 });
 
-function harness() {
-  const calls: string[] = [];
-  const bridge: RevenueCatBridge = {
-    async isInitialized() { return { initialized: true, apiKey: 'appl_test' }; },
-    async configure({ appUserID }) { calls.push('configure:' + appUserID); return { success: true }; },
-    async login({ appUserID }) { calls.push('login:' + appUserID); return { success: true }; },
-    async logout() { calls.push('logout'); return { success: true }; },
-    async getOfferings() { return { success: true, identifiers: ['pro_monthly', 'team_monthly'] }; },
-    async presentPaywall() { calls.push('paywall'); return { success: true }; },
-    async restorePurchases() { calls.push('restore'); return { success: true }; },
-  };
-  const controller = new NativePurchaseController(async () => bridge, () => 'appl_test');
-  return { calls, bridge, controller };
-}
-test('purchase and restore always identify the authenticated account first', async () => {
-  const { calls, controller } = harness();
-  await assert.rejects(controller.run('a', 'purchase'), /account changed/);
-  await controller.setUser('a'); await controller.run('a', 'purchase'); await controller.run('a', 'restore');
-  assert.deepEqual(calls, ['login:a', 'login:a', 'paywall', 'login:a', 'restore']);
-});
-test('app restart logs into the current UUID even if the SDK was already initialized', async () => {
-  const { controller, calls } = harness(); await controller.setUser('returning-user');
-  assert.deepEqual(calls, ['login:returning-user']);
-});
-test('first launch configures the SDK with the Supabase UUID', async () => {
-  const { controller, bridge, calls } = harness();
-  bridge.isInitialized = async () => ({ initialized: false });
-  await controller.setUser('new-user'); assert.deepEqual(calls, ['configure:new-user']);
-});
-test('logout and switching accounts clear the previous identity before the next purchase', async () => {
-  const { controller, calls } = harness();
-  await controller.setUser('a'); await controller.setUser(null); await controller.setUser('b');
-  await assert.rejects(controller.run('a', 'purchase'));
-  await controller.run('b', 'restore');
-  assert.deepEqual(calls, ['login:a', 'logout', 'login:b', 'login:b', 'restore']);
-});
-test('a purchase response after account switching is discarded', async () => {
-  const { controller, bridge } = harness();
-  let finish!: (value: { success: boolean }) => void;
-  let opened!: () => void;
-  const started = new Promise<void>(resolve => { opened = resolve; });
-  bridge.presentPaywall = () => { opened(); return new Promise(resolve => { finish = resolve; }); };
-  await controller.setUser('a');
-  const purchase = controller.run('a', 'purchase');
-  await started;
-  const switched = controller.setUser('b');
-  finish({ success: true });
-  await assert.rejects(purchase, /account changed/); await switched;
-});
-test('cancellation is separate from purchase failure and neither succeeds', async () => {
-  const { controller, bridge } = harness(); await controller.setUser('a');
-  bridge.presentPaywall = async () => ({ success: false, error: { code: 'PURCHASE_CANCELLED' } });
-  await assert.rejects(controller.run('a', 'purchase'), error => error instanceof NativePurchaseError && error.cancelled);
-  bridge.presentPaywall = async () => ({ success: false, error: { code: 'STORE_PROBLEM', message: 'Store unavailable' } });
-  await assert.rejects(controller.run('a', 'purchase'), /Store unavailable/);
-});
-test('identity failures prevent paywall and restore calls', async () => {
-  const { controller, bridge, calls } = harness();
-  bridge.login = async () => ({ success: false, error: { message: 'Login failed' } });
-  await assert.rejects(controller.setUser('a'), /Login failed/);
-  await assert.rejects(controller.run('a', 'purchase'), /Login failed/);
-  await assert.rejects(controller.run('a', 'restore'), /Login failed/);
-  assert.deepEqual(calls, []);
-});
-
-test('Median rejected response objects retain cancellation and useful error messages', async () => {
-  const { controller, bridge } = harness(); await controller.setUser('a');
-  bridge.presentPaywall = async () => { throw { success: false, error: { code: '1', message: 'Cancelled by user' } }; };
-  await assert.rejects(controller.run('a', 'purchase'), error => error instanceof NativePurchaseError && error.cancelled);
-  bridge.restorePurchases = async () => { throw { success: false, error: { code: 'STORE_ERROR', message: 'Store unavailable' } }; };
-  await assert.rejects(controller.run('a', 'restore'), /Store unavailable/);
-});
-
-test('absent feature flag blocks purchases and restore before any bridge call', async () => {
-  let calls = 0;
-  const controller = new NativePurchaseController(async () => { calls++; throw new Error('Must not reach bridge'); }, () => 'public-key', () => false);
-  await assert.rejects(controller.run('a', 'purchase'), /coming soon/);
-  await assert.rejects(controller.run('a', 'restore'), /coming soon/);
-  assert.equal(calls, 0);
-});
-
-test('store-pending purchases remain pending and never resolve as confirmed access', async () => {
-  const { controller, bridge } = harness(); await controller.setUser('a');
-  bridge.presentPaywall = async () => ({ success: false, error: { code: 20 } });
-  await assert.rejects(controller.run('a', 'purchase'), error => error instanceof NativePurchaseError && error.pending && !error.cancelled && /server confirmation/.test(error.message));
-});
+// Versioned native purchase coverage lives in releaseNativeBilling.test.ts.
 
 test('default entitlements match OnlyFast and Teams wins when both are granted', () => {
   const configured = revenueCatConfig(key => key === 'REVENUECAT_SECRET_API_KEY' ? 'server-test-key' : undefined);

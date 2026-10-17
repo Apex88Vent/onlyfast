@@ -1,36 +1,19 @@
 import { supabase } from './supabase';
 import { hideExternalPayments } from './paymentVisibility';
-import { nativePlatform } from './nativeEnvironment';
-import { NATIVE_PURCHASES_READY, NativePurchaseController, type RevenueCatBridge } from './nativePurchaseController';
+import { NATIVE_PURCHASES_READY } from './nativePurchaseController';
+import { ReleaseNativePurchaseController } from './releaseNativeBilling';
+import { getReleaseBillingBridge } from './releaseNativeTransport';
 import { watchMembershipLifecycle } from './membershipLifecycle';
 import { clearTrustedMembership, getMembershipExpiration, notifyMembershipExpiration } from './trustedMembership';
 import { syncMembershipFromSubscription } from './subscription';
 
-// A build flag alone must not release the incomplete generic-paywall flow.
-// See docs/ONBOARDING_SUBSCRIPTION_INTEGRATION.md for the release bridge blocker.
+// A build flag alone must not release purchasing. Both wrapper packaging and
+// transaction approval are still required; see docs/NATIVE_RELEASE_PREPARATION.md.
 export const nativePurchasesEnabled = NATIVE_PURCHASES_READY && hideExternalPayments && import.meta.env.VITE_REVENUECAT_ENABLED === 'true';
 
-async function getBridge(): Promise<RevenueCatBridge> {
-  const deadline = Date.now() + 8000;
-  while (Date.now() < deadline) {
-    const host = window as unknown as { median?: { revenueCat?: RevenueCatBridge }; gonative?: { revenueCat?: RevenueCatBridge } };
-    const bridge = host.median?.revenueCat || host.gonative?.revenueCat;
-    if (bridge) {
-      if (!['configure', 'isInitialized', 'login', 'logout', 'getOfferings', 'presentPaywall', 'restorePurchases']
-        .every(key => typeof bridge[key as keyof RevenueCatBridge] === 'function')) {
-        throw new Error('Please update OnlyFast to use in-app subscriptions.');
-      }
-      return bridge;
-    }
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
-  throw new Error('In-app subscriptions are unavailable in this version. Please update OnlyFast.');
-}
-
-export const nativePurchases = new NativePurchaseController(getBridge, () => {
-  const platform = nativePlatform(navigator.userAgent, navigator.maxTouchPoints);
-  return platform === 'ios' ? import.meta.env.VITE_REVENUECAT_IOS_API_KEY || '' :
-    platform === 'android' ? import.meta.env.VITE_REVENUECAT_ANDROID_API_KEY || '' : '';
+export const nativePurchases = new ReleaseNativePurchaseController(getReleaseBillingBridge, async () => {
+  const { data, error } = await supabase.auth.getSession();
+  return error || !data.session ? null : { userId: data.session.user.id, accessToken: data.session.access_token };
 }, () => nativePurchasesEnabled);
 
 export async function syncNativeSubscription(userId: string, notify = true): Promise<void> {
@@ -62,7 +45,8 @@ export function watchNativePurchases(): () => void {
       if ((await supabase.auth.getSession()).data.session?.user.id !== id) return;
       // Existing native subscribers can refresh while new purchases are held.
       // Stripe, Rookie and promotional memberships never trigger native billing.
-      if (hideExternalPayments && status?.row?.subscription_source === 'revenuecat') {
+      if (hideExternalPayments && (status?.row?.subscription_source === 'revenuecat' ||
+          (nativePurchasesEnabled && status && !status.isPaid))) {
         try { await syncNativeSubscription(id, false); }
         finally { await syncMembershipFromSubscription(); }
       }

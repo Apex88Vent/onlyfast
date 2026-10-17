@@ -2,15 +2,18 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
-import { NATIVE_PURCHASES_READY, NativePurchaseController } from '../src/lib/nativePurchaseController.ts';
+import { NATIVE_PURCHASES_READY } from '../src/lib/nativePurchaseController.ts';
+import { ReleaseNativePurchaseController } from '../src/lib/releaseNativeBilling.ts';
 
 function client() {
   let calls = 0;
   const code = ts.transpileModule(readFileSync(new URL('../src/lib/nativePurchases.ts', import.meta.url), 'utf8')
     .replaceAll('import.meta.env', '__env'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-  const mod = { exports: {} as { nativePurchasesEnabled: boolean; nativePurchases: NativePurchaseController; syncNativeSubscription(id: string): Promise<void> } };
+  const mod = { exports: {} as { nativePurchasesEnabled: boolean; nativePurchases: ReleaseNativePurchaseController; syncNativeSubscription(id: string): Promise<void> } };
   const modules = {
-    './nativePurchaseController': { NATIVE_PURCHASES_READY, NativePurchaseController },
+    './nativePurchaseController': { NATIVE_PURCHASES_READY },
+    './releaseNativeBilling': { ReleaseNativePurchaseController },
+    './releaseNativeTransport': { getReleaseBillingBridge: async () => { throw Error('Held release must not call native code'); } },
     './paymentVisibility': { hideExternalPayments: true },
     './nativeEnvironment': { nativePlatform: () => 'android' },
     './membershipLifecycle': {}, './trustedMembership': {}, './subscription': {},

@@ -4,9 +4,11 @@ import { supabase } from '@/lib/supabase';
 import { fetchUserSubscription, deriveAccountStatus, syncMembershipFromSubscription, type AccountStatus } from '@/lib/subscription';
 import NativeSubscriptionControls from './NativeSubscriptionControls';
 import StripeBuyButton from './StripeBuyButton';
+import type { StoreCatalog } from '@/lib/releaseNativeBilling';
 
-export default function MembershipPaidAction({ userId, tier, onVerified, checkoutSelected, onSelect }: {
+export default function MembershipPaidAction({ userId, tier, onVerified, checkoutSelected, onSelect, nativeCatalog }: {
   userId: string; tier: 'pro' | 'team'; onVerified: () => void | Promise<void>; checkoutSelected: boolean; onSelect: () => void;
+  nativeCatalog?: StoreCatalog;
 }) {
   const [account, setAccount] = useState<AccountStatus | null>(null);
   const [message, setMessage] = useState('');
@@ -22,6 +24,7 @@ export default function MembershipPaidAction({ userId, tier, onVerified, checkou
   }, [userId]);
 
   if (hideExternalPayments) return <NativeSubscriptionControls userId={userId} purchaseOnly
+    purchasePlan={tier === 'team' ? 'teams' : 'pro'} catalog={nativeCatalog}
     purchaseLabel={tier === 'pro' ? 'Choose Pro' : 'Choose Teams'} onVerified={onVerified} />;
 
   const choose = async () => {

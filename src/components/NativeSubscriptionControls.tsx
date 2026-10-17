@@ -3,6 +3,7 @@ import { fetchUserSubscription, deriveAccountStatus, syncMembershipFromSubscript
 import { nativePurchases, nativePurchasesEnabled, syncNativeSubscription } from '@/lib/nativePurchases';
 import { NativePurchaseError } from '@/lib/nativePurchaseController';
 import { supabase } from '@/lib/supabase';
+import type { StoreCatalog, StorePlan } from '@/lib/releaseNativeBilling';
 
 async function loadStatus(userId: string) {
   const initial = await supabase.auth.getSession();
@@ -13,8 +14,9 @@ async function loadStatus(userId: string) {
   return status;
 }
 
-export default function NativeSubscriptionControls({ userId, purchaseOnly = false, hidePurchase = false, purchaseLabel = 'View Pro and Teams subscriptions', onVerified }: {
+export default function NativeSubscriptionControls({ userId, purchaseOnly = false, hidePurchase = false, purchaseLabel = 'View Pro and Teams subscriptions', purchasePlan, catalog, onVerified }: {
   userId: string; purchaseOnly?: boolean; hidePurchase?: boolean; purchaseLabel?: string; onVerified?: () => void | Promise<void>;
+  purchasePlan?: StorePlan; catalog?: StoreCatalog;
 }) {
   const [account, setAccount] = useState<AccountStatus | null>(null);
   const [busy, setBusy] = useState(false);
@@ -70,7 +72,7 @@ export default function NativeSubscriptionControls({ userId, purchaseOnly = fals
         }
         await nativePurchases.setUser(userId);
         if (generation.current !== revision) return;
-        await nativePurchases.run(userId, action);
+        await nativePurchases.run(userId, action, purchasePlan, catalog);
       }
       if (nativePurchasesEnabled || account?.row?.subscription_source === 'revenuecat') await syncNativeSubscription(userId);
       const status = await loadStatus(userId);
@@ -101,7 +103,7 @@ export default function NativeSubscriptionControls({ userId, purchaseOnly = fals
         {account.row?.subscription_source === 'revenuecat' ?
           'Manage or cancel your plan in Apple Settings → Subscriptions or Google Play → Payments & subscriptions, using the store where you purchased.' :
           'Your existing membership is available in this app. No additional purchase is needed. Contact admin@onlyfast.app for account support.'}
-      </p> : !hidePurchase && <button disabled={!nativePurchasesEnabled || busy || !account || loadError} onClick={() => void run('purchase')}
+      </p> : !hidePurchase && <button disabled={!nativePurchasesEnabled || busy || !account || loadError || !purchasePlan || !catalog} onClick={() => void run('purchase')}
         className="w-full rounded-xl bg-[#00A8E8] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">
         {busy ? 'Please wait…' : nativePurchasesEnabled ? purchaseLabel : 'Coming Soon'}
       </button>}

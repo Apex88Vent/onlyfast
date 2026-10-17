@@ -3,7 +3,8 @@ import { PLANS } from '@/lib/membership';
 import MembershipComparison from './MembershipComparison';
 import MembershipPaidAction from './MembershipPaidAction';
 import { hideExternalPayments } from '@/lib/paymentVisibility';
-import { nativePurchasesEnabled } from '@/lib/nativePurchases';
+import { nativePurchasesEnabled, nativePurchases } from '@/lib/nativePurchases';
+import type { StoreCatalog } from '@/lib/releaseNativeBilling';
 
 interface PlanSelectionProps {
   onComplete: () => void | Promise<void>;
@@ -24,6 +25,21 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userI
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [checkoutTier, setCheckoutTier] = useState<'pro' | 'team' | null>(null);
+  const [nativeCatalog, setNativeCatalog] = useState<StoreCatalog>();
+  const [catalogError, setCatalogError] = useState('');
+  useEffect(() => {
+    setNativeCatalog(undefined); setCatalogError('');
+    if (!nativePurchasesEnabled || !hideExternalPayments || !userId) return;
+    let active = true;
+    void (async () => {
+      try {
+        await nativePurchases.setUser(userId);
+        const catalog = await nativePurchases.getCatalog(userId);
+        if (active) setNativeCatalog(catalog);
+      } catch { if (active) setCatalogError('Store plans could not be loaded. Check your connection and reopen this screen.'); }
+    })();
+    return () => { active = false; };
+  }, [userId]);
   const submitting = useRef(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => { headingRef.current?.focus(); }, []);
@@ -64,6 +80,8 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userI
           const isRecommended = plan.recommended;
           const comingSoon = plan.tier !== 'rookie' &&
             (hideExternalPayments ? !nativePurchasesEnabled : !allowWebCheckout);
+          const nativePlan = nativeCatalog?.packages.find(item => item.plan === (plan.tier === 'team' ? 'teams' : plan.tier));
+          const useStoreTerms = hideExternalPayments && nativePurchasesEnabled && plan.tier !== 'rookie';
           return (
             <div
               key={plan.tier}
@@ -92,15 +110,19 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userI
                   {plan.tier === 'team' ? 'Teams' : plan.displayName}
                 </h3>
                 <p className="text-3xl font-extrabold text-[#1A1B23] mt-2">
-                  {plan.priceDisplay === 'FREE' ? 'FREE' : plan.priceDisplay.split('/')[0]}
-                  {plan.priceDisplay !== 'FREE' && (
+                  {useStoreTerms ? nativePlan?.formattedPrice || 'Loading store price…' : plan.priceDisplay === 'FREE' ? 'FREE' : plan.priceDisplay.split('/')[0]}
+                  {useStoreTerms && nativePlan && <span className="text-base font-medium text-[#6B7280]"> / {nativePlan.billingPeriod}</span>}
+                  {!useStoreTerms && plan.priceDisplay !== 'FREE' && (
                     <span className="text-base font-medium text-[#6B7280]"> / month</span>
                   )}
                 </p>
               </div>
 
               <p className="text-sm text-[#6B7280] mb-4">{plan.description}</p>
-              {plan.tier !== 'rookie' && <p className="text-xs text-[#6B7280] mb-3">Seven-day introductory trial where eligible when store subscriptions launch. Store prices and eligibility will be shown before purchase.</p>}
+              {plan.tier !== 'rookie' && <p className="text-xs text-[#6B7280] mb-3">{useStoreTerms ? nativePlan ?
+                `${nativePlan.pricingPhases.map(phase => `${phase.price.formatted} / ${phase.billingPeriod}${phase.billingCycleCount ? ` × ${phase.billingCycleCount}` : ''}`).join('; ')}. ${nativePlan.eligibilityNote}` :
+                catalogError || 'Waiting for the native store catalog. No trial eligibility is assumed.' :
+                'Seven-day introductory trial where eligible when store subscriptions launch. Store prices and eligibility will be shown before purchase.'}</p>}
               {plan.tier === 'rookie' && <p className="text-xs text-[#6B7280] mb-3">Setup export, leaderboard uploads and badges, and advanced profiles are locked. Pro or Teams unlocks them.</p>}
               <ul className="space-y-2 mb-6 flex-1">
                 {plan.synopsis.map((line, i) => (
@@ -113,7 +135,7 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userI
                 ))}
               </ul>
 
-              {plan.tier !== 'rookie' && userId && !comingSoon ? <MembershipPaidAction key={`${userId}:${plan.tier}`} userId={userId} tier={plan.tier} onVerified={onPaidComplete || onComplete} checkoutSelected={checkoutTier === plan.tier} onSelect={() => setCheckoutTier(plan.tier as 'pro' | 'team')} /> : <button
+              {plan.tier !== 'rookie' && userId && !comingSoon ? <MembershipPaidAction key={`${userId}:${plan.tier}`} userId={userId} tier={plan.tier} nativeCatalog={nativeCatalog} onVerified={onPaidComplete || onComplete} checkoutSelected={checkoutTier === plan.tier} onSelect={() => setCheckoutTier(plan.tier as 'pro' | 'team')} /> : <button
                 onClick={plan.tier === 'rookie' ? handleContinue : undefined}
                 disabled={saving || plan.tier !== 'rookie'}
                 className={`w-full py-3 rounded-xl font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2 disabled:opacity-50 ${
