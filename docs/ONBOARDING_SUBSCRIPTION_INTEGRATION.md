@@ -5,6 +5,11 @@ published, uploaded, submitted, purchased or restored during this task.
 
 Final actual-app review and release scope: [ONBOARDING_RELEASE_REVIEW.md](ONBOARDING_RELEASE_REVIEW.md).
 
+Native release direction update: the custom named-catalog/source-build requirement
+below is historical and superseded by [MEDIAN_PAYWALL_RELEASE_PLAN.md](MEDIAN_PAYWALL_RELEASE_PLAN.md).
+The revised approach reuses Median's stock RevenueCat paywall with approved current
+offering configuration. Public purchases remain held; no live configuration changed.
+
 ## What changed
 
 The main application now keeps one membership lifecycle across all routes,

@@ -6,8 +6,8 @@ import { watchMembershipLifecycle } from './membershipLifecycle';
 import { clearTrustedMembership, getMembershipExpiration, notifyMembershipExpiration } from './trustedMembership';
 import { syncMembershipFromSubscription } from './subscription';
 
-// A build flag alone must not release the incomplete generic-paywall flow.
-// See docs/ONBOARDING_SUBSCRIPTION_INTEGRATION.md for the release bridge blocker.
+// A build flag alone must not release purchases. See the reviewed activation
+// procedure in docs/MEDIAN_PAYWALL_RELEASE_PLAN.md before changing the hold.
 export const nativePurchasesEnabled = NATIVE_PURCHASES_READY && hideExternalPayments && import.meta.env.VITE_REVENUECAT_ENABLED === 'true';
 
 async function getBridge(): Promise<RevenueCatBridge> {
@@ -16,7 +16,7 @@ async function getBridge(): Promise<RevenueCatBridge> {
     const host = window as unknown as { median?: { revenueCat?: RevenueCatBridge }; gonative?: { revenueCat?: RevenueCatBridge } };
     const bridge = host.median?.revenueCat || host.gonative?.revenueCat;
     if (bridge) {
-      if (!['configure', 'isInitialized', 'login', 'logout', 'getOfferings', 'presentPaywall', 'restorePurchases']
+      if (!['configure', 'isInitialized', 'login', 'logout', 'presentPaywall', 'restorePurchases']
         .every(key => typeof bridge[key as keyof RevenueCatBridge] === 'function')) {
         throw new Error('Please update OnlyFast to use in-app subscriptions.');
       }

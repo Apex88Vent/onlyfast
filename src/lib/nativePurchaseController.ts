@@ -1,6 +1,6 @@
 // API verified against Median's official revenueCat plugin/types and demo.
-// Public hold belongs to the release code, independently of diagnostic builds
-// and environment flags. The named-offering release bridge is still required.
+// Public hold is independent of environment flags. Release requires the approved
+// current offering and published paywall; RevenueCatUI owns products and prices.
 export const NATIVE_PURCHASES_READY = false;
 export type NativeResult = { success: boolean; error?: { code?: string | number; message?: string } };
 export interface RevenueCatBridge {
@@ -8,8 +8,7 @@ export interface RevenueCatBridge {
   isInitialized(): Promise<{ initialized: boolean; apiKey?: string }>;
   login(params: { appUserID: string }): Promise<NativeResult>;
   logout(): Promise<NativeResult>;
-  getOfferings(): Promise<NativeResult & { identifiers?: string[] }>;
-  presentPaywall(params?: { onCancelPurchase?: () => void }): Promise<NativeResult>;
+  presentPaywall(): Promise<NativeResult>;
   restorePurchases(): Promise<NativeResult>;
 }
 
@@ -22,7 +21,8 @@ export class NativePurchaseError extends Error {
 function checked(result: NativeResult): void {
   if (result?.success === true && !result.error) return;
   const code = String(result?.error?.code || '').toLowerCase();
-  const cancelled = code === '1' || /cancel/.test(code);
+  // Median Android's paywall dismissal returns only error.message: 'User cancelled'.
+  const cancelled = code === '1' || /cancel/.test(code) || /\b(?:user|purchase) cancel(?:led|ed)\b/i.test(result?.error?.message || '');
   const pending = code === '20' || /payment.?pending/.test(code);
   throw new NativePurchaseError(cancelled ? 'Purchase cancelled.' : pending ?
     'Payment is pending store approval. Do not purchase again. Use Refresh subscription after approval; access requires server confirmation.' :
@@ -31,6 +31,7 @@ function checked(result: NativeResult): void {
 
 export class NativePurchaseController {
   private desiredUser: string | null = null;
+  private identityRevision = 0;
   private queue: Promise<unknown> = Promise.resolve();
   private poisoned = false;
   private purchasing = false;
@@ -67,29 +68,40 @@ export class NativePurchaseController {
     } finally { clearTimeout(timer!); }
   }
 
-  private async identify(userId: string): Promise<RevenueCatBridge> {
+  private assertIdentity(userId: string, revision: number): void {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) throw new Error('A signed-in OnlyFast account is required.');
+    if (this.desiredUser !== userId || this.identityRevision !== revision) throw new Error('Your account changed. Please try again.');
+  }
+
+  private async identify(userId: string, revision: number): Promise<RevenueCatBridge> {
     if (this.poisoned) throw new Error('Please close and reopen the app before trying again.');
-    if (this.desiredUser !== userId) throw new Error('Your account changed. Please try again.');
+    this.assertIdentity(userId, revision);
     const bridge = await this.bridge();
+    this.assertIdentity(userId, revision);
     const key = this.apiKey();
     if (!key) throw new Error('Subscriptions are being set up. Please try again later.');
     const state = await this.call(bridge.isInitialized());
+    this.assertIdentity(userId, revision);
     if (!state.initialized) checked(await this.call(bridge.configure({ apiKey: key, appUserID: userId })));
     else {
       if (state.apiKey !== key) throw new Error('Store configuration changed. Please close and reopen the app.');
       checked(await this.call(bridge.login({ appUserID: userId })));
     }
-    if (this.desiredUser !== userId) throw new Error('Your account changed. Please try again.');
+    this.assertIdentity(userId, revision);
     return bridge;
   }
 
   setUser(userId: string | null): Promise<void> {
+    if (this.desiredUser !== userId) this.identityRevision++;
     this.desiredUser = userId; // Invalidate in-flight results synchronously.
+    const revision = this.identityRevision;
     return this.enqueue(async () => {
-      if (this.poisoned || this.desiredUser !== userId) return;
-      if (userId) { await this.identify(userId); return; }
+      if (this.poisoned || this.identityRevision !== revision) return;
+      if (userId !== null) { await this.identify(userId, revision); return; }
       const bridge = await this.bridge();
+      if (this.identityRevision !== revision) return;
       const state = await this.call(bridge.isInitialized());
+      if (this.identityRevision !== revision) return;
       if (state.initialized) checked(await this.call(bridge.logout()));
     });
   }
@@ -98,21 +110,18 @@ export class NativePurchaseController {
     if (!this.enabled()) throw new Error('In-app subscriptions are coming soon.');
     if (this.purchasing) throw new Error('A store request is already open.');
     this.purchasing = true;
+    const revision = this.identityRevision;
     try {
       await this.enqueue(async () => {
         if (!this.enabled()) throw new Error('In-app subscriptions are coming soon.');
-        const bridge = await this.identify(userId);
+        const bridge = await this.identify(userId, revision);
         let result: NativeResult;
         if (action === 'purchase') {
-          const offerings = await this.call(bridge.getOfferings());
-          checked(offerings);
-          if (!offerings.identifiers?.length) throw new Error('No store plans are available yet. Please try again later.');
-          if (this.desiredUser !== userId) throw new Error('Your account changed. Please try again.');
-          let cancelled = false;
-          result = await this.call(bridge.presentPaywall({ onCancelPurchase: () => { cancelled = true; } }), 300_000);
-          if (cancelled && !result?.success) throw new NativePurchaseError('Purchase cancelled.', true);
+          // The stock paywall loads the current offering and performs the selected
+          // purchase itself. Do not fetch/rebuild its catalog or purchase twice.
+          result = await this.call(bridge.presentPaywall(), 300_000);
         } else result = await this.call(bridge.restorePurchases(), 120_000);
-        if (this.desiredUser !== userId) throw new Error('Your account changed. Sign in to the purchasing account to see its subscription.');
+        this.assertIdentity(userId, revision);
         checked(result);
       });
     } finally { this.purchasing = false; }
