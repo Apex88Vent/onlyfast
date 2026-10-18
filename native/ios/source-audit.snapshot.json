@@ -1,0 +1,73 @@
+{
+  "archiveNames": [
+    "ios_source.tar.gz",
+    "ios_source (1).tar.gz"
+  ],
+  "location": "C:/Users/c_mar/Downloads",
+  "archiveSha256": "391BE0CFDB9BCA5C7BD5EB043B7CE98328B9E66ED5AD3500172C5AFF8A292B1D",
+  "originalArchivesModified": false,
+  "nativeBuildExecuted": false,
+  "inspection": {
+    "source": "tmp/ios-source-audit/ios",
+    "expectedBundleId": "app.onlyfast",
+    "workspaces": [
+      "OnlyFast.xcworkspace"
+    ],
+    "projects": [
+      "OnlyFast.xcodeproj"
+    ],
+    "appConfig": {
+      "iosBundleId": "co.median.ios.bnkramx",
+      "initialUrl": "https://onlyfast.app?nativeApp=true",
+      "injectMedianJS": true,
+      "revenueCatActive": false
+    },
+    "bundleCandidates": [
+      "co.median.ios.bnkramx"
+    ],
+    "buildSystem": "Tuist / Swift Package Manager",
+    "dependencyMetadataCore": "2.4.1",
+    "pluginMetadataNames": [],
+    "resolvedPackages": [
+      {
+        "identity": "median.go-native-core",
+        "version": "3.0.10"
+      },
+      {
+        "identity": "median.median-icons",
+        "version": "1.2.0"
+      },
+      {
+        "identity": "ziparchive",
+        "version": "2.6.0"
+      }
+    ],
+    "revenueCatLinkage": false,
+    "linkedProducts": [
+      "OnlyFast",
+      "OnlyFastTests",
+      "MedianIcons",
+      "ZipArchive",
+      "GoNativeCore"
+    ],
+    "lifecycleAnchors": [
+      "initializeWebview",
+      "addScriptMessageHandlersInWebView:",
+      "switchToWebView:"
+    ],
+    "sourceInspectionPassed": false,
+    "blockers": [
+      "Export appConfig iOS bundle ID does not match registered app.onlyfast.",
+      "Generated Xcode app bundle ID does not match registered app.onlyfast.",
+      "Export does not confirm RevenueCat plugin enabled.",
+      "Generated project/manifests do not show RevenueCat native linkage.",
+      "Installed RevenueCat iOS SDK/plugin version cannot be established from resolved dependencies."
+    ],
+    "warnings": [
+      "dependencies.json core metadata differs from resolved GoNativeCore version.",
+      "Tuist template defaults to a development bundle ID: preserve reviewed builder environment when regenerating.",
+      "Source inspection does not verify signing, In-App Purchase provisioning, compilation, runtime or StoreKit transactions."
+    ],
+    "nativeBuildExecuted": false
+  }
+}

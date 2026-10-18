@@ -1,17 +1,23 @@
-# iOS release adapter: blocked pending source and build access
+# iOS native release path
 
-No iOS native adapter, binary, StoreKit purchase or TestFlight test is claimed. The available download contains Android and the web repository only; no Median iOS Xcode workspace/Podfile was available to inspect. Windows cannot compile or sign the required iOS application.
+The shared web contract exists; an iOS native adapter and StoreKit/TestFlight purchase remain unimplemented and untested. Public readiness stays false. See the [release-path and implementation plan](../../docs/IOS_NATIVE_RELEASE_PATH.md).
 
-The web protocol validates the verified iOS product IDs and can consume a matching `onlyFastBilling` channel, but that is a mocked contract, not a functioning WKWebView bridge. Do not enable web/native purchases on iOS yet. The standard Median bridge is insufficient for the required explicitly named offering and complete pricing terms; do not substitute its generic paywall.
+The audit found `C:\Users\c_mar\Downloads\ios_source.tar.gz` and `ios_source (1).tar.gz`. They are identical, SHA-256 `391BE0CFDB9BCA5C7BD5EB043B7CE98328B9E66ED5AD3500172C5AFF8A292B1D`. Originals were preserved; the audit extraction is under ignored `tmp/ios-source-audit/ios/`.
 
-Required inputs/actions:
+This export contains `OnlyFast.xcworkspace`, a generated Xcode project and Objective-C/Swift source. However, its generated app and appConfig use **`co.median.ios.bnkramx`**, while RevenueCat is registered to **`app.onlyfast`**. RevenueCat enablement, native dependency/plugin linkage and a resolved SDK version are missing. Do not build or silently rewrite it into a release.
 
-1. Download the licensed Median iOS source for the actual release app, including `.xcworkspace`, plugin sources and Pods/Podfile.lock. Median documents [building iOS from source](https://docs.median.co/docs/build-ios-from-source). Confirm source licensing, signing team, bundle `app.onlyfast`, provisioning and In-App Purchase capability.
-2. Provide Mac/Xcode build access. Determine the actual installed RevenueCat iOS SDK version from the source lockfile before choosing APIs; Android SDK 10.3.0 does not establish the iOS SDK version.
-3. Implement the shared protocol in the actual WKWebView lifecycle. Use a main-frame handler with approved HTTPS origin checks, native Auth verification, one SDK initialization owner, ephemeral tokens and account generation invalidation. Export the same channel contract; do not assume an undocumented Median method exists.
-4. Configure only after validating the authenticated Supabase UUID using the existing iOS **public** SDK key `appl_ScuxViARpeZHZQyTtVQQpSooVFz`. Never ship private API credentials. Fetch `onlyfast_monthly_v1` explicitly; Pro `$rc_monthly` / `app.onlyfast.pro.monthly`, Teams `$rc_custom_teams_monthly` / `app.onlyfast.teams.monthly`.
-5. Return actual StoreKit localized prices, periods and introductory eligibility using APIs supported by that SDK; unknown eligibility stays unknown. Purchase the selected package and implement actual cancellation, deferred/pending, errors, identified restore and account-switch rejection. Refresh membership through the existing server sync, not client entitlement grants.
-6. Preserve Median login, navigation, photo selection and plugin listeners. If using App Studio cloud packaging instead of source builds, Median must integrate a custom plugin; a web repository change alone cannot add native code. See [Median native plugins](https://docs.median.co/docs/native-plugins-overview).
-7. Test using a separately restricted build and the free isolated sandbox backend. A simulator/device cannot assume Windows localhost is its backend: use an explicitly reviewed reachable development endpoint. Keep production sandbox rejection unchanged. Run actual StoreKit/TestFlight purchases only with further approval and appropriate Apple sandbox accounts.
+The actual export uses **Tuist/SPM**, not CocoaPods. Preserve `Project.swift`, `Workspace.swift`, `Tuist.swift`, `.package.resolved`, workspace `Package.resolved`, registry configuration, plugin dependencies and builder environment. Tuist's default bundle ID is a development ID; do not regenerate with defaults. Dependency metadata says core 2.4.1 while resolved packages say GoNativeCore 3.0.10.
 
-Keep the public purchase hold, restore hold, offering configuration, Apple review state and live subscriptions unchanged. Do not submit a product or upload a binary to resolve these blockers.
+Obtain a current export matching the intended existing App Store Connect app, with the licensed RevenueCat plugin included. Run the read-only Windows intake utility before a hosted build:
+
+```powershell
+node scripts/inspect-median-ios-source.mjs 'C:\path\to\extracted\ios'
+```
+
+Exit 0 means source intake checks passed, not that signing, native compilation or purchases work. Exit 2 reports specific blockers. No source is rewritten and no dependency/build/network operation runs.
+
+[store-readiness.snapshot.json](store-readiness.snapshot.json) records the live read-only Apple mapping: both products `READY_TO_SUBMIT`, with one-week trial configuration across all 175 territories. This is store configuration evidence, not runtime StoreKit price/eligibility evidence.
+
+Remaining inputs: corrected/current SDK-bearing source, approved hosted or borrowed macOS/Xcode and secure signing setup, a trusted compatible Apple-device tester, and safe connectivity to the existing isolated local backend. A personal Mac/iPhone purchase is not required. No build, source upload, hosted workflow, product submission or transaction was performed.
+
+If a fresh plugin export is unavailable, the plan also covers a separately reviewed direct integration of RevenueCat's official SPM SDK in the licensed source. It still requires confirmed app identity, dependency compatibility and macOS validation; no such dependency change was made here.

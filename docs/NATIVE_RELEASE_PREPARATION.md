@@ -6,6 +6,10 @@ identity, account-switch and background/resume checks. See
 No additional purchase or restore was performed; the preparation record below
 describes the original `86e794f4` work.
 
+The subsequent [iOS source/path audit](IOS_NATIVE_RELEASE_PATH.md) found existing
+Downloads archives with a mismatched bundle ID and missing RevenueCat linkage;
+it supersedes the original missing-source assessment below. No iOS build ran.
+
 Prepared on `codex/native-revenuecat-release`, from production main `9ae29d685bc68c265ef2c363e0943acb49573c3e`, in a new isolated worktree. No merge, push, deployment, store upload, production subscription write, or additional transaction was performed. Public purchases and restoration remain held.
 
 ## Reused and verified
