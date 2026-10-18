@@ -4,6 +4,8 @@
 
 Current priority: [the prepared private GitHub Actions unsigned simulator compilation path](../../docs/IOS_COMPILATION_READINESS.md). A self-contained local review workspace and inactive manual workflow are ready; no CI push/run or paid macOS hosting has been authorized or performed.
 
+First-compilation request: [pre-upload stop report](../../docs/IOS_FIRST_COMPILATION_STATUS.md). The draft timeout is now 30 minutes. Upload/CI authorization is conditional on verifying the source license and billing checks; no upload or run occurred.
+
 Use only `C:\Users\c_mar\Downloads\ios_source.tar (1).gz`, SHA-256 `91431FBDC8761910F1CEF4EA8E167E0EB9C2810296C83E1321418CA0FEA11628`. Its preserved extraction is `tmp/ios-source-current/ios`. Old revision-12 exports remain untouched. The [source evidence](source-resolution.snapshot.json) records bundle `app.onlyfast`, configuration 16, plugin 1.1.2 and SDK 5.96.0. The [store snapshot](store-readiness.snapshot.json) records earlier Apple configuration; it does not prove runtime prices or eligibility.
 
 ## Reproduce in a new copy

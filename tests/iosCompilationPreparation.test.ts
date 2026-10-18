@@ -26,7 +26,7 @@ test('draft workflow stays manual/private, unsigned, simulator-only and outside 
   const workflow = await readFile(new URL('../native/ios/ci/unsigned-simulator.yml', import.meta.url), 'utf8');
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /github\.event\.repository\.private == true && inputs\.approve_compile == true/);
-  assert.match(workflow, /timeout-minutes: 45/);
+  assert.match(workflow, /timeout-minutes: 30/);
   assert.match(workflow, /CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO/);
   assert.match(workflow, /generic\/platform=iOS Simulator/);
   assert.match(workflow, /OnlyFastBilling\.o/);

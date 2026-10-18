@@ -1,5 +1,7 @@
 # iOS unsigned compilation plan — October 17, 2026 (Pacific)
 
+Follow-up: [first-compilation status and pre-upload licensing stop](IOS_FIRST_COMPILATION_STATUS.md). The latest draft timeout is **30 minutes**; the 45-minute planning figures below describe the earlier proposal. Upload/run authorization remains conditional on the user's license/privacy/billing checks, which have not all passed.
+
 **Next priority: one approved GitHub Actions unsigned simulator compile. No CI has been pushed or executed.** The Swift adapter remains implemented but uncompiled. Android picker code is preserved; final photo selection is deferred to a physical Android device, without further emulator troubleshooting unless evidence establishes an OnlyFast regression.
 
 ## Android comparison with the presumed working upload
