@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { createServer, loadEnv } from 'vite';
-import { qaSettings, allowedOrigin, allowedProxy, assertTester } from './policy.ts';
+import { qaSettings, allowedOrigin, allowedProxy, allowedQaAsset, assertTester } from './policy.ts';
 
 const qaRoot = fileURLToPath(new URL('./', import.meta.url));
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -20,6 +20,10 @@ assert.equal(new URL(local.DB_URL).hostname, '127.0.0.1');
 assert.equal(new URL(local.DB_URL).port, '54322');
 const settings = qaSettings({ ...loadEnv('qa', qaRoot, 'ONLYFAST_QA_'), ONLYFAST_QA_ANON_KEY: local.ANON_KEY });
 const target = 'http://127.0.0.1:54321'; // Never configurable to a remote project.
+const fsUrl = value => '/@fs/' + value.replaceAll('\\', '/');
+const sourceFiles = [path.join(root, 'src/lib/nativePurchaseController.ts'), path.join(root, 'src/lib/nativeEnvironment.ts'),
+  fileURLToPath(new URL('../client/env.mjs', import.meta.resolve('vite')))].map(fsUrl);
+const dependencyFolders = [fsUrl(path.join(root, 'node_modules/.vite-median-paywall-qa/deps')) + '/'];
 async function localRead(route, token) {
   const response = await fetch(target + route, { headers: { apikey: settings.anonKey, Authorization: token },
     redirect: 'error', signal: AbortSignal.timeout(10000) });
@@ -53,10 +57,15 @@ const server = await createServer({ configFile: false, envDir: false, root: qaRo
       response.setHeader('Cache-Control', 'no-store'); response.setHeader('Referrer-Policy', 'no-referrer');
       const url = new URL(request.url || '/', 'http://127.0.0.1:8086');
       const isAuth = url.pathname === '/__qa/authorize';
-      if (!isAuth && !url.pathname.startsWith('/local-supabase')) return next();
+      if (!isAuth && !url.pathname.startsWith('/local-supabase')) {
+        if (!['GET', 'HEAD'].includes(request.method || '') || !allowedQaAsset(url.pathname, sourceFiles, dependencyFolders)) {
+          response.statusCode = 403; response.end('Route refused'); return;
+        }
+        return next();
+      }
       if (!allowedOrigin(request.headers.origin || '', settings)) { response.statusCode = 403; response.end('Origin refused'); return; }
       const route = url.pathname.replace(/^\/local-supabase/, '');
-      if (!(isAuth && request.method === 'POST') && !allowedProxy(request.method || '', route)) {
+      if (!(isAuth && request.method === 'POST') && !allowedProxy(request.method || '', route, settings.presentationOnly)) {
         response.statusCode = 403; response.end('Route refused'); return;
       }
       try {
@@ -71,4 +80,5 @@ const server = await createServer({ configFile: false, envDir: false, root: qaRo
     });
   } }] });
 await server.listen(); server.printUrls();
-console.log('LOCAL stock paywall QA only. Store actions ' + (settings.storeActionsApproved ? 'OPERATOR APPROVED' : 'DISABLED') + '. No cloud project or tunnel created.');
+console.log('LOCAL stock paywall QA only. ' + (settings.presentationOnly ? 'PRESENTATION ONLY; restore and subscription sync disabled' :
+  'Store actions ' + (settings.storeActionsApproved ? 'OPERATOR APPROVED' : 'DISABLED')) + '. This server creates no cloud project or tunnel.');

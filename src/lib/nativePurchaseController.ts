@@ -61,9 +61,13 @@ export class NativePurchaseController {
         }, timeout);
       })]);
     } catch (error) {
-      // Median's addCommandCallback rejects the complete native response when
-      // it has an error field. Handle both rejected and resolved responses.
+      // Stock Median rejects data.error itself: a message/code object (or
+      // string), rather than the surrounding { success, error } response.
+      // Retain compatibility with wrappers that reject the full response.
       if (error && typeof error === 'object' && 'error' in error) checked(error as NativeResult);
+      else if (error && typeof error === 'object' && !(error instanceof Error) && ('message' in error || 'code' in error)) {
+        checked({ success: false, error: error as NonNullable<NativeResult['error']> });
+      } else if (typeof error === 'string') checked({ success: false, error: { message: error } });
       throw error;
     } finally { clearTimeout(timer!); }
   }

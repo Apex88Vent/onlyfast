@@ -16,9 +16,11 @@ const show = (value: unknown) => { element('status').textContent = typeof value 
 const buttons = () => {
   element<HTMLButtonElement>('identify').disabled = busy || !verified || !settings.storeActionsApproved;
   for (const id of ['paywall', 'restore']) element<HTMLButtonElement>(id).disabled = busy || !verified || !identified || !settings.storeActionsApproved;
+  if (settings.presentationOnly) element<HTMLButtonElement>('restore').disabled = true;
   for (const id of ['refresh', 'logout']) element<HTMLButtonElement>(id).disabled = busy || !verified;
 };
-element('hold').textContent = settings.storeActionsApproved ? 'Operator-approved SANDBOX store actions; local backend only.' : 'Store actions DISABLED pending explicit operator approval.';
+element('hold').textContent = settings.presentationOnly ? 'Paywall presentation only. Do not purchase or restore. Local membership reads only.' :
+  settings.storeActionsApproved ? 'Operator-approved SANDBOX store actions; local backend only.' : 'Store actions DISABLED pending explicit operator approval.';
 async function authorize() {
   const { data } = await supabase.auth.getSession();
   if (data.session?.user.id !== settings.testerId) throw Error('Local tester session required.');
@@ -85,13 +87,14 @@ element('identify').addEventListener('click', () => { void run(async () => {
 for (const [id, action] of [['paywall', 'purchase'], ['restore', 'restore']] as const) {
   element(id).addEventListener('click', () => { void run(async () => {
     if (!settings.storeActionsApproved || !identified) throw Error('Approved native initialization is required first.');
+    if (settings.presentationOnly && action === 'restore') throw Error('Restoration is not approved for this presentation-only session.');
     const session = await authorize();
     await controller.setUser(session.user.id);
     await authorize(); await controller.run(session.user.id, action);
-    await membership(true); // Native success alone never grants membership.
+    await membership(!settings.presentationOnly); // Native success alone never grants membership.
   }); });
 }
-element('refresh').addEventListener('click', () => { void run(() => membership(settings.storeActionsApproved)); });
+element('refresh').addEventListener('click', () => { void run(() => membership(settings.storeActionsApproved && !settings.presentationOnly)); });
 element('logout').addEventListener('click', () => { void run(async () => {
   verified = false; await supabase.auth.signOut(); show('Signed out; local membership unchanged.');
 }); });

@@ -19,13 +19,23 @@ export function qaSettings(env: Record<string, string | undefined>) {
   }
   return { testerId, anonKey, httpsOrigin,
     androidKey: env.ONLYFAST_QA_ANDROID_KEY || '', iosKey: env.ONLYFAST_QA_IOS_KEY || '',
+    presentationOnly: env.ONLYFAST_QA_PRESENTATION_ONLY === 'true',
     storeActionsApproved: env.ONLYFAST_QA_STORE_ACTIONS_APPROVED === 'true' };
 }
 export type QASettings = ReturnType<typeof qaSettings>;
 export function allowedOrigin(origin: string, settings: QASettings): boolean {
   return ['http://127.0.0.1:8086', 'http://localhost:8086', settings.httpsOrigin].filter(Boolean).includes(origin);
 }
-export function allowedProxy(method: string, path: string): boolean {
+export function allowedQaAsset(path: string, sourceFiles: string[], dependencyFolders: string[]): boolean {
+  let decoded: string;
+  try { decoded = decodeURIComponent(path); } catch { return false; }
+  if (decoded.includes('%') || decoded.includes('\\') || decoded.split('/').includes('..')) return false;
+  if (['/', '/index.html', '/client.ts', '/policy.ts', '/@vite/client'].includes(decoded)) return true;
+  if (sourceFiles.includes(decoded)) return true;
+  return dependencyFolders.some(folder => decoded.startsWith(folder) && /^(?:@supabase_supabase-js|chunk-[\w-]+)\.js$/.test(decoded.slice(folder.length)));
+}
+export function allowedProxy(method: string, path: string, presentationOnly = false): boolean {
+  if (presentationOnly && path.startsWith('/functions/')) return false;
   return (method === 'POST' && ['/auth/v1/token', '/auth/v1/logout',
     '/functions/v1/sync-revenuecat-subscription', '/rest/v1/rpc/get_onlyfast_membership'].includes(path)) ||
     (method === 'GET' && path === '/auth/v1/user');

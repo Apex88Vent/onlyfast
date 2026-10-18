@@ -195,6 +195,30 @@ test('Median message-only paywall dismissal is cancellation, including rejected 
   await assert.rejects(controller.run(A, 'purchase'), error => error instanceof NativePurchaseError && error.cancelled);
 });
 
+test('stock Median unwrapped error rejections cancel gracefully and never complete a purchase', async () => {
+  const { controller, bridge } = harness(); await controller.setUser(A);
+  for (const nativeError of [{ message: 'User cancelled' }, { code: 'PurchaseCancelledError' }, 'User cancelled']) {
+    bridge.presentPaywall = async () => { throw nativeError; };
+    let confirmed = false;
+    await assert.rejects(controller.run(A, 'purchase').then(() => { confirmed = true; }),
+      error => error instanceof NativePurchaseError && error.cancelled && !error.pending && error.message === 'Purchase cancelled.');
+    assert.equal(confirmed, false);
+  }
+  // A cancelled operation must not poison subsequent identified actions.
+  bridge.presentPaywall = async () => ({ success: true });
+  await controller.run(A, 'purchase');
+});
+
+test('unwrapped stock errors preserve store failures and pending states without accepting access', async () => {
+  const { controller, bridge } = harness(); await controller.setUser(A);
+  bridge.presentPaywall = async () => { throw { code: 20, message: 'Payment pending' }; };
+  await assert.rejects(controller.run(A, 'purchase'), error => error instanceof NativePurchaseError && error.pending && !error.cancelled);
+  bridge.restorePurchases = async () => { throw { code: 'STORE_ERROR', message: 'Store unavailable' }; };
+  await assert.rejects(controller.run(A, 'restore'), error => error instanceof NativePurchaseError && !error.cancelled && error.message === 'Store unavailable');
+  bridge.presentPaywall = async () => { throw 'Store offline'; };
+  await assert.rejects(controller.run(A, 'purchase'), /Store offline/);
+});
+
 test('missing and anonymous identities cannot initialize or purchase', async () => {
   for (const id of ['', '$RCAnonymousID:synthetic', 'display-name']) {
     let calls = 0;
