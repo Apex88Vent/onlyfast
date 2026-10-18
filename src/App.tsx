@@ -12,6 +12,7 @@ import ResetPassword from "./pages/ResetPassword";
 import Upgrade from "./pages/Upgrade";
 import SubscriptionSuccess from "./pages/SubscriptionSuccess";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfService from "./pages/TermsOfService";
 import DeleteAccount from "./pages/DeleteAccount";
 import Support from "./pages/Support";
 import SafeBackHandler from "./components/SafeBackHandler";
@@ -42,6 +43,7 @@ const App = () => (
               <Route path="/checkout" element={<Upgrade />} />
               <Route path="/subscription/success" element={<SubscriptionSuccess />} />
               <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+              <Route path="/terms-of-service" element={<TermsOfService />} />
               <Route path="/delete-account" element={<DeleteAccount />} />
               <Route path="/support" element={<Support />} />
               <Route
