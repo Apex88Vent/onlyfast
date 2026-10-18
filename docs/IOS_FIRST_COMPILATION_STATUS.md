@@ -1,5 +1,25 @@
 # First iOS compilation request — stopped before upload
 
+## Renewed build approval: Phase 1 restriction found
+
+The renewed request authorizes one private GitHub Actions build with up to $2 compute beyond included allowance, and requires stopping if an applicable agreement explicitly prohibits the proposed hosting. No earlier simulator, Android or catalog diagnostics were repeated.
+
+The revision-16 source README points to `https://median.co/license`; that URL returned HTTP 403 during this check. Its bundled license files describe third-party open-source components, not a grant covering Median source hosting. The exported vendor Renovate workflow refers to a vendor private repository; it does not grant customer hosting rights.
+
+Median's current published Online Terms were read directly. Sections 1.3 and 2.6(b) restrict third-party source disclosure; section 7.3 expressly requires GoNative's prior written consent for source disclosure to any third party. Applying that restriction to uploading source into a private GitHub repository and executing it on GitHub-hosted runners is an interpretation, not a legal determination. The terms allow a separate Median Customer Agreement to govern covered applications, but no applicable agreement or written consent overriding this restriction was found in the available source files.
+
+Stopped at the user's explicit Phase 1 condition, before repository creation/upload. An applicable customer agreement or written Median permission covering private GitHub storage and hosted CI is needed to resolve this restriction. No request for renewed spending approval is necessary within the already authorized single-build/$2 limit once the restriction is resolved.
+
+Renewed request results:
+
+- Private repository and workflow URLs: none created or verified in this attempt.
+- Compilation: **NOT RUN (blocked before upload)**; neither PASSED nor FAILED.
+- Swift/compiler/linker errors: none available; adapter compilation remains unverified.
+- Build duration: not applicable; zero Actions runs dispatched.
+- Cost: no CI compute consumed by this attempt. Published standard macOS compute is $0.062/minute; a 30-minute job estimates $1.86 before tax, within the authorized $2 compute limit. Account allowance/billing was not checked after the earlier stopping condition was found.
+- Existing manual unsigned simulator workflow, adapter, dependency locks and local preparation remain intact. No native implementation, signing, production configuration or readiness hold changed.
+- Next action: resolve the explicit source-disclosure restriction, then verify private repository visibility and billing, upload the reviewed inputs, and dispatch exactly one compilation. A successful compile would still require separately approved iOS runtime testing.
+
 Date: October 17, 2026 (Pacific). Starting branch/commit: `codex/native-revenuecat-release` / `b514c9f8`. **No GitHub repository was created, native source uploaded, workflow dispatched, or Xcode job run.** The user's licensing verification condition could not be satisfied.
 
 ## Blocking license check
