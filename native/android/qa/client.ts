@@ -14,8 +14,10 @@ const panel = document.createElement('section');
 panel.style.cssText = 'position:fixed;inset:0;z-index:2147483647;overflow:auto;background:#f5f5f7;color:#111;padding:16px;font:14px sans-serif';
 panel.innerHTML = '<h1>OnlyFast — release bridge internal QA</h1><p>No purchases or restores. Local synthetic accounts only.</p><pre id="qa-status" style="white-space:pre-wrap"></pre><div id="qa-plans"></div><div id="qa-controls"></div>';
 document.body.append(panel);
-const report: { passed: boolean; startedAt: string; steps: { name: string; result: unknown }[]; errors: string[]; catalogs: Record<string, StoreCatalog>; observations: unknown } = {
+const report: { passed: boolean; startedAt: string; steps: { name: string; result: unknown }[]; errors: string[]; catalogs: Record<string, StoreCatalog>; observations: unknown;
+  manualPhotoPicker: { selectionPassed: boolean; cancellationPassed: boolean; status: 'not-run' | 'partial' | 'passed' | 'failed' } } = {
   passed: false, startedAt: new Date().toISOString(), steps: [], errors: [], catalogs: {}, observations: {},
+  manualPhotoPicker: { selectionPassed: false, cancellationPassed: false, status: 'not-run' },
 };
 let navigationCount = 0;
 window.addEventListener('popstate', () => navigationCount++);
@@ -117,6 +119,31 @@ async function main() {
   const again = await login('a'); expect(again === a, 'Original tester was not restored');
   await controller.setUser(a); report.catalogs.aAfterSwitch = await controller.getCatalog(a);
   step('B → logout → A retains correct authenticated identity');
+
+  // Manual native file-chooser regression in the existing QA APK. Nothing is
+  // uploaded: only the selected synthetic fixture's metadata is reported.
+  const pickerLabel = document.createElement('label');
+  pickerLabel.textContent = 'QA photo picker (synthetic image only; no upload): ';
+  const picker = document.createElement('input');
+  picker.type = 'file'; picker.accept = 'image/*'; picker.id = 'onlyfast-qa-photo';
+  pickerLabel.append(picker);
+  panel.insertBefore(pickerLabel, panel.querySelector('#qa-status'));
+  const recordPicker = async (cancelled: boolean) => {
+    try {
+      expect(await authorize() === a && location.origin === expectedOrigin, 'Authentication/origin changed during photo picker');
+      const file = picker.files?.[0];
+      if (!cancelled) expect(file?.name === 'ONLYFAST-QA-photo.png' && file.type === 'image/png' && file.size > 0,
+        'Select only the named synthetic PNG fixture');
+      if (cancelled) report.manualPhotoPicker.cancellationPassed = true;
+      else report.manualPhotoPicker.selectionPassed = true;
+      report.manualPhotoPicker.status = report.manualPhotoPicker.selectionPassed && report.manualPhotoPicker.cancellationPassed ? 'passed' : 'partial';
+      step(cancelled ? 'photo picker cancellation preserved authentication' : 'native photo picker returned synthetic image and preserved authentication',
+        cancelled ? true : { name: file!.name, type: file!.type, bytes: file!.size, uploaded: false });
+    } catch (error) { report.passed = false; report.manualPhotoPicker.status = 'failed'; report.errors.push(error instanceof Error ? error.message : 'Photo picker failed'); }
+    await archive();
+  };
+  picker.addEventListener('change', () => void recordPicker(false));
+  picker.addEventListener('cancel', () => void recordPicker(true));
 
   createRoot(panel.querySelector('#qa-plans')!).render(React.createElement(PlanSelection, { userId: a, onComplete: () => {} }));
   createRoot(panel.querySelector('#qa-controls')!).render(React.createElement(NativeSubscriptionControls, { userId: a }));

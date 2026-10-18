@@ -19,8 +19,18 @@
     "appConfig": {
       "iosBundleId": "co.median.ios.bnkramx",
       "initialUrl": "https://onlyfast.app?nativeApp=true",
+      "configurationVersion": 12,
       "injectMedianJS": true,
       "revenueCatActive": false
+    },
+    "generationEvidence": {
+      "templateBundleId": "io.gonative.ios.dev",
+      "builderEnvironmentDocumented": true,
+      "exportedIdDiffersFromTemplateDefault": true,
+      "plistUsesBuildSetting": true,
+      "pluginInjectionMarkersPresent": true,
+      "bundledRevenueCatJavaScriptPresent": false,
+      "liveMedianConfigurationVerified": false
     },
     "bundleCandidates": [
       "co.median.ios.bnkramx"
@@ -69,5 +79,7 @@
       "Source inspection does not verify signing, In-App Purchase provisioning, compilation, runtime or StoreKit transactions."
     ],
     "nativeBuildExecuted": false
-  }
+  },
+  "historical": true,
+  "supersededBy": "source-resolution.snapshot.json"
 }

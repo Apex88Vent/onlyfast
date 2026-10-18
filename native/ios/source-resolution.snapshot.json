@@ -1,0 +1,110 @@
+{
+  "inspectedAt": "2026-10-18T00:33:47.604Z",
+  "cause": "Cached iOS source archive from earlier OnlyFast configuration; current Median settings already correct.",
+  "oldConfigurationVersion": 12,
+  "currentConfigurationVersion": 16,
+  "livePortal": {
+    "sameOnlyFastAppConfirmed": true,
+    "sharingId": "bnkramx",
+    "iosBundleId": "app.onlyfast",
+    "androidPackageName": "app.onlyfast",
+    "revenueCatEnabled": true,
+    "license": "PLUS",
+    "sourceStatusBefore": "OUTDATED",
+    "sourceStatusAfter": "CURRENT",
+    "ipaStatusBefore": "OUTDATED",
+    "ipaStatusAfter": "OUTDATED",
+    "appStoreAutoUploadConfigured": false
+  },
+  "action": {
+    "sourceArchiveOnlyRegenerated": true,
+    "settingsChanged": false,
+    "ipaBuildRequested": false,
+    "signingRequested": false,
+    "uploadRequested": false,
+    "paidServicePurchased": false
+  },
+  "archive": {
+    "path": "C:/Users/c_mar/Downloads/ios_source.tar (1).gz",
+    "sha256": "91431fbdc8761910f1cef4ea8e167e0eb9c2810296c83e1321418ca0fea11628",
+    "originalArchivesPreserved": true
+  },
+  "inspection": {
+    "source": "tmp/ios-source-current/ios",
+    "expectedBundleId": "app.onlyfast",
+    "workspaces": [
+      "OnlyFast.xcworkspace"
+    ],
+    "projects": [
+      "OnlyFast.xcodeproj"
+    ],
+    "appConfig": {
+      "iosBundleId": "app.onlyfast",
+      "initialUrl": "https://onlyfast.app?nativeApp=true",
+      "configurationVersion": 16,
+      "injectMedianJS": true,
+      "revenueCatActive": true
+    },
+    "generationEvidence": {
+      "templateBundleId": "io.gonative.ios.dev",
+      "builderEnvironmentDocumented": true,
+      "exportedIdDiffersFromTemplateDefault": true,
+      "plistUsesBuildSetting": true,
+      "pluginInjectionMarkersPresent": true,
+      "bundledRevenueCatJavaScriptPresent": false,
+      "liveMedianConfigurationVerified": false
+    },
+    "bundleCandidates": [
+      "app.onlyfast"
+    ],
+    "buildSystem": "Tuist / Swift Package Manager",
+    "dependencyMetadataCore": "3.0.17",
+    "pluginMetadataNames": [
+      "revenue-cat-plugin"
+    ],
+    "resolvedPackages": [
+      {
+        "identity": "median.go-native-core",
+        "version": "3.0.17"
+      },
+      {
+        "identity": "median.median-icons",
+        "version": "1.2.0"
+      },
+      {
+        "identity": "median.revenue-cat-plugin",
+        "version": "1.1.2"
+      },
+      {
+        "identity": "purchases-ios-spm",
+        "version": "5.96.0"
+      },
+      {
+        "identity": "ziparchive",
+        "version": "2.6.0"
+      }
+    ],
+    "revenueCatLinkage": true,
+    "linkedProducts": [
+      "OnlyFast",
+      "OnlyFastTests",
+      "MedianIcons",
+      "ZipArchive",
+      "GoNativeCore",
+      "RevenueCatPlugin"
+    ],
+    "lifecycleAnchors": [
+      "initializeWebview",
+      "addScriptMessageHandlersInWebView:",
+      "switchToWebView:"
+    ],
+    "sourceInspectionPassed": true,
+    "blockers": [],
+    "warnings": [
+      "Tuist template defaults to a development bundle ID: preserve reviewed builder environment when regenerating.",
+      "Source inspection does not verify signing, In-App Purchase provisioning, compilation, runtime or StoreKit transactions."
+    ],
+    "nativeBuildExecuted": false
+  },
+  "runtimeVerified": false
+}

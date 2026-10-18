@@ -38,6 +38,9 @@ export async function inspectMedianIosSource(directory) {
   const revenueCatLinkage = linkedProducts.some(name => /revenue.?cat|purchases/i.test(name)) ||
     /(?:package|product|url)[^\n]*?(?:revenue.?cat|purchases-ios)/i.test(manifest + '\n' + pbx);
   const controller = await optional(path.join(source, 'LeanIOS/LEANWebViewController.m')) || '';
+  const bundledBridge = await optional(path.join(source, 'LeanIOS/GoNativeJSBridgeLibrary.js')) || '';
+  const infoPlist = await optional(path.join(source, 'LeanIOS/MedianIOS-Info.plist')) || '';
+  const templateBundleId = manifest.match(/Environment\.bundleId\.getString\(default:\s*"([^"]+)"\)/)?.[1] || null;
   const blockers = [];
   if (!workspaces.length || !projects.length) blockers.push('Median Xcode workspace/project is missing.');
   if (config?.general?.iosBundleId !== 'app.onlyfast') blockers.push('Export appConfig iOS bundle ID does not match registered app.onlyfast.');
@@ -52,7 +55,14 @@ export async function inspectMedianIosSource(directory) {
   warnings.push('Source inspection does not verify signing, In-App Purchase provisioning, compilation, runtime or StoreKit transactions.');
   return { source, expectedBundleId: 'app.onlyfast', workspaces, projects,
     appConfig: { iosBundleId: config?.general?.iosBundleId || null, initialUrl: config?.general?.initialUrl || null,
+      configurationVersion: config?.general?.version ?? null,
       injectMedianJS: config?.general?.injectMedianJS === true, revenueCatActive: config?.services?.revenueCat?.active === true },
+    generationEvidence: { templateBundleId, builderEnvironmentDocumented: /builder sets these/.test(manifest),
+      exportedIdDiffersFromTemplateDefault: !!config?.general?.iosBundleId && !!templateBundleId && config.general.iosBundleId !== templateBundleId,
+      plistUsesBuildSetting: /<key>CFBundleIdentifier<\/key>\s*<string>\$\(PRODUCT_BUNDLE_IDENTIFIER\)<\/string>/.test(infoPlist),
+      pluginInjectionMarkersPresent: manifest.includes('MARK: BUILDER_PLUGINS') && manifest.includes('MARK: BUILDER_PLUGIN_DEPENDENCIES'),
+      bundledRevenueCatJavaScriptPresent: /revenuecat/i.test(bundledBridge),
+      liveMedianConfigurationVerified: false },
     bundleCandidates, buildSystem: manifest ? 'Tuist / Swift Package Manager' : 'Inspect workspace dependencies',
     dependencyMetadataCore: dependencies.core || null, pluginMetadataNames: Object.keys(dependencies.plugins || {}),
     resolvedPackages: pins, revenueCatLinkage, linkedProducts,

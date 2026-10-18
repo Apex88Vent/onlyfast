@@ -14,12 +14,20 @@ test('iOS source intake detects wrong identity and missing native plugin without
   await mkdir(path.join(source, 'OnlyFast.xcworkspace'));
   await writeFile(path.join(source, 'LeanIOS/appConfig.json'), JSON.stringify({ general: { iosBundleId: 'co.median.test', publicKey: 'synthetic-private-config-marker' }, services: {} }));
   await writeFile(path.join(source, 'OnlyFast.xcodeproj/project.pbxproj'), 'PRODUCT_BUNDLE_IDENTIFIER = co.median.test; productName = GoNativeCore;');
+  await writeFile(path.join(source, 'Project.swift'), '// The builder sets these.\nlet bundleId = Environment.bundleId.getString(default: "io.gonative.ios.dev")\n// MARK: BUILDER_PLUGINS\n// MARK: BUILDER_PLUGIN_DEPENDENCIES');
+  await writeFile(path.join(source, 'LeanIOS/MedianIOS-Info.plist'), '<key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>');
   const result = await inspectMedianIosSource(source);
   assert.equal(result.sourceInspectionPassed, false);
   assert.equal(result.nativeBuildExecuted, false);
   assert.ok(result.blockers.some(message => message.includes('appConfig')));
   assert.ok(result.blockers.some(message => message.includes('linkage')));
   assert.doesNotMatch(JSON.stringify(result), /synthetic-private-config-marker/);
+  assert.equal(result.generationEvidence.templateBundleId, 'io.gonative.ios.dev');
+  assert.equal(result.generationEvidence.exportedIdDiffersFromTemplateDefault, true);
+  assert.equal(result.generationEvidence.plistUsesBuildSetting, true);
+  assert.equal(result.generationEvidence.pluginInjectionMarkersPresent, true);
+  assert.equal(result.generationEvidence.liveMedianConfigurationVerified, false);
+  assert.equal(result.generationEvidence.bundledRevenueCatJavaScriptPresent, false);
 
   // Synthetic file fixture, not evidence of an installed/compiled iOS SDK.
   await writeFile(path.join(source, 'LeanIOS/appConfig.json'), JSON.stringify({ general: { iosBundleId: 'app.onlyfast' }, services: { revenueCat: { active: true } } }));

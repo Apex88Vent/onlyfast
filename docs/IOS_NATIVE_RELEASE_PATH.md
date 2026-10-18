@@ -1,5 +1,7 @@
 # OnlyFast iOS native RevenueCat release path — October 17, 2026 (Pacific)
 
+> Follow-up: [source blocker resolved](IOS_SOURCE_BLOCKER_RESOLUTION.md). Authenticated App Studio inspection confirmed a stale source archive, and source-only regeneration now provides `app.onlyfast`, Median RevenueCat plugin 1.1.2 and SDK 5.96.0. The missing-source findings below are historical; no iOS native build/signing/upload occurred.
+
 Prepared on `codex/native-revenuecat-release` from `55a0c2c7`. No Android runtime diagnostic/build was repeated. No native/app build, hosted runner, upload, store submission, purchase, restore, deployment or production setting/data change occurred. `NATIVE_PURCHASES_READY=false` remains unchanged.
 
 ## Shortest reliable route

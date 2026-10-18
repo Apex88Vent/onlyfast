@@ -1,0 +1,89 @@
+{
+  "task": ":app:minifyNormalReleaseWithR8",
+  "unsignedCompilationOnly": true,
+  "sourceDirectory": "tmp/android-release-minification-review",
+  "applicationId": "app.onlyfast",
+  "versionCode": 44,
+  "versionName": "1.0.0",
+  "compileSdk": 36,
+  "targetSdk": 36,
+  "minSdk": 26,
+  "debuggable": false,
+  "transactionsEnabled": false,
+  "publicPurchasesReady": false,
+  "dex": [
+    {
+      "path": "tmp\\android-release-minification-review\\app\\build\\intermediates\\dex\\normalRelease\\minifyNormalReleaseWithR8\\classes.dex",
+      "sha256": "1ef8a19ecf6a555ced9b2c85a8474baccd10e32fd25d517eb3b9275328bc51df"
+    }
+  ],
+  "mappingSha256": "44b9850832a5e9755a4d36082df61e3c11317f792b7568a074daa301eb6e207d",
+  "requiredBridgeStringsPresent": true,
+  "forbiddenQaStrings": [],
+  "mappedClasses": [
+    {
+      "class": "app.onlyfast.billing.OnlyFastBilling",
+      "present": true
+    },
+    {
+      "class": "co.median.android.MainActivity",
+      "present": true
+    },
+    {
+      "class": "co.median.android.FileUploadContract",
+      "present": true
+    }
+  ],
+  "vendorPickerFiles": [
+    {
+      "file": "app/src/main/java/co/median/android/FileUploadContract.kt",
+      "unchanged": true
+    },
+    {
+      "file": "app/src/main/java/co/median/android/UrlNavigation.java",
+      "unchanged": true
+    }
+  ],
+  "debugSourceDirectoryPresent": false,
+  "releaseStartup": "https://onlyfast.app?nativeApp=true",
+  "apkOrAabCreated": false,
+  "signingExecuted": false,
+  "installed": false,
+  "existingQaApkSha256": "57DF5F7D3984A8E3C5AFC59D99A43407FB6A39E9D6F74BC1EF0E3D62A204AC9F",
+  "existingQaAuthentication": {
+    "passed": true,
+    "startedAt": "2026-10-18T00:26:38.702Z",
+    "steps": [
+      "native bridge capabilities",
+      "release bridge identified authenticated local UUID",
+      "native RevenueCat initialization and named Pro/Teams catalog A validated",
+      "native rejected mismatched authenticated UUID",
+      "native rejected invalid session",
+      "A → B authenticated account switch; delayed A result rejected",
+      "logged-out catalog rejected",
+      "B → logout → A retains correct authenticated identity",
+      "actual PlanSelection and NativeSubscriptionControls remain publicly held; Rookie free",
+      "native background/resume preserved authentication and refreshed named catalog"
+    ],
+    "errors": [],
+    "purchaseCalls": 0,
+    "restoreCalls": 0
+  },
+  "photoPicker": {
+    "chooserOpened": true,
+    "selectionPassed": false,
+    "cancellationPassed": false,
+    "blockedBy": "Android API 36 system_server NullPointerException at IntentFilter.getDataType → DataManager.reportShareTargetEvent on Photos selection; subsequent DeadSystemException and disconnected emulator storage.",
+    "nativePickerChanged": false,
+    "fixture": "ONLYFAST-QA-photo.png",
+    "uploaded": false
+  },
+  "minifiedRuntimeVerified": false,
+  "signingAndVersionReview": {
+    "existingDeclarationsUnchanged": true,
+    "keysCopied": false,
+    "productionCertificateMatchVerified": false,
+    "livePlayVersionCodeVerified": false,
+    "nextVersionRequiresOwnerReview": true
+  }
+}

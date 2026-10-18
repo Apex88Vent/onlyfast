@@ -35,3 +35,9 @@ The report appears in the app and is written to `<QA output>/runtime-report.json
 For background/resume, send the emulator Home key and bring the same activity back without force-stopping. The harness verifies the same authenticated account and reloads the named catalog. The report receives a separate resume result.
 
 Before any legitimate AAB packaging, omit all of these QA scripts, local bindings, debug assets and credentials. Use the unchanged production release bridge and normal approved signing/build process. See [the runtime validation report](../../../docs/ANDROID_RELEASE_BRIDGE_RUNTIME_VALIDATION.md).
+
+## Photo-picker follow-up
+
+The serve-only client now offers a manual `image/*` file input after synthetic Auth/account-switch checks. Use only `ONLYFAST-QA-photo.png`; selection records name/type/size and revalidates the synthetic account, without uploading/reading file content. Cancellation also revalidates Auth. The additional manual check has its own `manualPhotoPicker` status (initially `not-run`); the base `report.passed` alone does not prove it was exercised. It is not imported into the production build.
+
+During the October 17 follow-up, the native chooser opened but selecting Photos crashed the API 36 emulator's **system process** (`IntentFilter.getDataType` → `DataManager.reportShareTargetEvent`); the selection/cancel checks remain incomplete. No new APK was signed or installed. See [the source-resolution/Android preparation report](../../../docs/IOS_SOURCE_BLOCKER_RESOLUTION.md) before retrying on a stable runtime. Do not clear emulator data or change production photo-picker behavior to bypass this failure.
