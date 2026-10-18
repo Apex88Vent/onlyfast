@@ -11,15 +11,17 @@ Preparation only. Do not purchase or restore until separately approved. Android 
 - Existing UUID-restricted native-sandbox synchronization workspace: `tmp/ios-stock-paywall-local-sync`. It reuses the existing handler, rejects remote Supabase and production receipts, and is not production deployable.
 - The temporary visual-test HTTPS tunnel and QA server are stopped. Do not reuse their expired hostname.
 
-## Build/access gate — not yet verified
+## Build/access gate — read-only TestFlight inspection completed
 
-App Store Connect is signed out. Inspect OnlyFast (Apple app ID `6792149373`) → TestFlight after the developer signs in. Record the exact version/build, expiry, external-testing status, and matching build provenance before choosing an installation.
+OnlyFast (Apple app ID `6792149373`) was inspected after developer sign-in. The newest uploaded build is **1.0.0 (41)**, uploaded September 24, 2026 at 9:37 PM as displayed by App Store Connect. It is Validated, bundle `app.onlyfast`, arm64, iPhone/iPad, minimum iOS **15.5**, with 67 days remaining. Its original filename is `7dbd5dd6-13b0-4ecd-8910-71d7cfc61f8c.ipa`. It belongs only to `internal`; external-testing status is **Ready to Submit**. What to Test is empty and no individual testers are assigned. Neither stock-plugin contents nor isolated QA routing can be established from this metadata.
+
+The existing `external` group has three testers and only build **1.0.0 (25)**, status **Rejected**. Its testers show **No Builds Available**. Thus there is currently no verified external TestFlight build to recommend to the wife. No testers/groups/build assignments were changed and no invitations or review submissions were sent.
 
 The verified simulator artifact is not a TestFlight device build. It contains the stock plugin and supports `presentPaywall()`, but this does not establish what an existing TestFlight binary contains.
 
 The normal wrapper opens production `https://onlyfast.app?nativeApp=true`. The simulator used an Appetize-only launch argument to open isolated QA. That argument is not a TestFlight entry mechanism. An existing build is suitable only if it has a verified supported way to open the isolated HTTPS QA site **inside its native WebView**, with the stock plugin. Opening QA in Safari is insufficient. Do not sign the local synthetic account into production or enable production purchases.
 
-If no existing build has that route, a signed stock-plugin QA wrapper is necessary. Prepare it separately, preserving production Median configuration. The last verified Median page reported iOS IPA outdated and missing signing/upload configuration. Do not assume a new QA device build can be produced or uploaded until signing/access and isolated configuration are confirmed. Do not upload, submit or distribute a new binary as part of this preparation.
+If no existing build has that route, a signed stock-plugin QA wrapper is necessary. Prepare it separately, preserving production Median configuration. On this inspection, the **fully loaded** Median page reports iOS IPA **OUTDATED**, iOS source **CURRENT**, bundle `app.onlyfast`, Configure unchecked, and Rebuild enabled. The upload control says **Version 1.0.0 is already on App Store Connect. Rebuild, or set a higher Version Name, then upload again.** The IPA backup list says **No Backups Available**, so it cannot establish build-41 provenance. The earlier initial/loading-state messages about missing signing/API credentials are not a verified current blocker. Signing and upload eligibility for a separate QA configuration still need confirmation; do not infer them merely from the enabled Rebuild control. No rebuild, configuration change, binary upload or distribution was performed.
 
 ## Wife's installation and invitation
 
