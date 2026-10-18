@@ -1,6 +1,6 @@
 # OnlyFast release billing protocol 1
 
-This is an OnlyFast source extension, **not a documented Median API**. The web client requires `window.onlyFastBilling.postMessage(string)` and its `onmessage` callback. Android installs it with AndroidX WebKit before the initial page load. No fallback to `median.revenueCat.presentPaywall`, the current offering, or `onlyFastCatalog` is allowed. iOS needs a matching native adapter; none is included yet.
+This is an OnlyFast source extension, **not a documented Median API**. The web client requires `window.onlyFastBilling.postMessage(string)` and its `onmessage` callback. Android installs it with AndroidX WebKit before the initial page load. The iOS source adapter installs the same contract with a main-frame document-start WKUserScript and WKScriptMessageHandler; iOS compilation/runtime remain unverified. No fallback to `median.revenueCat.presentPaywall`, the current offering, or `onlyFastCatalog` is allowed.
 
 Every request is JSON with a unique `requestId`, `protocolVersion: 1`, and `operation`. Every response is `{requestId, result: {protocolVersion: 1, status, ...}}`. Ignore malformed/unmatched messages. Tokens must never be logged or persisted by the bridge. The client serializes operations, rejects stale account results, and requires a process restart after a timed-out operation rather than retrying a potentially completed purchase.
 
@@ -16,6 +16,8 @@ Every request is JSON with a unique `requestId`, `protocolVersion: 1`, and `oper
 
 Catalog: `offeringIdentifier`, native-generated opaque `catalogToken`, millisecond `expiresAt`, and two `packages`. Each package contains `plan` (`pro` or `teams`), `packageIdentifier`, `productIdentifier`, `formattedPrice`, `currencyCode`, ISO `billingPeriod`, nullable `optionIdentifier`, `pricingPhases`, `trialEligibility`, and `eligibilityNote`.
 
+The iOS adapter also returns actual localized `title` and nullable `introductoryOffer` (payment mode, billing period, number of periods, price, raw eligibility). Only eligible introductory terms enter applicable pricing phases; unknown eligibility stays unknown. Upfront/free introductory periods are aggregated once, while pay-as-you-go retains its cycle count. These extra fields do not change protocol version 1.
+
 Each phase contains ISO `billingPeriod`, nullable `billingCycleCount`, `recurrenceMode`, and `price: {formatted, amountMicros, currencyCode}`. Preserve actual store responses. Do not fabricate a free trial or infer eligibility from the plan description. A missing price/catalog disables selection. The Android purchase must use the same SDK subscription option whose phases were displayed, with the package's offering attribution.
 
 | Plan | Package | Android product/base plan | iOS product |
@@ -29,4 +31,4 @@ Android caches selections for five minutes, binds them to the user and identity 
 
 `purchased` / `restored` is a transaction result, **not membership authorization**. The client invokes the existing authenticated `sync-revenuecat-subscription` function, then reloads server-authoritative membership. An HTTP success containing an application error is still a failure. Offline, pending, or expired access must not be replaced with client entitlement claims.
 
-Both web `NATIVE_PURCHASES_READY` and Android `TRANSACTIONS_ENABLED` remain false. The existing generic Median plugin remains installed for compatibility, but OnlyFast does not call its paywall/purchase/restore APIs. This protocol's native hold covers this extension; it does not remove vendor APIs from the binary.
+Web `NATIVE_PURCHASES_READY`, Android `TRANSACTIONS_ENABLED`, and iOS `transactionsEnabled` remain false. The existing generic Median plugin remains installed for compatibility, but OnlyFast does not call its configure/paywall/purchase/restore APIs. The iOS adapter refuses an already configured SDK it does not own, observes customerInfoStream without replacing Median's delegate, and emits only a payload-free subscription-updated event. This protocol's native hold covers this extension; it does not remove vendor APIs from the binary.

@@ -1,0 +1,69 @@
+{
+  "datePacific": "2026-10-17",
+  "startedAtUtc": "2026-10-18T01:10:56.520Z",
+  "kind": "actual Android minified runtime; identities and catalog tokens redacted",
+  "avd": "OnlyFast_RevenueCat_API36",
+  "serial": "emulator-5554",
+  "applicationId": "app.onlyfast",
+  "variant": "normalInternalMinifiedQa",
+  "r8Enabled": true,
+  "qaDebuggable": true,
+  "artifact": "tmp/android-minified-runtime-review/onlyfast-minified-qa-debug-signed.apk",
+  "sha256": "2346898E8499DAEFBD1516DBF0FBB3AE9E6ACD2C8E9CC7AAFFB799D2882822B0",
+  "signing": {
+    "userApprovedSeparateCopy": true,
+    "existingAndroidDebugKeyOnly": true,
+    "installedCertificateMatched": true,
+    "installReplaceSucceeded": true,
+    "uninstalled": false,
+    "dataCleared": false,
+    "productionKeyUsed": false
+  },
+  "runtime": {
+    "medianLaunch": "passed",
+    "localAuthentication": "passed",
+    "protocolVersion": 1,
+    "platform": "android",
+    "verifiedUuidUsed": true,
+    "namedOffering": "onlyfast_monthly_v1",
+    "invalidSessionRejected": true,
+    "mismatchedUuidRejected": true,
+    "accountAToBAndBack": "passed",
+    "delayedAccountAResultRejected": true,
+    "loggedOutCatalogRejected": true,
+    "homeAndResumeAuthAndCatalog": "passed",
+    "unexpectedNavigationCount": 0,
+    "rookieFree": true,
+    "publicComingSoon": true,
+    "publicRestoreDisabled": true,
+    "publicPurchasesReady": false,
+    "nativeTransactionsEnabled": false,
+    "purchasesInvoked": 0,
+    "restoresInvoked": 0,
+    "newFatalCrashesObserved": false,
+    "errors": []
+  },
+  "catalog": [
+    { "plan": "pro", "packageIdentifier": "$rc_monthly", "productIdentifier": "pro:pro", "formattedPrice": "$4.99", "currencyCode": "USD", "amountMicros": 4990000, "billingPeriod": "P1M", "trialEligibility": "unknown", "returnedFreeTrialPhase": false },
+    { "plan": "teams", "packageIdentifier": "$rc_custom_teams_monthly", "productIdentifier": "teams:teams", "formattedPrice": "$7.99", "currencyCode": "USD", "amountMicros": 7990000, "billingPeriod": "P1M", "trialEligibility": "unknown", "returnedFreeTrialPhase": false }
+  ],
+  "picker": {
+    "imageOnlyChooserCancellation": "passed",
+    "imageOnlyPhotosSelection": "unresolved; previous system-process share-prediction crash",
+    "alternateFileChooserDocumentsUiSelection": "passed",
+    "alternateFileChooserCancellationAfterSelection": "passed",
+    "fixture": { "name": "ONLYFAST-QA-photo.png", "mime": "image/png", "bytes": 449563, "uploaded": false },
+    "authenticationAndPagePreserved": true,
+    "harnessCorrection": "An empty change event after prior selection is cancellation.",
+    "vendorPickerChanged": false
+  },
+  "rawEvidenceIgnored": "tmp/android-minified-runtime-review/runtime-report-final.json",
+  "limitations": [
+    "QA is debuggable and uses isolated local Auth/origin/tester bindings; final production-signed non-debuggable AAB is not tested.",
+    "Original image-only Photos selection still needs verification on a stable target; alternate selection is not proof of that path.",
+    "Store prices are this emulator session's actual responses; trial eligibility is unknown.",
+    "Historical 17:28 system-process crash remains in crash buffer; no new fatal entry was observed during the minified run."
+  ],
+  "productionChanged": false,
+  "uploadedOrDistributed": false
+}

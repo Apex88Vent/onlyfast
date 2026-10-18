@@ -38,6 +38,24 @@ Before any legitimate AAB packaging, omit all of these QA scripts, local binding
 
 ## Photo-picker follow-up
 
+**Latest follow-up:** the separate R8/minified QA artifact was debug-signed and installed with explicit user approval, preserving app data. See [minified runtime evidence](minified-runtime-evidence.json) and [completion review](../../../docs/NATIVE_BRIDGE_COMPLETION_REVIEW.md). The historical failure below remains relevant; it is not a claim that the latest bridge crashed.
+
 The serve-only client now offers a manual `image/*` file input after synthetic Auth/account-switch checks. Use only `ONLYFAST-QA-photo.png`; selection records name/type/size and revalidates the synthetic account, without uploading/reading file content. Cancellation also revalidates Auth. The additional manual check has its own `manualPhotoPicker` status (initially `not-run`); the base `report.passed` alone does not prove it was exercised. It is not imported into the production build.
 
 During the October 17 follow-up, the native chooser opened but selecting Photos crashed the API 36 emulator's **system process** (`IntentFilter.getDataType` → `DataManager.reportShareTargetEvent`); the selection/cancel checks remain incomplete. No new APK was signed or installed. See [the source-resolution/Android preparation report](../../../docs/IOS_SOURCE_BLOCKER_RESOLUTION.md) before retrying on a stable runtime. Do not clear emulator data or change production photo-picker behavior to bypass this failure.
+
+The latest serve-only harness offers separate image-only and unrestricted file inputs. Image-only chooser cancellation preserved Auth. Choosing Photos & videos through the alternate file chooser opened DocumentsUI; selecting the synthetic PNG returned its metadata through Median's actual WebView callback, with no upload, Auth loss or navigation reset. An empty `change` after a previous selection is classified as cancellation, matching Median/WebView behavior. This validates an alternate path; the original image-only Photos selection remains unresolved and needs a stable target/physical-device check before release.
+
+## Minified emulator-only artifact
+
+In a NEW prepared QA copy, the explicitly opted-in init script adds `internalMinifiedQa` from `release`, with R8 enabled, inspection/debug enabled, QA-only assets/manifest, and no signing configuration. It refuses signing tasks. Production release sources/assets/signing are untouched:
+
+```powershell
+Push-Location tmp/android-minified-runtime-review
+.\gradlew.bat :app:assembleNormalInternalMinifiedQa -I ..\..\native\android\qa\minified.init.gradle --offline --console=plain --no-daemon
+Pop-Location
+```
+
+The resulting unsigned APK is under `app/build/outputs/apk/normal/internalMinifiedQa/`. Android requires signing for installation. With the user's subsequent explicit approval, a separate `onlyfast-minified-qa-debug-signed.apk` was signed using the existing Android debug keystore. Both certificates were compared against the installed emulator app; they matched. `adb -s emulator-5554 install -r` succeeded. No uninstall/data clear, production signing key, AAB, distribution or upload was used.
+
+This QA variant proves R8 execution with the local synthetic gate; it is deliberately debuggable and uses local bindings. It does not prove a final non-debuggable, production-signed AAB. Exclude the init script, local assets and harness from release packaging. Never silently uninstall to bypass a certificate mismatch.

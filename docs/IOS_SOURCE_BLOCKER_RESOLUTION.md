@@ -1,5 +1,7 @@
 # Median iOS source blocker resolved — October 17, 2026 (Pacific)
 
+Follow-up: [Swift adapter implementation and minified Android runtime review](NATIVE_BRIDGE_COMPLETION_REVIEW.md). This report preserves the earlier source-resolution evidence; its runtime/signing statements describe that earlier stage.
+
 The iOS configuration/dependency blocker is resolved **without macOS hosting, signing, an IPA build or an upload**. Only Median's **iOS SOURCE CODE → Rebuild** was invoked, followed by downloading and inspecting that source archive. No app/plugin setting was changed. Android release compilation/R8 also passed; its photo-picker runtime check encountered a separate emulator system crash.
 
 ## 1. Exact bundle-ID cause

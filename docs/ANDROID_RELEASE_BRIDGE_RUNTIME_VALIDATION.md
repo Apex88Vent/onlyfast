@@ -1,5 +1,7 @@
 # Android native release bridge runtime validation — 2026-10-17
 
+Follow-up: [minified runtime and iOS adapter completion review](NATIVE_BRIDGE_COMPLETION_REVIEW.md), with separate debug-signed minified QA evidence and picker limitations. This report describes the earlier non-minified run.
+
 **Result: catalog, authenticated identity, account switching and held public UI passed in the actual Median Android runtime. No purchase or restore was performed.**
 
 Reviewed bridge: `86e794f440e84b658e170d190693ec7c76aa7eec`, branch `codex/native-revenuecat-release`. The release Kotlin bridge, pre-navigation Median hook, web controller/transport and readiness constants were not changed for this task. New tracked files are confined to `native/android/qa/` and this report.

@@ -1,0 +1,23 @@
+// Explicit opt-in for a NEW prepared local QA source copy. Never production packaging.
+allprojects {
+    plugins.withId('com.android.application') {
+        androidComponents.finalizeDsl { extension ->
+            def qa = extension.buildTypes.create('internalMinifiedQa')
+            qa.initWith(extension.buildTypes.getByName('release'))
+            qa.matchingFallbacks = ['release']
+            qa.minifyEnabled = true
+            qa.debuggable = true // Emulator inspection only; does not disable R8.
+            qa.signingConfig = null // Stop before signing; no release/debug key is used.
+            extension.sourceSets.getByName('internalMinifiedQa').with {
+                assets.srcDirs = ['src/debug/assets']
+                res.srcDirs = ['src/debug/res']
+                manifest.srcFile 'src/debug/AndroidManifest.xml'
+            }
+        }
+    }
+}
+gradle.taskGraph.whenReady { graph ->
+    if (graph.allTasks.any { it.name ==~ /(?i)(validateSigning|sign|create.*Keystore).*/ }) {
+        throw new GradleException('Unsigned QA preparation must not execute signing tasks.')
+    }
+}
