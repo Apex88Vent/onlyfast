@@ -1,5 +1,7 @@
 # Native bridge implementation and minified runtime review — October 17, 2026
 
+Follow-up: [iOS compilation readiness and historical Android picker comparison](IOS_COMPILATION_READINESS.md). The user reports the prior Play picker worked; preserve the implementation and defer final selection to a physical device. Further emulator troubleshooting is deferred unless an actual OnlyFast regression is established. This report retains the earlier runtime evidence.
+
 **Android minified catalog/identity runtime passed. The iOS Swift adapter is implemented in source but remains uncompiled and untested on iOS. Original image-only Photos selection remains unresolved. Public purchases and restores remain held.**
 
 Work is confined to `codex/native-revenuecat-release`, based on `d0d43c5bf695aa44350b94472694c0be3467f138`. No push, merge, production deployment, store upload, purchase, restore, production Auth/database operation or billing configuration change occurred. The user's later approval permitted only a separate debug-signed QA APK on the named emulator; no production signing key was used. Protected branches/worktrees and original downloaded native sources/archives remain intact.

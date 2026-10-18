@@ -2,6 +2,8 @@
 
 `OnlyFastBilling.swift` implements shared protocol 1 using the **existing** RevenueCat SDK 5.96.0 and Median plugin 1.1.2 in the verified revision-16 export. It has not been compiled with Swift/Xcode or tested on iOS. Native transactions and public purchasing remain disabled. See [the completion review](../../docs/NATIVE_BRIDGE_COMPLETION_REVIEW.md).
 
+Current priority: [the prepared private GitHub Actions unsigned simulator compilation path](../../docs/IOS_COMPILATION_READINESS.md). A self-contained local review workspace and inactive manual workflow are ready; no CI push/run or paid macOS hosting has been authorized or performed.
+
 Use only `C:\Users\c_mar\Downloads\ios_source.tar (1).gz`, SHA-256 `91431FBDC8761910F1CEF4EA8E167E0EB9C2810296C83E1321418CA0FEA11628`. Its preserved extraction is `tmp/ios-source-current/ios`. Old revision-12 exports remain untouched. The [source evidence](source-resolution.snapshot.json) records bundle `app.onlyfast`, configuration 16, plugin 1.1.2 and SDK 5.96.0. The [store snapshot](store-readiness.snapshot.json) records earlier Apple configuration; it does not prove runtime prices or eligibility.
 
 ## Reproduce in a new copy
