@@ -1,0 +1,20 @@
+{
+  "apply": false,
+  "project_id": "proj79983fe3",
+  "paywall_id": "pw3a65004212ef4af8",
+  "terms": {
+    "component_id": "6554716f9f",
+    "destination": "https://onlyfast.app/terms-of-service",
+    "prerequisite": "Approved deployment and signed-out verification of the public Terms route",
+    "legal_text_change": false
+  },
+  "tester_override": {
+    "customer_id": "<verified synthetic local Supabase UUID; check RevenueCat aliases before assignment>",
+    "body": { "offering_id": "ofrng35794ca3b5" },
+    "clear_body": { "offering_id": null },
+    "approval_required": true
+  },
+  "global_default": "KEEP default (ofrng9c4268b9bb)",
+  "publish_approval_required": true,
+  "public_native_purchases_ready": false
+}

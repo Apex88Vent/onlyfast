@@ -25,7 +25,7 @@ function setup(status, enabled = false) {
     if (name === '@/lib/nativePurchaseController') return { NativePurchaseError };
     if (name === '@/lib/nativePurchases') return { nativePurchasesEnabled: enabled,
       nativePurchases: { setUser: async id => { f.storeCalls.push(['identify', id]); }, run: async (id, action) => { f.storeCalls.push([action, id]); if (f.error) throw f.error; } },
-      syncNativeSubscription: async () => { f.syncCalls++; if (f.syncError) throw f.syncError; } };
+      syncNativeSubscription: async () => { f.syncCalls++; if (f.syncError) throw f.syncError; if (f.syncStatus) f.status = f.syncStatus; } };
     throw Error('Unexpected dependency ' + name);
   }, mod, mod.exports);
   return { f, Component: mod.exports.default };
@@ -70,4 +70,46 @@ test('restore completion alone cannot unlock content, while pending/cancellation
       if (error) assert.match(text(view.root), new RegExp(error.pending ? 'pending' : 'cancelled'));
     } finally { await act(async () => view.unmount()); }
   }
+});
+
+test('paywall success refreshes the server but cannot itself grant Pro or Teams', async () => {
+  for (const serverStatus of [free(), paid('play_store'), paid('app_store', 'teams')]) {
+    const { f, Component } = setup(free(), true);
+    f.syncStatus = serverStatus;
+    const view = await mount(Component, f);
+    try {
+      await click(view, 'View Pro and Teams subscriptions');
+      assert.deepEqual(f.storeCalls, [['identify', 'tester'], ['purchase', 'tester']]);
+      assert.equal(f.syncCalls, 1);
+      assert.equal(f.verified, serverStatus.isPaid ? 1 : 0);
+      assert.match(text(view.root), new RegExp('Current plan: ' + (serverStatus.isPaid ? serverStatus.label : 'Rookie')));
+    } finally { await act(async () => view.unmount()); }
+  }
+});
+
+test('canceled, pending and failed paywalls do not confirm or synchronize a purchase', async () => {
+  for (const error of [new NativePurchaseError('Purchase cancelled.', true),
+    new NativePurchaseError('Payment pending; server confirmation required.', false, true), Error('Store offline')]) {
+    const { f, Component } = setup(free(), true); f.error = error;
+    const view = await mount(Component, f);
+    try {
+      await click(view, 'View Pro and Teams subscriptions');
+      assert.equal(f.syncCalls, 0); assert.equal(f.verified, 0);
+      assert.match(text(view.root), /Current plan: Rookie/);
+      assert.match(text(view.root), new RegExp(error.message.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    } finally { await act(async () => view.unmount()); }
+  }
+});
+
+test('an existing paid account cannot open another paywall even when activation is mocked on', async () => {
+  const { f, Component } = setup(free(), true);
+  const view = await mount(Component, f);
+  try {
+    // The provider becomes active after the initial screen load. The action must
+    // recheck authoritative membership before invoking any native billing method.
+    f.status = paid('stripe');
+    await click(view, 'View Pro and Teams subscriptions');
+    assert.deepEqual(f.storeCalls, []); assert.equal(f.syncCalls, 0);
+    assert.match(text(view.root), /paid membership is already active/);
+  } finally { await act(async () => view.unmount()); }
 });

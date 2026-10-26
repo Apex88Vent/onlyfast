@@ -21,8 +21,7 @@ export default function MembershipPaidAction({ userId, tier, onVerified, checkou
     return () => { active.current = false; };
   }, [userId]);
 
-  if (hideExternalPayments) return <NativeSubscriptionControls userId={userId} purchaseOnly
-    purchaseLabel={tier === 'pro' ? 'Choose Pro' : 'Choose Teams'} onVerified={onVerified} />;
+  if (hideExternalPayments) return <NativeSubscriptionControls userId={userId} purchaseOnly onVerified={onVerified} />;
 
   const choose = async () => {
     setMessage('');

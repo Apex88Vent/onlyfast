@@ -100,7 +100,7 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userI
               </div>
 
               <p className="text-sm text-[#6B7280] mb-4">{plan.description}</p>
-              {plan.tier !== 'rookie' && <p className="text-xs text-[#6B7280] mb-3">Seven-day introductory trial where eligible when store subscriptions launch. Store prices and eligibility will be shown before purchase.</p>}
+              {plan.tier !== 'rookie' && <p className="text-xs text-[#6B7280] mb-3">Localized store prices, subscription terms and any eligible introductory offer will be shown before purchase.</p>}
               {plan.tier === 'rookie' && <p className="text-xs text-[#6B7280] mb-3">Setup export, leaderboard uploads and badges, and advanced profiles are locked. Pro or Teams unlocks them.</p>}
               <ul className="space-y-2 mb-6 flex-1">
                 {plan.synopsis.map((line, i) => (

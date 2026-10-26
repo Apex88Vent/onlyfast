@@ -40,7 +40,7 @@ test('native-disabled membership shows all plans, free continuation, accurate li
   assert.doesNotMatch(html.match(/<button[^>]*>Continue Free<\/button>/)?.[0] || 'missing', /\sdisabled(?:=|>)/);
   assert.match(html, />Continue Free<\/button>/);
   assert.equal((html.match(/<button[^>]*disabled[^>]*>Coming Soon<\/button>/g) || []).length, 2);
-  assert.match(html, /Free Forever/); assert.match(html, /Seven-day introductory trial where eligible/);
+  assert.match(html, /Free Forever/); assert.match(html, /Localized store prices, subscription terms and any eligible introductory offer/);
   assert.match(html, /role="table" aria-label="OnlyFast membership features"/);
   assert.match(html, /Locked/); assert.match(html, /Included/);
   assert.equal(limits.rookie.setupAssistsPerRaceWeekend, 1);

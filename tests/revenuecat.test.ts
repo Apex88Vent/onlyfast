@@ -89,6 +89,8 @@ test('webhook authorization rejects missing and incorrect secrets', () => {
   assert.equal(authorizationMatches('Bearer right', 'Bearer right'), true);
 });
 
+const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 function harness() {
   const calls: string[] = [];
   const bridge: RevenueCatBridge = {
@@ -96,7 +98,6 @@ function harness() {
     async configure({ appUserID }) { calls.push('configure:' + appUserID); return { success: true }; },
     async login({ appUserID }) { calls.push('login:' + appUserID); return { success: true }; },
     async logout() { calls.push('logout'); return { success: true }; },
-    async getOfferings() { return { success: true, identifiers: ['pro_monthly', 'team_monthly'] }; },
     async presentPaywall() { calls.push('paywall'); return { success: true }; },
     async restorePurchases() { calls.push('restore'); return { success: true }; },
   };
@@ -105,25 +106,25 @@ function harness() {
 }
 test('purchase and restore always identify the authenticated account first', async () => {
   const { calls, controller } = harness();
-  await assert.rejects(controller.run('a', 'purchase'), /account changed/);
-  await controller.setUser('a'); await controller.run('a', 'purchase'); await controller.run('a', 'restore');
-  assert.deepEqual(calls, ['login:a', 'login:a', 'paywall', 'login:a', 'restore']);
+  await assert.rejects(controller.run(A, 'purchase'), /account changed/);
+  await controller.setUser(A); await controller.run(A, 'purchase'); await controller.run(A, 'restore');
+  assert.deepEqual(calls, ['login:' + A, 'login:' + A, 'paywall', 'login:' + A, 'restore']);
 });
 test('app restart logs into the current UUID even if the SDK was already initialized', async () => {
-  const { controller, calls } = harness(); await controller.setUser('returning-user');
-  assert.deepEqual(calls, ['login:returning-user']);
+  const { controller, calls } = harness(); await controller.setUser(A);
+  assert.deepEqual(calls, ['login:' + A]);
 });
 test('first launch configures the SDK with the Supabase UUID', async () => {
   const { controller, bridge, calls } = harness();
   bridge.isInitialized = async () => ({ initialized: false });
-  await controller.setUser('new-user'); assert.deepEqual(calls, ['configure:new-user']);
+  await controller.setUser(A); assert.deepEqual(calls, ['configure:' + A]);
 });
 test('logout and switching accounts clear the previous identity before the next purchase', async () => {
   const { controller, calls } = harness();
-  await controller.setUser('a'); await controller.setUser(null); await controller.setUser('b');
-  await assert.rejects(controller.run('a', 'purchase'));
-  await controller.run('b', 'restore');
-  assert.deepEqual(calls, ['login:a', 'logout', 'login:b', 'login:b', 'restore']);
+  await controller.setUser(A); await controller.setUser(null); await controller.setUser(B);
+  await assert.rejects(controller.run(A, 'purchase'));
+  await controller.run(B, 'restore');
+  assert.deepEqual(calls, ['login:' + A, 'logout', 'login:' + B, 'login:' + B, 'restore']);
 });
 test('a purchase response after account switching is discarded', async () => {
   const { controller, bridge } = harness();
@@ -131,35 +132,35 @@ test('a purchase response after account switching is discarded', async () => {
   let opened!: () => void;
   const started = new Promise<void>(resolve => { opened = resolve; });
   bridge.presentPaywall = () => { opened(); return new Promise(resolve => { finish = resolve; }); };
-  await controller.setUser('a');
-  const purchase = controller.run('a', 'purchase');
+  await controller.setUser(A);
+  const purchase = controller.run(A, 'purchase');
   await started;
-  const switched = controller.setUser('b');
+  const switched = controller.setUser(B);
   finish({ success: true });
   await assert.rejects(purchase, /account changed/); await switched;
 });
 test('cancellation is separate from purchase failure and neither succeeds', async () => {
-  const { controller, bridge } = harness(); await controller.setUser('a');
+  const { controller, bridge } = harness(); await controller.setUser(A);
   bridge.presentPaywall = async () => ({ success: false, error: { code: 'PURCHASE_CANCELLED' } });
-  await assert.rejects(controller.run('a', 'purchase'), error => error instanceof NativePurchaseError && error.cancelled);
+  await assert.rejects(controller.run(A, 'purchase'), error => error instanceof NativePurchaseError && error.cancelled);
   bridge.presentPaywall = async () => ({ success: false, error: { code: 'STORE_PROBLEM', message: 'Store unavailable' } });
-  await assert.rejects(controller.run('a', 'purchase'), /Store unavailable/);
+  await assert.rejects(controller.run(A, 'purchase'), /Store unavailable/);
 });
 test('identity failures prevent paywall and restore calls', async () => {
   const { controller, bridge, calls } = harness();
   bridge.login = async () => ({ success: false, error: { message: 'Login failed' } });
-  await assert.rejects(controller.setUser('a'), /Login failed/);
-  await assert.rejects(controller.run('a', 'purchase'), /Login failed/);
-  await assert.rejects(controller.run('a', 'restore'), /Login failed/);
+  await assert.rejects(controller.setUser(A), /Login failed/);
+  await assert.rejects(controller.run(A, 'purchase'), /Login failed/);
+  await assert.rejects(controller.run(A, 'restore'), /Login failed/);
   assert.deepEqual(calls, []);
 });
 
 test('Median rejected response objects retain cancellation and useful error messages', async () => {
-  const { controller, bridge } = harness(); await controller.setUser('a');
+  const { controller, bridge } = harness(); await controller.setUser(A);
   bridge.presentPaywall = async () => { throw { success: false, error: { code: '1', message: 'Cancelled by user' } }; };
-  await assert.rejects(controller.run('a', 'purchase'), error => error instanceof NativePurchaseError && error.cancelled);
+  await assert.rejects(controller.run(A, 'purchase'), error => error instanceof NativePurchaseError && error.cancelled);
   bridge.restorePurchases = async () => { throw { success: false, error: { code: 'STORE_ERROR', message: 'Store unavailable' } }; };
-  await assert.rejects(controller.run('a', 'restore'), /Store unavailable/);
+  await assert.rejects(controller.run(A, 'restore'), /Store unavailable/);
 });
 
 test('absent feature flag blocks purchases and restore before any bridge call', async () => {
@@ -171,9 +172,76 @@ test('absent feature flag blocks purchases and restore before any bridge call', 
 });
 
 test('store-pending purchases remain pending and never resolve as confirmed access', async () => {
-  const { controller, bridge } = harness(); await controller.setUser('a');
+  const { controller, bridge } = harness(); await controller.setUser(A);
   bridge.presentPaywall = async () => ({ success: false, error: { code: 20 } });
-  await assert.rejects(controller.run('a', 'purchase'), error => error instanceof NativePurchaseError && error.pending && !error.cancelled && /server confirmation/.test(error.message));
+  await assert.rejects(controller.run(A, 'purchase'), error => error instanceof NativePurchaseError && error.pending && !error.cancelled && /server confirmation/.test(error.message));
+});
+
+test('the stock paywall owns product lookup and selection, with no custom catalog or purchase call', async () => {
+  const { controller, bridge, calls } = harness();
+  bridge.presentPaywall = async (...args) => {
+    assert.equal(args.length, 0, 'no undocumented offering or product arguments');
+    calls.push('paywall'); return { success: true };
+  };
+  await controller.setUser(A); await controller.run(A, 'purchase');
+  assert.deepEqual(calls, ['login:' + A, 'login:' + A, 'paywall']);
+});
+
+test('Median message-only paywall dismissal is cancellation, including rejected callbacks', async () => {
+  const { controller, bridge } = harness(); await controller.setUser(A);
+  bridge.presentPaywall = async () => ({ success: false, error: { message: 'User cancelled' } });
+  await assert.rejects(controller.run(A, 'purchase'), error => error instanceof NativePurchaseError && error.cancelled);
+  bridge.presentPaywall = async () => { throw { success: false, error: { message: 'User cancelled' } }; };
+  await assert.rejects(controller.run(A, 'purchase'), error => error instanceof NativePurchaseError && error.cancelled);
+});
+
+test('stock Median unwrapped error rejections cancel gracefully and never complete a purchase', async () => {
+  const { controller, bridge } = harness(); await controller.setUser(A);
+  for (const nativeError of [{ message: 'User cancelled' }, { code: 'PurchaseCancelledError' }, 'User cancelled']) {
+    bridge.presentPaywall = async () => { throw nativeError; };
+    let confirmed = false;
+    await assert.rejects(controller.run(A, 'purchase').then(() => { confirmed = true; }),
+      error => error instanceof NativePurchaseError && error.cancelled && !error.pending && error.message === 'Purchase cancelled.');
+    assert.equal(confirmed, false);
+  }
+  // A cancelled operation must not poison subsequent identified actions.
+  bridge.presentPaywall = async () => ({ success: true });
+  await controller.run(A, 'purchase');
+});
+
+test('unwrapped stock errors preserve store failures and pending states without accepting access', async () => {
+  const { controller, bridge } = harness(); await controller.setUser(A);
+  bridge.presentPaywall = async () => { throw { code: 20, message: 'Payment pending' }; };
+  await assert.rejects(controller.run(A, 'purchase'), error => error instanceof NativePurchaseError && error.pending && !error.cancelled);
+  bridge.restorePurchases = async () => { throw { code: 'STORE_ERROR', message: 'Store unavailable' }; };
+  await assert.rejects(controller.run(A, 'restore'), error => error instanceof NativePurchaseError && !error.cancelled && error.message === 'Store unavailable');
+  bridge.presentPaywall = async () => { throw 'Store offline'; };
+  await assert.rejects(controller.run(A, 'purchase'), /Store offline/);
+});
+
+test('missing and anonymous identities cannot initialize or purchase', async () => {
+  for (const id of ['', '$RCAnonymousID:synthetic', 'display-name']) {
+    let calls = 0;
+    const controller = new NativePurchaseController(async () => { calls++; throw Error('Must not reach bridge'); }, () => 'public-key');
+    await assert.rejects(controller.setUser(id), /signed-in OnlyFast/);
+    await assert.rejects(controller.run(id, 'purchase'), /signed-in OnlyFast/);
+    assert.equal(calls, 0);
+  }
+});
+
+test('A to B to A cannot accept an earlier paywall completion', async () => {
+  const { controller, bridge } = harness();
+  let finish!: (value: { success: boolean }) => void;
+  let opened!: () => void;
+  const started = new Promise<void>(resolve => { opened = resolve; });
+  bridge.presentPaywall = () => { opened(); return new Promise(resolve => { finish = resolve; }); };
+  await controller.setUser(A);
+  const purchase = controller.run(A, 'purchase');
+  await started;
+  const b = controller.setUser(B); const a = controller.setUser(A);
+  finish({ success: true });
+  await assert.rejects(purchase, /account changed/);
+  await Promise.all([b, a]);
 });
 
 test('default entitlements match OnlyFast and Teams wins when both are granted', () => {
