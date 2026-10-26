@@ -1,6 +1,7 @@
 import { useMembershipRevision } from '@/hooks/useMembershipRevision';
 import { CustomCarGate } from './CustomCarSheet';
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
+import { nativeAds } from '@/lib/nativeAds';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import { AnnouncerProvider } from './AccessibleAnnouncer';
@@ -342,6 +343,9 @@ const AppLayout: React.FC = () => {
   };
 
   const openClassChange = () => setClassChangeOpen(true);
+  useLayoutEffect(() => {
+    if (authModalOpen || classChangeOpen || legalModal !== null) return nativeAds.suspend();
+  }, [authModalOpen, classChangeOpen, legalModal]);
   const effectiveTier = getEffectiveTier(readMembership(user?.user_metadata || {}));
   const openTeamsUpgrade = () => {
     setClassChangeOpen(false);

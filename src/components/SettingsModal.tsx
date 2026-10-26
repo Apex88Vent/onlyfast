@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect } from 'react';
+import { nativeAds } from '@/lib/nativeAds';
 import NativeSubscriptionControls from '@/components/NativeSubscriptionControls';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -46,6 +47,7 @@ const clearDeletedAccountLocalState = (userId: string) => {
 };
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) => {
+  useLayoutEffect(() => { if (isOpen) return nativeAds.suspend(); }, [isOpen]);
   const { betaIndicatorLabel, hasBetaFeature, testerKind } = useBetaFeatures();
   const hasExperimentalFullAccess =
     testerKind === 'experimental' &&
@@ -66,6 +68,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [adPrivacyMessage, setAdPrivacyMessage] = useState('');
+  const [requestingAdPrivacy, setRequestingAdPrivacy] = useState(false);
 
 
   useEffect(() => {
@@ -484,6 +488,34 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
                 ? 'For technical support, privacy, or data requests.'
                 : 'For account, billing, privacy, or data requests.'}
             </p>
+            <p className="text-xs text-[#9CA3AF] mt-2">
+              <Link to="/privacy-policy" onClick={onClose} className="text-[#00A8E8] underline-offset-2 hover:underline">Privacy Policy</Link>
+              {' '}includes information about native advertising. Essential-cookie choices do not grant advertising consent.
+            </p>
+            {nativeAds?.canRequestConsent?.() && (
+              <div className="mt-2">
+                <button
+                  type="button"
+                  disabled={requestingAdPrivacy}
+                  onClick={async () => {
+                    setRequestingAdPrivacy(true);
+                    setAdPrivacyMessage('');
+                    try {
+                      const status = await nativeAds.requestConsent();
+                      setAdPrivacyMessage(status === 'unverified'
+                        ? 'Your native privacy request completed. Ad permission could not be verified, so ads remain off.'
+                        : 'Advertising privacy controls are unavailable right now. Ads remain off.');
+                    } catch {
+                      setAdPrivacyMessage('Advertising privacy controls are unavailable right now. Ads remain off.');
+                    } finally { setRequestingAdPrivacy(false); }
+                  }}
+                  className="text-sm font-semibold text-[#00A8E8] underline-offset-2 hover:underline disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
+                >
+                  {requestingAdPrivacy ? 'Requesting privacy choices…' : 'Request advertising privacy choices'}
+                </button>
+                {adPrivacyMessage && <p role="status" className="text-xs text-[#9CA3AF] mt-2">{adPrivacyMessage}</p>}
+              </div>
+            )}
           </section>
 
           <section>

@@ -40,6 +40,7 @@ function renderUI(file: string, states: unknown[], environment: typeof environme
       ...React,
       useState: (initial: unknown) => [stateIndex < states.length ? states[stateIndex++] : initial, () => {}],
       useEffect: () => {},
+      useLayoutEffect: () => {},
     };
     if (id === '@/lib/paymentVisibility') return {
       isMedianIOSApp: isMedianIOS(environment.ua, environment.touch),
@@ -47,6 +48,10 @@ function renderUI(file: string, states: unknown[], environment: typeof environme
       nativeBillingMessage: 'Existing Android billing message',
       nativeUpgradeMessage: 'Existing Android upgrade message',
     };
+    if (id === '@/lib/nativeAds') return { nativeAds: {
+      canRequestConsent: () => isMedianUserAgent(environment.ua) && /android/i.test(environment.ua),
+      requestConsent: async () => 'unverified',
+    } };
     if (id === 'react-router-dom') return {
       useNavigate: () => () => {}, useLocation: () => ({}),
       Link: ({ to, children }: { to: string; children: React.ReactNode }) => React.createElement('a', { href: to }, children),
@@ -80,6 +85,9 @@ for (const environment of environments) {
       environment, { isOpen: true, onClose: () => {}, user });
     assert.match(settings, /href="\/support"[^>]*>Contact Support/);
     assert.match(settings, /Delete Account/);
+    if (isMedianUserAgent(environment.ua) && /android/i.test(environment.ua)) {
+      assert.match(settings, /Request advertising privacy choices/);
+    } else assert.doesNotMatch(settings, /Request advertising privacy choices/);
     assert.match(settings, /Type DELETE to confirm/);
     assert.match(support, /Technical issue/);
     assert.match(support, /Privacy or data request/);

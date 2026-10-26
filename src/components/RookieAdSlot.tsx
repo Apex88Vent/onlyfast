@@ -2,6 +2,7 @@ import React, { Suspense } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { shouldShowAds } from '@/lib/ads';
 import { isMedianIOSApp } from '@/lib/paymentVisibility';
+import { useMembershipRevision } from '@/hooks/useMembershipRevision';
 
 export type RookieAdPlacement =
   | 'home_middle'
@@ -26,6 +27,7 @@ export interface RookieAdSlotProps {
 const RookieHouseAdContent = React.lazy(() => import('./RookieHouseAdContent'));
 
 const RookieAdSlot: React.FC<RookieAdSlotProps> = (props) => {
+  useMembershipRevision();
   const isDevPreview = props.previewMode && import.meta.env.DEV;
 
   if (!isDevPreview && !shouldShowAds(props.user)) {

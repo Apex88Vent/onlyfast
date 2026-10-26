@@ -7,7 +7,7 @@ import { CUSTOM_CAR, CUSTOM_SHEET_KEY, customSheetFromRow, readCustomSheet, snap
 import { areSetupSheetsCompatible, isDevelopmentClass } from '@/lib/setupLibrary';
 import { canAccessSetupClass } from '@/lib/setupLibraryAccess';
 import { buildLibraryCustomFields, libraryFieldsFromRow, SETUP_LIBRARY_KEY } from '@/lib/setupLibraryStorage';
-import React, { useState, useEffect, useCallback, useId, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useId, useRef } from 'react';
 import { isMedianIOSApp } from '@/lib/paymentVisibility';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -69,6 +69,7 @@ import {
 } from '@/lib/membership';
 import RookieAdSlot from './RookieAdSlot';
 import { shouldShowAds } from '@/lib/ads';
+import { nativeAds } from '@/lib/nativeAds';
 import {
   createNewRaceWeekendSessions,
   getDefaultRaceSessionLabels,
@@ -447,6 +448,11 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   const [classLockNoticeOpen, setClassLockNoticeOpen] = useState(false);
   // Whether ads should be shown to this user at all (rookie + logged in only).
   const adsEnabled = shouldShowAds(user);
+  const saveAdContext = useRef({ userId: user?.id, activeView, saveModalOpen });
+  useLayoutEffect(() => {
+    saveAdContext.current = { userId: user?.id, activeView, saveModalOpen };
+  }, [user?.id, activeView, saveModalOpen]);
+  useLayoutEffect(() => nativeAds.setPlacement(user?.id ?? null, activeView), [user?.id, activeView]);
 
 
   // Swipe animation state
@@ -1329,6 +1335,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       const isRename = savedMeta.name && savedMeta.name.trim() !== name.trim();
       const newIds: Partial<Record<SetupType, string>> = {};
       let queuedAny = false;
+      let persistedAny = false;
 
       const saveTabs = ALL_SLOTS.filter(tabKey => {
         if (deletedSessionSlots[tabKey]) return false;
@@ -1350,6 +1357,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
             result = await dbInsert(payload);
           }
           newIds[tabKey] = result.id;
+          persistedAny = true;
         } catch (err: any) {
           if (isNetworkError(err)) {
             // Queue it for later
@@ -1391,7 +1399,9 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
         }
         setTimeout(() => setSaveMessage(''), 4000);
       }
-      return true;
+      // Preserve the truthy success result for queued saves and existing callers,
+      // while distinguishing a confirmed database save for advertising only.
+      return { persisted: persistedAny && !queuedAny, queued: queuedAny };
     } catch (err: any) {
       setSaveMessage('Error saving: ' + (err.message || 'Unknown error'));
       return null;
@@ -1422,6 +1432,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
 
 
   const handleSaveModalSubmit = async (name: string) => {
+    const adTicket = nativeAds.beginManualSave(user?.id ?? null);
     const result = await performSave(name);
     if (result) {
       setSaveModalOpen(false);
@@ -1430,9 +1441,14 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
         setSaveThenClear(false);
         doClearAllTabs();
       }
-      // Post-save interstitial ad — rookie users only, AFTER a successful save.
-      // Never shown on failure (result is falsy) and never blocks the save.
-      if (adsEnabled) setShowPostSaveAd(true);
+      // Only the completed save modal owns this immediate pause. No delayed ad
+      // can follow the user back into editing, another screen, or another account.
+      const context = saveAdContext.current;
+      const adResult = nativeAds.completeManualSave(adTicket, {
+        ...result,
+        editing: !context.saveModalOpen || context.activeView !== 'setup' || context.userId !== user?.id,
+      });
+      if (adResult === 'house') setShowPostSaveAd(true);
     }
   };
 
