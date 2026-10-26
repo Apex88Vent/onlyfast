@@ -77,15 +77,15 @@ const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type }) => {
         <div className="flex-1 overflow-y-auto px-6 py-6 text-sm text-[#4B5563] leading-relaxed space-y-4">
           {type === 'privacy' ? (
             <>
-              <p className="text-xs text-[#9CA3AF]">Last updated: April 7, 2026</p>
+              <p className="text-xs text-[#9CA3AF]">Last updated: October 26, 2026</p>
               <h3 className="text-base font-bold text-[#1A1B23]">1. Information We Collect</h3>
               <p>OnlyFast collects the following information when you create an account: email address, password (encrypted), and selected subscription plan. When you use the app, we store your chassis setup data, track information, and session notes.</p>
               <h3 className="text-base font-bold text-[#1A1B23]">2. How We Use Your Information</h3>
-              <p>Your data is used solely to provide the OnlyFast setup tracking service. We use your email for account authentication and important service communications. Setup data is used to provide AI-powered suggestions and setup comparison features.</p>
+              <p>Your setup data is used to provide the OnlyFast setup tracking service. We use your email for account authentication and important service communications. Setup data is used to provide AI-powered suggestions and setup comparison features.</p>
               <h3 className="text-base font-bold text-[#1A1B23]">3. Data Storage & Security</h3>
-              <p>Your data is stored securely using Supabase infrastructure with row-level security. Passwords are hashed and never stored in plain text. We do not sell, share, or transfer your personal data to third parties.</p>
-              <h3 className="text-base font-bold text-[#1A1B23]">4. Cookies</h3>
-              <p>We use only essential cookies required for authentication and session management. We do not use tracking, analytics, or advertising cookies.</p>
+              <p>Your data is stored securely using Supabase infrastructure with row-level security. Passwords are hashed and never stored in plain text. Service providers process data needed to operate OnlyFast. Google AdMob may process advertising-related device and interaction data in the Android app as described below.</p>
+              <h3 className="text-base font-bold text-[#1A1B23]">4. Cookies & Advertising</h3>
+              <p>We use essential cookies for authentication and session management. The Android app is being prepared to offer Google AdMob ads to eligible signed-in Rookie accounts. AdMob may process device identifiers, IP addresses, device information, and ad interactions for ad delivery, measurement, and fraud prevention. Native ad display is disabled in this release while advertising consent controls are prepared. Ad display settings do not necessarily stop an SDK included in the native app from initializing or making requests. Required advertising privacy choices must be collected separately; accepting essential cookies does not authorize personalized advertising. iOS advertising is not enabled.</p>
               <h3 className="text-base font-bold text-[#1A1B23]">5. Your Rights</h3>
               <p>You have the right to access, correct, or delete your personal data at any time. You can delete your account and all associated data by contacting support. You can export your setup data from the Saved Setups section.</p>
               <h3 className="text-base font-bold text-[#1A1B23]">6. Data Retention</h3>

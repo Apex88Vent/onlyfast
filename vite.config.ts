@@ -20,7 +20,7 @@ export default defineConfig(({ mode }) => ({
     },
   },
   build: {
-    outDir: "dist",
+    outDir: mode === 'native-sandbox' ? 'dist-native-sandbox' : 'dist',
     emptyOutDir: true,
     rollupOptions: {
       input: {

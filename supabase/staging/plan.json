@@ -1,0 +1,24 @@
+{
+  "baseline": "20261016230333_staging_baseline.sql",
+  "migrations": [
+    "20260630_prepare_user_subscriptions_for_revenuecat.sql",
+    "20260713_add_race_schedule_end_date.sql",
+    "20260720_enforce_active_race_class.sql",
+    "20260728_add_account_beta_feature_flags.sql",
+    "202607280002_onlyfast_onlylaps_backend_foundation.sql",
+    "202607280004_onlyfast_onlylaps_session_linking.sql",
+    "20260817_link_race_setups_to_schedule.sql",
+    "202609240001_revenuecat_subscription_sync.sql",
+    "202609240002_schedule_revenuecat_expiration.sql",
+    "20260929_add_custom_car_class.sql",
+    "20260930_add_development_setup_library.sql",
+    "20261002030004_add_development_kart_classes.sql",
+    "202610130001_restore_racing_onboarding.sql",
+    "20261013183621_enable_road_racing.sql",
+    "20261015235847_secure_membership_authorization.sql"
+  ],
+  "excluded": {
+    "202607280005_enable_cmar_test_account_full_access.sql": "Account-specific data grant; requires a named existing Auth user. No schema is defined. Staging starts with empty Auth and grants no real-user access.",
+    "20261001_verify_designated_test_account.sql": "Account-specific verification/grant; raises when the named Auth user does not exist. No schema is defined. Seed synthetic test identities explicitly after schema creation instead."
+  }
+}

@@ -16,7 +16,7 @@ const PrivacyPolicy: React.FC = () => {
             <img src={LOGO_URL} alt="OnlyFast" className="h-12 w-auto" />
           </Link>
           <h1 className="mt-5 text-3xl font-bold text-[#1A1B23]">Privacy Policy</h1>
-          <p className="mt-2 text-sm text-[#9CA3AF]">Last updated: April 7, 2026</p>
+          <p className="mt-2 text-sm text-[#9CA3AF]">Last updated: October 26, 2026</p>
         </header>
 
         <div className="space-y-5 text-sm leading-relaxed text-[#4B5563]">
@@ -32,7 +32,7 @@ const PrivacyPolicy: React.FC = () => {
           <section>
             <h2 className="text-base font-bold text-[#1A1B23]">2. How We Use Your Information</h2>
             <p className="mt-2">
-              Your data is used solely to provide the OnlyFast setup tracking service. We use your
+              Your setup data is used to provide the OnlyFast setup tracking service. We use your
               email for account authentication and important service communications. Setup data is
               used to provide AI-powered suggestions and setup comparison features.
             </p>
@@ -42,16 +42,23 @@ const PrivacyPolicy: React.FC = () => {
             <h2 className="text-base font-bold text-[#1A1B23]">3. Data Storage & Security</h2>
             <p className="mt-2">
               Your data is stored securely using Supabase infrastructure with row-level security.
-              Passwords are hashed and never stored in plain text. We do not sell, share, or transfer
-              your personal data to third parties.
+              Passwords are hashed and never stored in plain text. Service providers process data
+              needed to operate OnlyFast. Google AdMob may process advertising-related device and
+              interaction data in the Android app as described below.
             </p>
           </section>
 
           <section>
-            <h2 className="text-base font-bold text-[#1A1B23]">4. Cookies</h2>
+            <h2 className="text-base font-bold text-[#1A1B23]">4. Cookies & Advertising</h2>
             <p className="mt-2">
-              We use only essential cookies required for authentication and session management. We do
-              not use tracking, analytics, or advertising cookies.
+              We use essential cookies for authentication and session management. The Android app is
+              being prepared to offer Google AdMob ads to eligible signed-in Rookie accounts.
+              AdMob may process device identifiers, IP addresses, device information, and ad interactions
+              for ad delivery, measurement, and fraud prevention. Native ad display is disabled in this
+              release while advertising consent controls are prepared. Ad display settings do not
+              necessarily stop an SDK included in the native app from initializing or making requests.
+              Required advertising privacy choices must be collected separately; accepting essential
+              cookies does not authorize personalized advertising. iOS advertising is not enabled.
             </p>
           </section>
 

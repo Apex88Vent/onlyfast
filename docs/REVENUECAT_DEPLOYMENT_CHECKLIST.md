@@ -1,9 +1,19 @@
 # OnlyFast RevenueCat backend deployment checklist
 
+> Local Docker/Supabase verification is now complete. See
+> [LOCAL_SUPABASE_REVENUECAT_TEST_REPORT.md](LOCAL_SUPABASE_REVENUECAT_TEST_REPORT.md)
+> for the native PostgreSQL, cron, Auth and Edge test results and remaining
+> production rollout requirements. Nothing was deployed to production.
+
 Reviewed October 16, 2026 (America/Los_Angeles). **Prepared locally; nothing deployed.**
 No migrations were applied to Supabase, production records changed, purchases
 enabled, offerings changed, paywalls published, or Apple products submitted.
 SQL tests execute only in disposable in-memory PostgreSQL (PGlite).
+
+For fresh staging creation, first read [STAGING_DATABASE_REBUILD.md](STAGING_DATABASE_REBUILD.md).
+The production migration history lacks its original schema baseline; replaying
+that history alone on a new branch fails. The separate, locally validated staging
+sequence does not modify production history or customer data.
 
 The code is ready for a staging rehearsal. Production readiness still requires
 the operator checks and acceptance tests below; this is not evidence of a live

@@ -45,8 +45,9 @@ const CookieConsent: React.FC = () => {
           <h2 className="text-sm font-bold text-[#1A1B23] mb-1">Cookie & Privacy Notice</h2>
           <p id="cookie-desc" className="text-xs text-[#6B7280] leading-relaxed">
             OnlyFast uses essential cookies for authentication and saving your preferences. 
-            We do not use tracking or advertising cookies. Your setup data is stored securely 
-            and is only accessible to you. By continuing, you agree to our use of essential cookies.
+            The Android app is being prepared to offer Google AdMob ads to eligible signed-in Rookie accounts.
+            AdMob may process device identifiers, IP addresses, and ad interactions. Advertising privacy choices
+            are separate from essential cookies; these buttons do not grant advertising consent.
           </p>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">

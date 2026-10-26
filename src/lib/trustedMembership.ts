@@ -23,6 +23,9 @@ export function resolveAuthorizedMembership(row: Subscription | null, grants: Gr
 
 let activeUser: string | null = null;
 let authorization: { row: Subscription | null; grants: Grants } | null = null;
+// Advertising may fail closed without changing subscription entitlement behavior.
+export const AD_AUTHORIZATION_MAX_AGE_MS = 5 * 60 * 1000;
+let advertisingVerifiedAt: number | null = null;
 let revision = 0;
 export function getMembershipRevision() { return revision; }
 // Publish a time-based change even when a renewal lookup is offline. Every
@@ -36,15 +39,40 @@ export function clearTrustedMembership(userId: string | null = null) {
   if (activeUser === userId && userId !== null) return;
   activeUser = userId;
   authorization = null;
+  advertisingVerifiedAt = null;
   changed();
 }
 export function setTrustedAuthorization(userId: string, row: Subscription | null, grants: Grants) {
   activeUser = userId;
   authorization = { row: row ? { ...row } : null, grants: { ...grants } };
+  advertisingVerifiedAt = Date.now();
   changed();
 }
 export function getTrustedMembership(): MembershipState | null {
   return authorization ? resolveAuthorizedMembership(authorization.row, authorization.grants) : null;
+}
+
+/** Invalidate only advertising evidence while a membership refresh is pending. */
+export function invalidateAdvertisingMembership(userId: string | null) {
+  if (activeUser !== userId || advertisingVerifiedAt === null) return;
+  advertisingVerifiedAt = null;
+  changed();
+}
+
+export function getAdvertisingAuthorizationExpiry(): number | null {
+  return advertisingVerifiedAt === null ? null : advertisingVerifiedAt + AD_AUTHORIZATION_MAX_AGE_MS;
+}
+
+/** Never substitute the default Rookie tier for missing, stale or another user's evidence. */
+export function getTrustedAdvertisingMembership(userId: string, now = Date.now()): MembershipState | null {
+  if (!userId || activeUser !== userId || !authorization || advertisingVerifiedAt === null ||
+      now < advertisingVerifiedAt || now >= advertisingVerifiedAt + AD_AUTHORIZATION_MAX_AGE_MS) return null;
+  // Preserve every server-authorized promotional exemption, including ambassador
+  // grants that do not confer a subscription tier. Never consult user_metadata.
+  if (authorization.grants.promo_access_level) return null;
+  if (authorization.row && !['free', 'rookie', 'pro', 'team', 'teams'].includes(
+    authorization.row.plan?.toLowerCase() || '')) return null;
+  return resolveAuthorizedMembership(authorization.row, authorization.grants, now);
 }
 
 export function getMembershipExpiration(): number | null {

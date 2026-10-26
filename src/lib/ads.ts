@@ -13,7 +13,8 @@
 // ---------------------------------------------------------------------------
 
 import type { User } from '@supabase/supabase-js';
-import { readMembership, getEffectiveTier } from '@/lib/membership';
+import { getEffectiveTier } from '@/lib/membership';
+import { getTrustedAdvertisingMembership } from '@/lib/trustedMembership';
 
 // Google AdSense publisher (client) id — used by every <AdsenseAd />.
 export const ADSENSE_CLIENT = 'ca-pub-9431443509195212';
@@ -47,13 +48,13 @@ export const AD_SLOTS = {
  *
  * Anything ambiguous → false (hide ads).
  */
-export function shouldShowAds(user: User | null | undefined): boolean {
+export function shouldShowAds(user: Pick<User, 'id'> | null | undefined): boolean {
   // Rule 1 & 2: must be a logged-in account.
   if (!user) return false;
 
   try {
-    const metadata = (user.user_metadata || {}) as Record<string, any>;
-    const membership = readMembership(metadata);
+    const membership = getTrustedAdvertisingMembership(user.id);
+    if (!membership) return false;
 
     // Admin / full-access override → never ads.
     if (membership.has_admin_full_access === true) return false;

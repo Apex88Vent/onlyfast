@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { assertLocalSandboxConfiguration } from './nativeSandboxPolicy';
 
 /* ──────────────────────────────────────────────────────────────────────────
  * SWITCHING TO A DIFFERENT SUPABASE / DATABASE PROJECT
@@ -45,6 +46,11 @@ const envKey =
   env.VITE_database_ANON_KEY ||
   undefined;
 
+// Fail before constructing a client: a sandbox build can never silently use
+// this application's production fallback. Keep its Auth session separate too.
+if (import.meta.env.MODE === 'native-sandbox') {
+  assertLocalSandboxConfiguration(import.meta.env.MODE, env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY);
+}
 const supabaseUrl = envUrl || FALLBACK_URL;
 const supabaseKey = envKey || FALLBACK_KEY;
 
@@ -105,6 +111,7 @@ if (typeof window !== 'undefined') {
   }
 }
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(supabaseUrl, supabaseKey, import.meta.env.MODE === 'native-sandbox'
+  ? { auth: { storageKey: 'onlyfast-native-sandbox-auth' } } : undefined);
 
 export { supabase, supabaseUrl, supabaseKey };

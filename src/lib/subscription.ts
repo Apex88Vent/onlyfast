@@ -1,7 +1,7 @@
 // Subscription state derives from server-owned subscription rows and grants.
 
 import { supabase } from '@/lib/supabase';
-import { setTrustedAuthorization, clearTrustedMembership } from './trustedMembership';
+import { setTrustedAuthorization, clearTrustedMembership, invalidateAdvertisingMembership } from './trustedMembership';
 // The disposable experimental account can retain its legacy full-access mode
 // through an explicit account-level feature flag.
 import { isCurrentUserTestAccount } from '@/lib/testAccount';
@@ -137,6 +137,7 @@ export async function syncMembershipFromSubscription(): Promise<AccountStatus | 
   const user = data.session?.user;
   if (!user) { clearTrustedMembership(); return null; }
   clearTrustedMembership(user.id);
+  invalidateAdvertisingMembership(user.id);
   const [row, verified] = await Promise.all([
     fetchUserSubscription(user.id),
     supabase.auth.getUser(),
