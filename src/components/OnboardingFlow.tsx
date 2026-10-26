@@ -1,3 +1,4 @@
+import { getClassIcon } from '@/lib/classIcons';
 import { CUSTOM_CAR, CUSTOM_CAR_DISCIPLINES } from '@/lib/customCar';
 import React, { useState, useRef, useEffect } from 'react';
 import { CLASS_CONFIGS } from '@/lib/classConfigs';
@@ -22,53 +23,6 @@ interface OnboardingFlowProps {
 // Cars is locked again (Coming Soon). Lightning Sprints remains usable.
 
 
-
-const carIcons: Record<string, { blue: string; white: string }> = {
-  'Dwarf Cars': {
-    blue: '/onlyfast-class-icons/dwarf/dwarf-blue.png',
-    white: '/onlyfast-class-icons/dwarf/dwarf-white.png',
-  },
-  'Late Model': {
-    blue: '/onlyfast-class-icons/dirt-late-model/dirt-late-model-blue.png',
-    white: '/onlyfast-class-icons/dirt-late-model/dirt-late-model-white.png',
-  },
-  'Lightning Sprints': {
-    blue: '/onlyfast-class-icons/lightning-sprint/lightning-sprint-blue.png',
-    white: '/onlyfast-class-icons/lightning-sprint/lightning-sprint-white.png',
-  },
-  'Midgets': {
-    blue: '/onlyfast-class-icons/midget/midget-blue.png',
-    white: '/onlyfast-class-icons/midget/midget-white.png',
-  },
-  'Modified': {
-    blue: '/onlyfast-class-icons/modified/modified-blue.png',
-    white: '/onlyfast-class-icons/modified/modified-white.png',
-  },
-  'Non-Wing Sprint Cars': {
-    blue: '/onlyfast-class-icons/non-wing-sprint/non-wing-sprint-blue.png',
-    white: '/onlyfast-class-icons/non-wing-sprint/non-wing-sprint-white.png',
-  },
-  'Pro Stock': {
-    blue: '/onlyfast-class-icons/pure-stock/pure-stock-blue.png',
-    white: '/onlyfast-class-icons/pure-stock/pure-stock-white.png',
-  },
-  'Pure Stock': {
-    blue: '/onlyfast-class-icons/pure-stock/pure-stock-blue.png',
-    white: '/onlyfast-class-icons/pure-stock/pure-stock-white.png',
-  },
-  'Sport Compact': {
-    blue: '/onlyfast-class-icons/sport-compact/sport-compact-blue.png',
-    white: '/onlyfast-class-icons/sport-compact/sport-compact-white.png',
-  },
-  'Sport Mod': {
-    blue: '/onlyfast-class-icons/modified/modified-blue.png',
-    white: '/onlyfast-class-icons/modified/modified-white.png',
-  },
-  'Winged Sprint Cars': {
-    blue: '/onlyfast-class-icons/winged-sprint/winged-sprint-blue.png',
-    white: '/onlyfast-class-icons/winged-sprint/winged-sprint-white.png',
-  },
-};
 
 // Discipline definitions
 const disciplines = [
@@ -325,6 +279,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error, user
               {getDisciplineSetupClasses((disciplines.find(d => d.name === selectedDiscipline)?.key || 'dirt_oval') as SetupCategory, betaAccess).map((className) => {
                 const config = EXPANDED_CLASS_CONFIGS[className] || CLASS_CONFIGS[className];
                 const discipline = disciplines.find(d => d.name === selectedDiscipline);
+                const hasBakedBlueTile = discipline?.key === 'pavement_oval' || discipline?.key === 'road_course';
                 const isEnabled = className === CUSTOM_CAR
                   ? CUSTOM_CAR_DISCIPLINES[discipline?.key || ''] === true
                   : Boolean(config);
@@ -338,9 +293,10 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error, user
                       className="bg-white rounded-2xl border-2 border-[#E5E7EB] hover:border-[#00A8E8] p-6 transition-all group shadow-sm hover:shadow-lg hover:shadow-[#00A8E8]/10 text-left focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
                       aria-label={`${config?.name || className} - ${config?.description || ''}`}
                     >
-                      <div className="w-16 h-16 bg-[#00A8E8]/10 rounded-xl overflow-hidden flex items-center justify-center mb-4 group-hover:bg-[#00A8E8]/20 transition-colors" aria-hidden="true">
+                      {/* Match the baked-in blue at rest; only the surround darkens on highlight. */}
+                      <div className={`w-16 h-16 ${hasBakedBlueTile ? 'bg-[#DDEFFE]' : 'bg-[#00A8E8]/10'} rounded-xl overflow-hidden flex items-center justify-center mb-4 group-hover:bg-[#00A8E8]/20 transition-colors`} aria-hidden="true">
                         <img
-                          src={(carIcons[className] || carIcons['Dwarf Cars']).blue}
+                          src={getClassIcon(className, 'blue') || getClassIcon('Dwarf Cars', 'blue')}
                           alt=""
                           width={40}
                           height={40}
@@ -376,7 +332,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error, user
                     </div>
                     <div className="w-16 h-16 bg-gray-200 rounded-xl flex items-center justify-center mb-4 text-gray-400" aria-hidden="true">
                       <img
-                        src={(carIcons[className] || carIcons['Dwarf Cars']).white}
+                        src={getClassIcon(className, 'white') || getClassIcon('Dwarf Cars', 'white')}
                         alt=""
                         width={40}
                         height={40}
