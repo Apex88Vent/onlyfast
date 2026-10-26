@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 import test from 'node:test';
 import ts from 'typescript';
 import * as configs from '../src/lib/classConfigs.ts';
+import * as classIcons from '../src/lib/classIcons.ts';
 import * as library from '../src/lib/setupLibrary.ts';
 import * as access from '../src/lib/setupLibraryAccess.ts';
 import * as custom from '../src/lib/customCar.ts';
@@ -35,6 +36,7 @@ function compile(file, modules = {}) {
     if (name === 'lucide-react') return new Proxy({}, { get: () => icon });
     if (name === '@/hooks/useBetaFeatures') return { useBetaFeatures: () => ({ ...fixture.access, loading: fixture.betaLoading, hasBetaFeature: () => false }) };
     if (name === '@/lib/classConfigs') return configs;
+    if (name === '@/lib/classIcons') return classIcons;
     if (name === '@/lib/setupLibrary') return library;
     if (name === '@/lib/setupLibraryAccess') return access;
     if (name === '@/lib/customCar') return custom;

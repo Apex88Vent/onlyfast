@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import * as classIcons from '../src/lib/classIcons.ts';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -137,6 +138,7 @@ function loadUI(file: string, betaAccess = experimentalAccess, states: unknown[]
   const localRequire = (id: string) => {
     if (id === 'react' && states.length) return { ...React, useState: (initial: unknown) => [stateIndex < states.length ? states[stateIndex++] : initial, () => {}], useEffect: () => {} };
     if (id === '@/lib/classConfigs') return configs;
+    if (id === '@/lib/classIcons') return classIcons;
     if (id === '@/lib/setupLibrary') return library;
     if (id === '@/lib/setupLibraryAccess') return access;
     if (id === '@/lib/setupLibraryStorage') return storage;

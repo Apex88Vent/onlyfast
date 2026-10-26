@@ -1,3 +1,4 @@
+import { getClassIcon } from '@/lib/classIcons';
 import { setupClassLabel } from '@/lib/setupLibrary';
 import React from 'react';
 import { EXPANDED_CLASS_CONFIGS, SETUP_CATEGORY_LABELS, type SetupCategory } from '@/lib/setupLibrary';
@@ -58,20 +59,6 @@ const actionCards: {
   { action: 'parts', label: 'Parts Reference', icon: Wrench },
   { action: 'library', label: 'Setup Library', icon: Library },
 ];
-
-const classIconWhitePaths: Record<string, string> = {
-  'Dwarf Cars': '/onlyfast-class-icons/dwarf/dwarf-white.png',
-  'Late Model': '/onlyfast-class-icons/dirt-late-model/dirt-late-model-white.png',
-  'Lightning Sprints': '/onlyfast-class-icons/lightning-sprint/lightning-sprint-white.png',
-  'Midgets': '/onlyfast-class-icons/midget/midget-white.png',
-  'Modified': '/onlyfast-class-icons/modified/modified-white.png',
-  'Non-Wing Sprint Cars': '/onlyfast-class-icons/non-wing-sprint/non-wing-sprint-white.png',
-  'Pro Stock': '/onlyfast-class-icons/pure-stock/pure-stock-white.png',
-  'Pure Stock': '/onlyfast-class-icons/pure-stock/pure-stock-white.png',
-  'Sport Compact': '/onlyfast-class-icons/sport-compact/sport-compact-white.png',
-  'Sport Mod': '/onlyfast-class-icons/modified/modified-white.png',
-  'Winged Sprint Cars': '/onlyfast-class-icons/winged-sprint/winged-sprint-white.png',
-};
 
 const formatDate = (date?: string) => {
   if (!date) return '';
@@ -232,7 +219,7 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
   const displayedWeekendTitle = currentWeekendTitle || 'Current Race Weekend';
   const topInfoCount = (selectedCar ? 1 : 0) + (showNextEvent ? 1 : 0);
   const formattedCarNumber = formatCarNumber(carNumber);
-  const selectedCarIcon = classIconWhitePaths[selectedCar];
+  const selectedCarIcon = getClassIcon(selectedCar, 'white');
 
   return (
     <div className="max-w-5xl mx-auto">
