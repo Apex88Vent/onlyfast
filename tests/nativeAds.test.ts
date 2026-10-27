@@ -6,23 +6,23 @@ import * as trusted from '../src/lib/trustedMembership.ts';
 import * as environment from '../src/lib/nativeEnvironment.ts';
 
 // Execute real application modules with isolated browser/network boundaries.
-function loadModule(path: string, dependencies: Record<string, unknown>, env = {}) {
+function loadModule<T>(path: string, dependencies: Record<string, unknown>, env = {}) {
   const source = readFileSync(new URL(path, import.meta.url), 'utf8')
     .replaceAll('import.meta.env.VITE_MEDIAN_ADMOB_ENABLED', 'testEnvironment.VITE_MEDIAN_ADMOB_ENABLED');
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-  const exports: any = {};
+  const exports: Record<string, unknown> = {};
   new Function('require', 'exports', 'testEnvironment', js)((name: string) => {
     assert.ok(name in dependencies, `Unexpected dependency: ${name}`);
     return dependencies[name];
   }, exports, env);
-  return exports;
+  return exports as T;
 }
-const membership = loadModule('../src/lib/membership.ts', {
+const membership = loadModule<typeof import('../src/lib/membership.ts')>('../src/lib/membership.ts', {
   '@/lib/supabase': { supabase: {} }, './trustedMembership': trusted,
   '@/lib/testAccount': { isCurrentUserTestAccount: () => false },
 });
-const ads = loadModule('../src/lib/ads.ts', { '@/lib/membership': membership, '@/lib/trustedMembership': trusted });
-const native = loadModule('../src/lib/nativeAds.ts', {
+const ads = loadModule<typeof import('../src/lib/ads.ts')>('../src/lib/ads.ts', { '@/lib/membership': membership, '@/lib/trustedMembership': trusted });
+const native = loadModule<typeof import('../src/lib/nativeAds.ts')>('../src/lib/nativeAds.ts', {
   './ads': ads, './nativeEnvironment': environment, './trustedMembership': trusted,
 }, { VITE_MEDIAN_ADMOB_ENABLED: 'true' });
 
@@ -127,7 +127,7 @@ test('browser, iOS, missing bridge/methods and disabled flag do not enable nativ
   }
   const f = fixture(); f.host.bridge = undefined; f.controller.refresh();
   assert.equal(complete(f), 'house');
-  f.host.bridge = {} as any; f.controller.refresh(); assert.equal(complete(f), 'house');
+  f.host.bridge = {} as typeof f.bridge; f.controller.refresh(); assert.equal(complete(f), 'house');
   f.host.bridge = f.bridge; f.state.enabled = false; f.controller.refresh();
   assert.equal(f.calls.at(-1), 'disable'); assert.equal(complete(f), 'house');
   for (const value of [undefined, false, true, '', 'false', 'TRUE']) assert.equal(native.nativeAdsFeatureEnabled(value), false);
@@ -200,7 +200,7 @@ test('consent errors, callback-only bridges and late responses after account swi
   assert.equal(await failed.controller.requestConsent(), 'error');
   assert.equal(complete(failed), 'suppressed');
   const legacy = fixture(); legacy.state.consent = false;
-  legacy.bridge.request = { consent: (() => undefined) as any };
+  legacy.bridge.request = { consent: (() => undefined) as unknown as () => Promise<unknown> };
   assert.equal(await legacy.controller.requestConsent(), 'unavailable');
   const switched = fixture(); switched.state.consent = false;
   let finish!: (result: unknown) => void;

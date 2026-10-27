@@ -124,7 +124,9 @@ state. This is not a claim that the missing production Settings option is now li
   the corrected check uses the application's compiler configuration.
 - Focused lint comparison across 27 changed application files: no new findings;
   58 errors and 11 warnings exactly match existing main debt. Those unrelated
-  findings were not rewritten. Dedicated controller/AdMob/icon lint is also run.
+  findings were not rewritten. Dedicated controller/AdMob/icon and AdMob-test lint
+  passes after replacing three inherited test-only `any` annotations with explicit
+  module/bridge types; test behavior and application code are unchanged.
 - Production build passes. Existing main bundle-size warning remains.
 - Production imports/dependencies resolve; no package manifest/lockfile changes
   or dependency installations. Backend preservation check reports zero missing
