@@ -103,7 +103,8 @@ export class NativeAdsController {
 
   canRequestConsent(): boolean {
     try {
-      return !!this.userId && this.deps.enabled() && this.android() && this.foreground &&
+      // Manual privacy access is independent of advertising eligibility/display.
+      return !!this.userId && this.android() && this.foreground &&
         typeof this.deps.bridge()?.request?.consent === 'function';
     } catch { return false; }
   }
@@ -195,7 +196,7 @@ export class NativeAdsController {
       // Run UMP at an eligible, non-editing screen, before either native format.
       // Once per account/bridge attempt; Settings may explicitly retry errors or
       // re-request the flow. Do not loop when a native form cannot be displayed.
-      if (this.canRequestConsent() && this.routeSupported && this.suspensions.size === 0 &&
+      if (this.deps.enabled() && this.canRequestConsent() && this.routeSupported && this.suspensions.size === 0 &&
           this.deps.eligible(this.userId) && this.placement?.userId === this.userId &&
           ['home', 'schedule', 'saved'].includes(this.placement.view) &&
           (!this.consentAttempt || this.consentAttempt.bridge !== bridge || this.consentAttempt.generation !== this.generation)) {

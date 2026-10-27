@@ -68,9 +68,10 @@ test('unknown subscription plans are ambiguous for advertising without changing 
   assert.equal(trusted.getTrustedMembership()?.membership_tier, 'rookie');
 });
 
-function fixture(storage = new Map<string, string>(), useTrustedMembership = false) {
+function fixture(storage = new Map<string, string>(), useTrustedMembership = false,
+  initial: Partial<{ enabled: boolean; consent: boolean; eligible: boolean }> = {}) {
   const calls: string[] = [];
-  const state = { enabled: true, consent: true, eligible: true, ua: 'MedianAndroid/1.0 Android', now: 1_000_000 };
+  const state = { enabled: true, consent: true, eligible: true, ua: 'MedianAndroid/1.0 Android', now: 1_000_000, ...initial };
   const bridge = {
     banner: { enable: () => { calls.push('enable'); }, disable: () => { calls.push('disable'); } },
     showInterstitialIfReady: () => { calls.push('interstitial'); },
@@ -181,16 +182,49 @@ test('neither documented boolean nor an unknown permission-shaped response autho
   }
 });
 
-test('consent requests are Android-only, master-flag controlled and unavailable without a matching bridge', async () => {
+test('manual Settings consent works with ads disabled without automatic prompts or native ad display', async () => {
+  for (const eligible of [true, false]) {
+    const f = fixture(new Map(), false, { enabled: false, consent: native.NATIVE_ADS_CONSENT_VERIFIED, eligible });
+    let requests = 0;
+    f.bridge.request = { consent: async () => { requests++; return { success: true }; } };
+    assert.equal(f.controller.canRequestConsent(), true, 'privacy access does not require ad eligibility');
+    f.controller.refresh();
+    f.controller.setPlacement('a', 'schedule');
+    f.controller.setForeground(false); f.controller.setForeground(true);
+    assert.equal(requests, 0, 'ads off must not cause automatic consent prompts');
+    const releaseSettings = f.controller.suspend();
+    assert.equal(await f.controller.requestConsent(), 'unverified');
+    assert.equal(requests, 1);
+    releaseSettings();
+    f.controller.refresh();
+    complete(f);
+    assert.equal(requests, 1);
+    assert.ok(!f.calls.includes('enable') && !f.calls.includes('interstitial'));
+    assert.equal(f.storage.size, 0, 'privacy access must not consume the interstitial cooldown');
+    assert.equal(native.NATIVE_ADS_CONSENT_VERIFIED, false);
+  }
+});
+
+test('consent requests still require foreground authentication, Android and a matching bridge', async () => {
   for (const ua of ['Chrome Android', 'MedianIOS/1.0 iPhone']) {
-    const f = fixture(); f.state.ua = ua;
+    const f = fixture(new Map(), false, { enabled: false }); f.state.ua = ua;
     f.bridge.request = { consent: async () => { assert.fail('unsupported platform'); } };
+    assert.equal(f.controller.canRequestConsent(), false);
     assert.equal(await f.controller.requestConsent(), 'unavailable');
   }
-  const f = fixture();
+  const f = fixture(new Map(), false, { enabled: false });
+  assert.equal(f.controller.canRequestConsent(), false);
   assert.equal(await f.controller.requestConsent(), 'unavailable');
-  f.bridge.request = { consent: async () => { assert.fail('master flag disabled'); } };
-  f.state.enabled = false;
+  f.bridge.request = { consent: async () => { assert.fail('unavailable privacy request must not call native'); } };
+  f.host.bridge = undefined;
+  assert.equal(f.controller.canRequestConsent(), false);
+  assert.equal(await f.controller.requestConsent(), 'unavailable');
+  f.host.bridge = f.bridge;
+  f.controller.setUser(null);
+  assert.equal(f.controller.canRequestConsent(), false);
+  assert.equal(await f.controller.requestConsent(), 'unavailable');
+  f.controller.setUser('a'); f.controller.setForeground(false);
+  assert.equal(f.controller.canRequestConsent(), false);
   assert.equal(await f.controller.requestConsent(), 'unavailable');
 });
 

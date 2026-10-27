@@ -8,7 +8,10 @@ Focused consent follow-up: the documented Promise form of `median.admob.request.
 called before advertising opportunities at eligible Android screens, only with the master flag on.
 Requests are coalesced, bounded, and scoped to the current account/bridge; actual responses are retained
 in memory for device verification. Settings provides a native consent re-request action using that
-same documented method. Neither `success:true` nor `result:true` releases ads or implies personalization.
+same documented method for authenticated, foreground Median Android users with the consent bridge,
+even when the advertising flag is off or the account is not eligible for ads. Automatic consent
+requests remain gated by the advertising flag. Neither `success:true` nor `result:true` releases ads
+or implies personalization.
 This is not a verified UMP privacy-options/revocation implementation. The authorization hold remains:
 the public contract still does not define ad-request permission or how to reopen saved privacy options.
 
