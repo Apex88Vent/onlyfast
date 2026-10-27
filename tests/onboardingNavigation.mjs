@@ -32,6 +32,7 @@ function compile(file, modules = {}) {
   new Function('require', 'module', 'exports', code)(name => {
     if (name === 'react') return React;
     if (name === '@/hooks/useMembershipRevision') return { useMembershipRevision: () => {} };
+    if (name === '@/lib/nativeAds') return { nativeAds: { suspend: () => () => {} } };
     if (name.startsWith('react/')) return qaRequire(name);
     if (name === 'lucide-react') return new Proxy({}, { get: () => icon });
     if (name === '@/hooks/useBetaFeatures') return { useBetaFeatures: () => ({ ...fixture.access, loading: fixture.betaLoading, hasBetaFeature: () => false }) };

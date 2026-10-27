@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { authorizationMatches, mapRevenueCatSnapshot, revenueCatConfig, webhookUserIds, type SubscriberResponse } from '../supabase/functions/_shared/revenuecat.ts';
 import { NativePurchaseController, NativePurchaseError, type RevenueCatBridge } from '../src/lib/nativePurchaseController.ts';
+import { authorizationMatches, mapRevenueCatSnapshot, revenueCatConfig, webhookUserIds, type SubscriberResponse } from '../supabase/functions/_shared/revenuecat.ts';
 import { isMedianUserAgent, nativePlatform } from '../src/lib/nativeEnvironment.ts';
 
 const config = { apiKey: 'server-test-key', proEntitlement: 'pro', teamEntitlement: 'team', allowSandbox: false };
@@ -243,6 +243,7 @@ test('A to B to A cannot accept an earlier paywall completion', async () => {
   await assert.rejects(purchase, /account changed/);
   await Promise.all([b, a]);
 });
+// Historical custom-adapter coverage is retained separately in releaseNativeBilling.test.ts.
 
 test('default entitlements match OnlyFast and Teams wins when both are granted', () => {
   const configured = revenueCatConfig(key => key === 'REVENUECAT_SECRET_API_KEY' ? 'server-test-key' : undefined);

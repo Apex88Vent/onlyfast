@@ -1,0 +1,84 @@
+# DRAFT: copy only into an approved PRIVATE compilation repository.
+# This file is intentionally outside this web repo's .github/workflows.
+name: OnlyFast unsigned iOS compile
+
+on:
+  workflow_dispatch:
+    inputs:
+      approve_compile:
+        description: Approve one unsigned simulator compile (no app launch/sign/upload)
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: onlyfast-ios-compile
+  cancel-in-progress: false
+
+jobs:
+  compile:
+    if: github.event.repository.private == true && inputs.approve_compile == true
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - name: Checkout reviewed private source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, verified 2026-10-17
+        with:
+          persist-credentials: false
+          clean: false
+      - name: Verify archive and prepare source copy
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "$DEVELOPER_DIR"
+          xcodebuild -version
+          swift --version
+          node --version
+          shasum -a 256 -c source/ios_source.sha256
+          mkdir -p "$RUNNER_TEMP/onlyfast-ios-compile/raw"
+          tar -xzf source/ios_source.tar.gz -C "$RUNNER_TEMP/onlyfast-ios-compile/raw"
+          node scripts/prepare-median-ios-release-source.mjs \
+            --source "$RUNNER_TEMP/onlyfast-ios-compile/raw/ios" \
+            --output "$RUNNER_TEMP/onlyfast-ios-compile/ios"
+          node native/ios/ci/validate-input.mjs "$RUNNER_TEMP/onlyfast-ios-compile/ios" \
+            "$RUNNER_TEMP/onlyfast-ios-compile/locks.json"
+      - name: Resolve exact existing dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          swift package-registry set --global https://packages.median.co
+          xcodebuild -resolvePackageDependencies \
+            -workspace "$RUNNER_TEMP/onlyfast-ios-compile/ios/OnlyFast.xcworkspace" \
+            -scheme OnlyFast \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/onlyfast-ios-compile/SourcePackages" \
+            -disableAutomaticPackageResolution \
+            -onlyUsePackageVersionsFromResolvedFile
+          node native/ios/ci/validate-input.mjs "$RUNNER_TEMP/onlyfast-ios-compile/ios" \
+            "$RUNNER_TEMP/onlyfast-ios-compile/locks.json"
+      - name: Compile arm64 simulator without signing or launch
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild build \
+            -workspace "$RUNNER_TEMP/onlyfast-ios-compile/ios/OnlyFast.xcworkspace" \
+            -scheme OnlyFast -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/onlyfast-ios-compile/DerivedData" \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/onlyfast-ios-compile/SourcePackages" \
+            -disableAutomaticPackageResolution \
+            -onlyUsePackageVersionsFromResolvedFile \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' \
+            DEVELOPMENT_TEAM='' ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+            | tee "$RUNNER_TEMP/onlyfast-ios-compile/xcodebuild.log"
+          test -n "$(find "$RUNNER_TEMP/onlyfast-ios-compile/DerivedData/Build/Intermediates.noindex" -name 'OnlyFastBilling.o' -type f -print -quit)"
+          node native/ios/ci/validate-input.mjs "$RUNNER_TEMP/onlyfast-ios-compile/ios" \
+            "$RUNNER_TEMP/onlyfast-ios-compile/locks.json"
+          echo 'Unsigned simulator compile passed, including OnlyFastBilling.o. No app launch, signing, archive or upload.' >> "$GITHUB_STEP_SUMMARY"
+
+# Logs remain in the private Actions run. No artifact upload/cache/IPA/archive,
+# store credentials, RevenueCat secret key, service-role key or runtime tests.

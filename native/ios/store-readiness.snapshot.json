@@ -1,0 +1,83 @@
+{
+  "inspection": "Read-only RevenueCat MCP and live App Store Connect product-state retrieval",
+  "project": "proj79983fe3",
+  "iosApp": {
+    "id": "app82192c9834",
+    "bundleId": "app.onlyfast",
+    "appStoreConnectKeyConfigured": true,
+    "inAppPurchaseKeyConfigured": true
+  },
+  "offering": {
+    "identifier": "onlyfast_monthly_v1",
+    "isCurrent": false,
+    "currentOfferingUnchanged": "default"
+  },
+  "entitlements": {
+    "OnlyFast Pro": [
+      "app.onlyfast.pro.monthly",
+      "app.onlyfast.teams.monthly"
+    ],
+    "OnlyFast Teams": [
+      "app.onlyfast.teams.monthly"
+    ]
+  },
+  "products": [
+    {
+      "plan": "pro",
+      "revenueCatProductId": "proda39dd87405",
+      "storeIdentifier": "app.onlyfast.pro.monthly",
+      "packageIdentifier": "$rc_monthly",
+      "storeStatus": {
+        "status": "needs_action",
+        "raw_store_status": "READY_TO_SUBMIT",
+        "read_error_reason": null
+      },
+      "usConfiguredPrice": {
+        "amount_micros": 5000000,
+        "currency": "USD"
+      },
+      "pricedTerritoryCount": 175,
+      "availableTerritoryCount": 175,
+      "subscriptionGroup": "OnlyFast Memberships",
+      "trial": {
+        "duration": "ONE_WEEK",
+        "startDate": "2026-10-16",
+        "enabledTerritories": 175,
+        "missingTerritories": []
+      },
+      "warningsFieldReturned": false,
+      "warnings": [],
+      "storeFetchedAt": "2026-10-17T23:55:40Z"
+    },
+    {
+      "plan": "teams",
+      "revenueCatProductId": "prod901efecc38",
+      "storeIdentifier": "app.onlyfast.teams.monthly",
+      "packageIdentifier": "$rc_custom_teams_monthly",
+      "storeStatus": {
+        "status": "needs_action",
+        "raw_store_status": "READY_TO_SUBMIT",
+        "read_error_reason": null
+      },
+      "usConfiguredPrice": {
+        "amount_micros": 8000000,
+        "currency": "USD"
+      },
+      "pricedTerritoryCount": 175,
+      "availableTerritoryCount": 175,
+      "subscriptionGroup": "OnlyFast Memberships",
+      "trial": {
+        "duration": "ONE_WEEK",
+        "startDate": "2026-10-16",
+        "enabledTerritories": 175,
+        "missingTerritories": []
+      },
+      "warningsFieldReturned": false,
+      "warnings": [],
+      "storeFetchedAt": "2026-10-17T23:55:40Z"
+    }
+  ],
+  "storeChangesApplied": false,
+  "purchasesPerformed": false,
+  "storeKitRuntimeVerified": false
+}
