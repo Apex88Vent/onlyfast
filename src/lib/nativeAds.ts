@@ -1,7 +1,6 @@
 import { shouldShowAds } from './ads';
 import { isMedianUserAgent, nativePlatform } from './nativeEnvironment';
 import { getAdvertisingAuthorizationExpiry, invalidateAdvertisingMembership } from './trustedMembership';
-import { nativeAdsBuild } from '@/lib/nativeAdsBuild';
 
 // Verified commands: https://docs.median.co/docs/admob-native-ads
 // Readiness: https://docs.median.co/docs/javascript-bridge
@@ -12,23 +11,16 @@ export interface MedianAdmobBridge {
 }
 
 export const INTERSTITIAL_COOLDOWN_MS = 600_000;
-// The documented consent call is integrated below. Its public contract does not
-// define an ad-request permission signal or re-openable privacy options. Keep
-// this authorization hold until those native semantics are verified. Neither
-// success:true nor result:true is documented as canRequestAds or personalization.
-export const NATIVE_ADS_CONSENT_VERIFIED = false;
 
 export function nativeAdsFeatureEnabled(value: unknown): boolean { return value === 'true'; }
 
 export interface NativeAdsDependencies {
   enabled(): boolean;
-  consentReady(): boolean;
   userAgent(): string;
   bridge(): MedianAdmobBridge | undefined;
   eligible(userId: string): boolean;
   storage(): Pick<Storage, 'getItem' | 'setItem'>;
   now(): number;
-  iosEnabled?(): boolean;
   maxTouchPoints?(): number;
 }
 
@@ -135,17 +127,22 @@ export class NativeAdsController {
       try {
         // The Promise form is explicitly documented by Median. Do not manufacture
         // success for older/callback-only bridge implementations returning void.
-        const requestConsent = () => bridge.request.consent();
+        const requestConsent = () => {
+          const consent = bridge.request.consent();
+          if (!consent || typeof consent.then !== 'function') throw new Error('Native consent Promise unavailable');
+          return consent;
+        };
         let result: Promise<unknown>;
-        if (this.platform() === 'ios' && typeof bridge.request.tracking === 'function') {
+        if (this.platform() === 'ios') {
+          if (typeof bridge.request.tracking !== 'function') return 'unavailable';
           // ATT is separate from UMP. Denied/restricted ATT is not an ad-display
           // failure and never becomes authorization to track or personalize ads.
           const tracking = bridge.request.tracking();
           if (!tracking || typeof tracking.then !== 'function') return 'unavailable';
           result = Promise.resolve(tracking).then(response => {
-            if (generation !== this.generation || bridge !== this.deps.bridge()) return undefined;
+            if (generation !== this.generation || bridge !== this.deps.bridge()) throw new Error('Native identity changed');
             this.trackingResponse = response;
-            if (!this.foreground) return undefined;
+            if (!this.foreground) throw new Error('Native app backgrounded');
             return requestConsent();
           });
         } else result = requestConsent();
@@ -161,9 +158,11 @@ export class NativeAdsController {
         ]);
         if (generation !== this.generation || bridge !== this.deps.bridge()) return 'unavailable';
         this.consentResponse = response;
-        // Public docs mention both {success:boolean} and {result:boolean}, but
-        // do not define their permission semantics. Preserve the actual response
-        // for device verification; even true must not release ad requests.
+        // This records completion of the native flow, NOT permission to request
+        // ads, track, or personalize. Median exposes no documented canRequestAds
+        // getter. Subsequent banner/interstitial commands leave UMP eligibility
+        // and limited/nonpersonalized serving to the native plugin; no response
+        // field is converted into an authorization or SDK consent override.
         return 'unverified';
       } catch { return 'error'; }
       finally { clearTimeout(timer); }
@@ -191,12 +190,13 @@ export class NativeAdsController {
     const ua = this.deps.userAgent();
     if (!isMedianUserAgent(ua)) return null;
     const platform = nativePlatform(ua, this.deps.maxTouchPoints?.() ?? 0);
-    return platform === 'android' || (platform === 'ios' && this.deps.iosEnabled?.()) ? platform : null;
+    return platform === 'android' || platform === 'ios' ? platform : null;
   }
 
   private allowed() {
     return !!this.userId && this.deps.enabled() && this.platform() !== null && this.foreground &&
-      this.routeSupported && this.suspensions.size === 0 && this.consentStatus !== 'pending' && this.deps.consentReady() &&
+      this.routeSupported && this.suspensions.size === 0 && this.consentStatus === 'unverified' &&
+      this.consentAttempt?.bridge === this.deps.bridge() && this.consentAttempt.generation === this.generation &&
       this.deps.eligible(this.userId);
   }
 
@@ -290,8 +290,6 @@ type NativeAdsWindow = Window & { median?: { admob?: MedianAdmobBridge }; median
 
 export const nativeAds = new NativeAdsController({
   enabled: () => nativeAdsFeatureEnabled(import.meta.env.VITE_MEDIAN_ADMOB_ENABLED),
-  consentReady: () => nativeAdsBuild.permissionReady(NATIVE_ADS_CONSENT_VERIFIED, window.location.origin),
-  iosEnabled: () => nativeAdsBuild.iosEnabled(window.location.origin),
   maxTouchPoints: () => navigator.maxTouchPoints,
   userAgent: () => navigator.userAgent,
   bridge: () => (window as NativeAdsWindow).median?.admob,

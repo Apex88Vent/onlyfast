@@ -16,13 +16,11 @@ export default defineConfig(({ mode }) => ({
   plugins: [react()].filter(Boolean),
   resolve: {
     alias: {
-      '@/lib/nativeAdsBuild': path.resolve(__dirname, mode === 'admob-test'
-        ? 'src/lib/nativeAdsTestBuild.ts' : 'src/lib/nativeAdsBuild.ts'),
       "@": path.resolve(__dirname, "./src"),
     },
   },
   build: {
-    outDir: mode === 'native-sandbox' ? 'dist-native-sandbox' : mode === 'admob-test' ? 'dist-admob-test' : 'dist',
+    outDir: mode === 'native-sandbox' ? 'dist-native-sandbox' : 'dist',
     emptyOutDir: true,
     rollupOptions: {
       input: {

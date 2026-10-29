@@ -21,12 +21,12 @@ const CookieConsent: React.FC = () => {
   }, [visible]);
 
   const handleAccept = () => {
-    try { localStorage.setItem('onlyfast_cookie_consent', 'accepted'); } catch {}
+    try { localStorage.setItem('onlyfast_cookie_consent', 'accepted'); } catch { /* Storage may be unavailable. */ }
     setVisible(false);
   };
 
   const handleDecline = () => {
-    try { localStorage.setItem('onlyfast_cookie_consent', 'declined'); } catch {}
+    try { localStorage.setItem('onlyfast_cookie_consent', 'declined'); } catch { /* Storage may be unavailable. */ }
     setVisible(false);
   };
 
@@ -45,7 +45,7 @@ const CookieConsent: React.FC = () => {
           <h2 className="text-sm font-bold text-[#1A1B23] mb-1">Cookie & Privacy Notice</h2>
           <p id="cookie-desc" className="text-xs text-[#6B7280] leading-relaxed">
             OnlyFast uses essential cookies for authentication and saving your preferences. 
-            The Android app is being prepared to offer Google AdMob ads to eligible signed-in Rookie accounts.
+            The Android and iOS apps are being prepared to offer Google AdMob ads to eligible signed-in Rookie accounts.
             AdMob may process device identifiers, IP addresses, and ad interactions. Advertising privacy choices
             are separate from essential cookies; these buttons do not grant advertising consent.
           </p>

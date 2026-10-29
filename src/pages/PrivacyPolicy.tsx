@@ -44,21 +44,21 @@ const PrivacyPolicy: React.FC = () => {
               Your data is stored securely using Supabase infrastructure with row-level security.
               Passwords are hashed and never stored in plain text. Service providers process data
               needed to operate OnlyFast. Google AdMob may process advertising-related device and
-              interaction data in the Android app as described below.
+              interaction data in the Android and iOS apps as described below.
             </p>
           </section>
 
           <section>
             <h2 className="text-base font-bold text-[#1A1B23]">4. Cookies & Advertising</h2>
             <p className="mt-2">
-              We use essential cookies for authentication and session management. The Android app is
+              We use essential cookies for authentication and session management. The Android and iOS apps are
               being prepared to offer Google AdMob ads to eligible signed-in Rookie accounts.
               AdMob may process device identifiers, IP addresses, device information, and ad interactions
               for ad delivery, measurement, and fraud prevention. Native ad display is disabled in this
-              release while advertising consent controls are prepared. Ad display settings do not
+              release until activation is approved. Ad display settings do not
               necessarily stop an SDK included in the native app from initializing or making requests.
               Required advertising privacy choices must be collected separately; accepting essential
-              cookies does not authorize personalized advertising. iOS advertising is not enabled.
+              cookies does not authorize personalized advertising. On iOS, tracking permission is requested separately through Apple's native prompt. Tracking denial does not grant permission to track or personalize ads.
             </p>
           </section>
 

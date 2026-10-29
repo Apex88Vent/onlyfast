@@ -5,7 +5,7 @@ import test from 'node:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
-import { isMedianIOS, isMedianUserAgent } from '../src/lib/nativeEnvironment.ts';
+import { isMedianIOS, isMedianUserAgent, nativePlatform } from '../src/lib/nativeEnvironment.ts';
 
 const environments = [
   { name: 'Median iPhone', ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Median/1.0', touch: 5, ios: true, native: true },
@@ -34,7 +34,7 @@ function renderUI(file: string, states: unknown[], environment: typeof environme
   const { outputText } = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, esModuleInterop: true },
   });
-  const module = { exports: {} as { default: React.ComponentType<any> } };
+  const module = { exports: {} as { default: React.ComponentType<Record<string, unknown>> } };
   const localRequire = (id: string) => {
     if (id === 'react') return {
       ...React,
@@ -49,7 +49,7 @@ function renderUI(file: string, states: unknown[], environment: typeof environme
       nativeUpgradeMessage: 'Existing Android upgrade message',
     };
     if (id === '@/lib/nativeAds') return { nativeAds: {
-      canRequestConsent: () => isMedianUserAgent(environment.ua) && /android/i.test(environment.ua),
+      canRequestConsent: () => isMedianUserAgent(environment.ua) && nativePlatform(environment.ua, environment.touch) !== null,
       requestConsent: async () => 'unverified',
     } };
     if (id === 'react-router-dom') return {
@@ -85,7 +85,7 @@ for (const environment of environments) {
       environment, { isOpen: true, onClose: () => {}, user });
     assert.match(settings, /href="\/support"[^>]*>Contact Support/);
     assert.match(settings, /Delete Account/);
-    if (isMedianUserAgent(environment.ua) && /android/i.test(environment.ua)) {
+    if (isMedianUserAgent(environment.ua) && nativePlatform(environment.ua, environment.touch) !== null) {
       assert.match(settings, /Request advertising privacy choices/);
     } else assert.doesNotMatch(settings, /Request advertising privacy choices/);
     assert.match(settings, /Type DELETE to confirm/);

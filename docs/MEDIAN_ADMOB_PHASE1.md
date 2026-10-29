@@ -1,126 +1,104 @@
-# Median AdMob Phase 1 — Android release hold
+# OnlyFast native AdMob - original production apps
 
-For current isolated Android/iOS Google demo-ad builds, see
-[MEDIAN_ADMOB_TEST_BUILDS.md](MEDIAN_ADMOB_TEST_BUILDS.md). The production hold
-described here is unchanged; test-only permission authorization is a separate
-compile-time module, not verified consent or production activation.
+Updated October 28, 2026. No website deployment or ad activation is authorized by this change.
 
-Native ad display is **disabled by default and held disabled even when the feature flag is true**.
-No production AdMob IDs are embedded in the website. Unit IDs remain native Median configuration.
-No rewarded ads, iOS ads, deployment or Median configuration changes are included.
+## Website behavior
 
-Focused consent follow-up: the documented Promise form of `median.admob.request.consent()` is now
-called before advertising opportunities at eligible Android screens, only with the master flag on.
-Requests are coalesced, bounded, and scoped to the current account/bridge; actual responses are retained
-in memory for device verification. Settings provides a native consent re-request action using that
-same documented method for authenticated, foreground Median Android users with the consent bridge,
-even when the advertising flag is off or the account is not eligible for ads. Automatic consent
-requests remain gated by the advertising flag. Neither `success:true` nor `result:true` releases ads
-or implies personalization.
-This is not a verified UMP privacy-options/revocation implementation. The authorization hold remains:
-the public contract still does not define ad-request permission or how to reopen saved privacy options.
+The ordinary production build supports Median Android and iOS at `https://onlyfast.app/`.
+`VITE_MEDIAN_ADMOB_ENABLED` remains the master switch, off when absent or anything other than
+`true`. The Vercel production value was left absent. `vercel.json` still disables Git deployment
+for main. No test-origin authorization, sample units, alternate app identity, test build mode,
+or source-level permanent consent constant remains.
 
-## File inventory
+Native commands require authenticated, current-account, fresh server-verified Rookie membership.
+Pro, Teams, admin, promotional/ambassador/ad-free grants, unknown membership and logged-out
+accounts remain excluded. Membership expires after five minutes and is invalidated on backgrounding.
+Banners use home, schedule and saved views. Editing, timing, onboarding, account management,
+unsupported routes, overlays and backgrounding suppress banners. Interstitial attempts follow
+persisted manual saves only, with the existing account-specific 600-second cooldown. House
+promotions and browser/flag-off fallback remain. Nothing is deferred to interrupt later editing.
 
-Created: `src/lib/nativeAds.ts`, `tests/nativeAds.test.ts`, `docs/MEDIAN_ADMOB_PHASE1.md`.
+Before either native display command, the controller awaits `median.admob.request.consent()`;
+iOS first awaits `median.admob.request.tracking()`. Tracking denial is not converted into permission
+or an automatic ad ban: the native SDK must apply the appropriate privacy restrictions. Consent
+responses are retained unmodified in memory and remain labeled `unverified`. Missing/failed native
+operations, timeouts, changed identities/bridges and pending forms suppress display commands.
+Settings can re-request this same flow while advertising is off, including on iOS. It is not
+claimed to reopen saved privacy choices.
 
-Modified:
-- `src/lib/ads.ts`, `src/lib/trustedMembership.ts`, `src/lib/subscription.ts` — ad-only verification/freshness.
-- `src/contexts/AppContext.tsx`, `src/components/AppLayout.tsx`, `src/components/SettingsModal.tsx` — lifecycle, screen/modal restrictions and privacy disclosure access.
-- `src/components/SetupDashboard.tsx` — placement registration and confirmed manual-save hook.
-- `src/components/RookieAdSlot.tsx` — immediate membership-change subscription for existing house content.
-- `src/components/CookieConsent.tsx`, `src/pages/PrivacyPolicy.tsx`, `src/components/LegalModal.tsx` — consistent advertising disclosures in both privacy surfaces.
-- `src/vite-env.d.ts` — optional default-off flag typing.
-- `tests/iosSubscriptionUI.test.ts` — isolate the new layout effect in the existing static-render test harness.
+## Native privacy limitation
 
-`src/lib/membership.ts`, `src/components/RookieHouseAdContent.tsx`, racing calculations, setup fields,
-subscription permissions/prices, onboarding, payment flows and Median settings are unchanged.
+Median's public documentation alternates between `success` and `result` booleans, without defining
+Google UMP `canRequestAds`. Neither boolean, ATT authorization, nor a permission-shaped arbitrary
+response is treated as a Google authorization signal. Completed native flow permits dispatch of
+Median's native display commands; eligibility and restricted/nonpersonalized/limited serving must
+be enforced inside the native plugin. No SDK consent override or personalized-ad parameter is set.
 
-## Implemented behavior
+Google requires the native host to check UMP `canRequestAds` before loading ads. Google Mobile Ads
+initialization alone is not evidence of this check. Median must verify the compiled plugin's UMP
+checks and preload order, plus required privacy-options presentation/revocation; the documented JS
+bridge cannot inspect or repair them. This remains an activation validation item, not another
+permanently false website gate. The website flag controls display commands, not SDK initialization
+or background preloading. Automatic native banners must remain disabled.
 
-- Advertising requires an authenticated account with verified, matching-user membership evidence.
-  The ad-only evidence expires after five minutes and is invalidated during refresh and on backgrounding.
-  Existing subscription entitlements and default membership behavior are unchanged.
-- Server-authorized `promo_access_level` grants are conservatively excluded, including `ambassador`
-  and ad-free promotions. User-editable metadata never establishes eligibility. Any other exemption
-  representation must be verified and added to the ad-only gate before activation.
-- One native controller owns the bottom banner on the main landing (`home`), race schedule (`schedule`)
-  and saved setup (`saved`) views, on `/` only. Editing, timing, unsupported routes, settings, login,
-  legal/class modals, onboarding/unmount and backgrounding hide the banner. Existing inline house
-  promotions remain in web content; no duplicate native banner containers are inserted.
-- Manual save completion supplies a short-lived opportunity while the save dialog still owns the
-  interaction, before editing resumes. Only an actual database write with no queued operations can
-  request an interstitial. Autosaves, failed/empty/queued saves never request one. Intervening input,
-  navigation, logout/account switching and backgrounding cancel the opportunity; nothing is deferred.
-- Requests consume a persisted account-specific 600-second cooldown before bridge dispatch. Unknown
-  storage, clock rollback or storage failures suppress the request. Attempts count even on no-fill or
-  bridge failure, since the bridge does not report display success.
-- Ordinary browsers, disabled-flag sessions and unsupported bridges retain the house post-save modal.
-  Supported Android sessions blocked by consent/cooldown suppress the modal to avoid stacking ads.
+## Original Median app and real identifiers
 
-## Feature flag and local validation
+Original app: https://median.co/app/dcxfmcnr5b5jv3fh0zcj3cqj5c
+Both registered identities are `app.onlyfast`. Preserve their original signing configuration.
+Keep the existing production start URL `https://onlyfast.app?nativeApp=true`; its native billing
+query parameter is retained. It loads the production root, not a separate website.
 
-The only recognized enabling value is `VITE_MEDIAN_ADMOB_ENABLED=true`; absent or any other value is off.
-For a local test bundle, set the variable in an ignored `.env.local`, restart Vite or rebuild, then remove
-the value when finished. It is a build-time Vite setting. Do not set it on production Vercel yet.
-The flag alone **does not display ads**: `NATIVE_ADS_CONSENT_VERIFIED` remains false with no runtime,
-query-string, storage or cookie-consent bypass. Automated tests inject a fake consent capability only
-into isolated controller instances; no Google SDK or production ad requests are involved.
+| Setting | Android | iOS |
+| --- | --- | --- |
+| Application ID | ca-app-pub-9431443509195212~9777574822 | ca-app-pub-9431443509195212~1722134918 |
+| Banner unit | ca-app-pub-9431443509195212/7957756928 | ca-app-pub-9431443509195212/7067841263 |
+| Standard interstitial unit | ca-app-pub-9431443509195212/8022851471 | ca-app-pub-9431443509195212/5469808233 |
+| Automatic banner | Disable | Disable |
 
-Run `npm test`, `node_modules/.bin/tsc --noEmit -p tsconfig.app.json` and `npm run build`.
-Tests execute the actual eligibility modules, controller and extracted dashboard save routines with
-isolated network/browser boundaries. Native SDK/device behavior has not been validated by these tests.
+The real iOS AdMob entry was created for existing App Store ID `6792149373`, not a new Apple app.
+Its interstitial has an AdMob-side cap of 1 impression per user per 10 minutes. No rewarded feature
+was implemented. iOS AdMob currently reports Requires review / limited serving with an app-ads.txt
+verification issue. The publisher line already exists in `public/app-ads.txt`:
+`google.com, pub-9431443509195212, DIRECT, f08c47fec0942fa0`.
+Resolve the developer-site listing/crawl verification in AdMob before unrestricted live delivery;
+do not create a second App Store record or silently publish metadata changes.
 
-## Verified API and consent blockers
+## Native builds and device checks
 
-Verified commands: `median.admob.banner.enable()`, `median.admob.banner.disable()`,
-`median.admob.showInterstitialIfReady()`. The injected bridge is checked immediately and through the
-documented `median_library_ready` callback, preserving any previous handler. Methods are checked before
-use. No delayed-navigation interstitial, guessed readiness, load, reward or completion method is used.
+1. Open the original Median app above. Native Plugins > AdMob Native Ads: enable both platform
+   modules, use the real IDs above, and set AdMob Banner Ad Enabled to Disable for BOTH platforms.
+2. Permissions > App Tracking Transparency: Enable, Consent On Load = Manual, description:
+   "With your permission, OnlyFast uses device identifiers to deliver and measure advertising in
+   the Rookie plan." Save. Preserve other permissions and signing settings.
+3. Build & Deploy: Android APK/AAB > Rebuild, then Download > APK for device installation.
+   iOS IPA > Rebuild, then Download. Do not enable automatic App Store Connect uploads or submit
+   a release. Preserve bundle/package IDs and the existing Apple team/certificates/profiles.
+4. Register each physical Android/iOS device in AdMob Settings > Test devices before testing real
+   units. Confirm Test Ad labels; never click unregistered live ads or generate repeated live
+   impressions. Include the iOS app in applicable AdMob Privacy & Messaging configurations.
+5. After separate approval, deploy this source to the existing production website and enable the
+   production master switch. Until that deployment/activation, these native binaries load the
+   existing ad-disabled website. Rebuilding a shell does not deploy these website changes.
+6. Verify Rookie vs Pro/Teams/admin/promotional/logout, ATT denied/restricted, UMP required/not
+   required/error, privacy re-requests, navigation/overlays, editing/scans, resume/account switching,
+   manual vs queued/failed/autosaves, cooldown/reload, and native no-fill behavior. Automated tests
+   mock the native boundary and do not establish native consent compliance or actual ad delivery.
 
-- [Median AdMob documentation](https://docs.median.co/docs/admob-native-ads)
-- [Bridge readiness documentation](https://docs.median.co/docs/javascript-bridge)
-- [Official AdMob bridge source](https://github.com/gonativeio/median-javascript-bridge/blob/main/src/plugins/admob.ts)
-- [Google UMP requirements](https://developers.google.com/admob/android/privacy)
+## Rollback and removed infrastructure
 
-Median documents `median.admob.request.consent()` but describes its response inconsistently as `success`
-and `result`. The public npm AdMob module has no consent method. Neither source establishes a reliable
-JavaScript can-request-ads signal, privacy-options access, or whether automatic native preloading waits
-for updated UMP consent. `median.admob.request.tracking()` is documented for iOS ATT and is not Android
-advertising consent. Only `request.consent()` is invoked; ATT remains unused and iOS remains disabled.
+The live Vercel deployment remains `dpl_7ZCgZcjPyAVA2i9kUSoNQkBjHULv`, commit
+`5ca8181b74fe85703c1d1f99848d6872646a24ee`, serving onlyfast.app. It was not replaced or deleted.
+The disposable standalone Vercel project was verified separate (no Git connection, secrets or
+connectors; one separate generated domain) and deleted. Its test build/env/alias modules, script,
+specialized deployment test and obsolete build guide were removed. Normal regression coverage is
+preserved. Generated old test outputs were moved out of deployment/build paths into ignored
+`tmp/retired-admob-output/`; recovery backups and unrelated apps were preserved.
 
-The website cannot guarantee that an AdMob SDK already compiled into the Median binary makes no
-requests: the feature flag controls website-issued display commands, not SDK initialization/preloading.
-Automatic banners must remain OFF. Review the installed binary's behavior independently with Median.
-The Settings Privacy Policy link is disclosure access, **not** a substitute for UMP privacy options.
-The new consent re-request action likewise cannot be claimed to reopen previously saved choices until
-Median verifies that behavior. A United States launch does not bypass applicable state privacy options.
+Validation: all 450 automated tests, TypeScript app validation, focused application lint and normal
+production build passed. The existing large-bundle warning is unchanged.
 
-## Before any device or live delivery
-
-1. Obtain build-specific confirmation from Median of UMP initialization/preload order, the actual
-   consent result contract, can-request-ads gating, consent refresh/revocation and privacy-options
-   presentation. Add only verified coordination, with tests, before lifting the source-level hold.
-2. Create an isolated Android test build configured in Median with Google test units (fixed banner
-   `ca-app-pub-3940256099942544/6300978111`, interstitial
-   `ca-app-pub-3940256099942544/1033173712`), using the appropriate banner format for that build.
-   See [Google test ads](https://developers.google.com/admob/android/test-ads). Do not use or click live
-   units for QA. No test build/configuration was created as part of this implementation.
-3. Rebuild/install Android if the plugin or saved settings were added after the installed binary.
-   Website-only changes do not require another native build once its capabilities are present.
-   See [Median app updates](https://docs.median.co/docs/app-updates).
-4. Configure AdMob Privacy & Messaging for applicable regions, including EEA/UK/Switzerland and
-   applicable US-state requirements; validate withdrawal and required privacy-options access.
-   Validate test geography with Median-supported native diagnostics, never a fabricated JS callback.
-5. Test physical-device Rookie/Pro/Teams/admin/authorized ambassador/promo accounts; slow and failed
-   membership loads; account switching; banner navigation, overlays, keyboard, rotation and resume;
-   failed/offline/autosaves, rapid saves, cooldown/reload and no-fill. Confirm Test Ad labels.
-6. Check authorized exemption representations, store advertising/privacy declarations and developer
-   domain `app-ads.txt` crawlability. Set an AdMob-side one-impression-per-ten-minutes interstitial cap
-   as a backstop to the website's attempt cap. Do not enable automatic banners.
-7. Only after review and approval, replace test units with the supplied Android configuration and
-   enable the flag in the intended release. Keep the rewarded unit unused and iOS disabled.
-
-Production Android configuration supplied by the owner (not changed here): application
-`ca-app-pub-9431443509195212~9777574822`, banner `ca-app-pub-9431443509195212/7957756928`,
-interstitial `ca-app-pub-9431443509195212/8022851471`.
+Sources: [Median AdMob](https://docs.median.co/docs/admob-native-ads),
+[Google Android UMP](https://developers.google.com/admob/android/privacy),
+[Google iOS UMP](https://developers.google.com/admob/ios/privacy),
+[Android test devices](https://developers.google.com/admob/android/test-ads),
+[iOS test devices](https://developers.google.com/admob/ios/test-ads).
