@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 import * as trusted from '../src/lib/trustedMembership.ts';
 import * as environment from '../src/lib/nativeEnvironment.ts';
+import * as bannerSafety from '../src/lib/nativeBannerSafety.ts';
 
 // Execute real application modules with isolated browser/network boundaries.
 function loadModule<T>(path: string, dependencies: Record<string, unknown>, env = {}) {
@@ -25,6 +26,7 @@ const ads = loadModule<typeof import('../src/lib/ads.ts')>('../src/lib/ads.ts', 
 const native = loadModule<typeof import('../src/lib/nativeAds.ts')>('../src/lib/nativeAds.ts', {
   './ads': ads, './nativeEnvironment': environment, './trustedMembership': trusted,
   './supabase': { supabase: {} },
+  './nativeBannerSafety': bannerSafety,
 }, { VITE_MEDIAN_ADMOB_ENABLED: 'true' });
 
 const paid = (plan: string) => ({ plan, status: 'active', subscription_source: 'stripe' });
@@ -72,7 +74,7 @@ test('unknown subscription plans are ambiguous for advertising without changing 
 async function fixture(storage = new Map<string, string>(), useTrustedMembership = false,
   initial: Partial<{ enabled: boolean; completeConsent: boolean; eligible: boolean; touch: number; ua: string; rollout: boolean; device: boolean }> = {}) {
   const calls: string[] = [];
-  const state = { enabled: true, completeConsent: true, eligible: true, rollout: false, device: true, touch: 0, ua: 'MedianAndroid/1.0 Android', now: 1_000_000, ...initial };
+  const state = { enabled: true, completeConsent: true, eligible: true, rollout: false, device: true, bannerSafe: true, touch: 0, ua: 'MedianAndroid/1.0 Android', now: 1_000_000, ...initial };
   const bridge = {
     banner: { enable: () => { calls.push('enable'); }, disable: () => { calls.push('disable'); } },
     showInterstitialIfReady: () => { calls.push('interstitial'); },
@@ -84,6 +86,7 @@ async function fixture(storage = new Map<string, string>(), useTrustedMembership
   const controller = new native.NativeAdsController({
     enabled: id => state.enabled && (!state.rollout || native.nativeAdsRolloutEnabled('true', id)),
     deviceAllowed: () => state.device,
+    bannerSafe: () => state.bannerSafe,
     eligible: (id: string) => state.eligible && (!useTrustedMembership || ads.shouldShowAds({ id })), userAgent: () => state.ua,
     bridge: () => host.bridge, now: () => state.now,
     maxTouchPoints: () => state.touch,
@@ -174,25 +177,27 @@ test('a replacement native bridge must complete its own consent flow before ad c
   assert.ok(f.calls.includes('enable'));
 });
 
-test('iOS banners follow the existing placements and modal/editor exclusions', async () => {
+test('iOS banners follow safe dashboard views and retain modal and keyboard exclusions', async () => {
   const f = await fixture(new Map(), false, { ua: 'MedianIOS/1.0' });
-  for (const view of ['home', 'schedule', 'saved']) {
+  for (const view of ['home', 'schedule', 'saved', 'setup', 'create-base', 'todo', 'parts', 'compare']) {
     f.controller.setPlacement('a', view); assert.equal(f.calls.at(-1), 'enable');
     const resume = f.controller.suspend(); assert.equal(f.calls.at(-1), 'disable'); resume();
   }
-  for (const view of ['setup', 'scan', 'onboarding', 'account', 'pricing']) {
+  f.state.bannerSafe = false; f.controller.refresh(); assert.equal(f.calls.at(-1), 'disable');
+  f.state.bannerSafe = true;
+  for (const view of ['scan', 'onboarding', 'account', 'pricing']) {
     f.controller.setPlacement('a', view); assert.equal(f.calls.at(-1), 'disable');
   }
   f.controller.setForeground(false); assert.equal(complete(f), 'suppressed');
 });
 
-test('one banner follows only home, schedule and saved; unsupported screens and stale cleanup hide it', async () => {
+test('one shared banner follows safe dashboard views without duplicating enables; unsupported screens and stale cleanup hide it', async () => {
   const f = await fixture();
   assert.equal(f.calls.filter(c => c === 'enable').length, 1);
   f.controller.refresh(); assert.equal(f.calls.filter(c => c === 'enable').length, 1);
-  f.controller.setPlacement('a', 'schedule'); f.controller.setPlacement('a', 'saved');
+  for (const view of ['schedule', 'saved', 'setup', 'create-base', 'todo', 'parts', 'compare']) f.controller.setPlacement('a', view);
   assert.equal(f.calls.filter(c => c === 'enable').length, 1);
-  for (const view of ['setup', 'scan', 'onboarding', 'account', 'pricing', 'todo', 'parts']) {
+  for (const view of ['scan', 'onboarding', 'account', 'pricing']) {
     f.controller.setPlacement('a', 'home'); f.controller.setPlacement('a', view);
     assert.equal(f.calls.at(-1), 'disable');
   }
@@ -214,6 +219,20 @@ test('eligibility loss, account switches, logout, background and account routes 
   const release = f.controller.suspend(); assert.equal(f.calls.at(-1), 'disable');
   release(); assert.equal(f.calls.at(-1), 'enable');
   f.controller.setUser(null); assert.equal(f.calls.at(-1), 'disable');
+});
+
+test('banner-only safety hides the bottom banner without cancelling working save/Assist opportunities or their shared cooldown', async () => {
+  const f = await fixture(); f.controller.setPlacement('a', 'setup');
+  const ticket = f.controller.beginManualSave('a');
+  f.state.bannerSafe = false; f.controller.refresh();
+  assert.equal(f.calls.at(-1), 'disable');
+  assert.ok(f.controller.getDiagnostics().bannerBlockers.includes('banner-space-or-input-unsafe'));
+  assert.equal(f.controller.completeManualSave(ticket, { persisted: true, queued: false, editing: false }), 'requested');
+  f.state.bannerSafe = true; f.controller.refresh(); assert.equal(f.calls.at(-1), 'enable');
+  assert.equal(f.controller.completeSetupAssistDismissal(f.controller.beginSetupAssistDismissal('a')), 'suppressed');
+  assert.equal(f.controller.getDiagnostics().lastInterstitialSuppression, 'cooldown');
+  assert.equal(f.calls.filter(c => c === 'interstitial').length, 1);
+  f.controller.stop();
 });
 test('browser, unknown native platform, missing bridge/methods and disabled flag do not enable native advertising', async () => {
   for (const ua of ['Mozilla/5.0 Android Chrome', 'MedianUnknown/1.0']) {

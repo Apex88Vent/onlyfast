@@ -146,6 +146,7 @@ function loadUI(file: string, betaAccess = experimentalAccess, states: unknown[]
     if (id === '@/hooks/useBetaFeatures') return { useBetaFeatures: () => betaAccess };
     if (id === '@/lib/paymentVisibility') return { isMedianIOSApp: false };
     if (id === './PlanSelection') return { default: () => null };
+    if (id === './RookieAdSlot') return { __esModule: true, default: () => null };
     if (id === './OnboardingFlow') return { disciplines: Object.entries(library.SETUP_CATEGORY_LABELS).map(([key, name]) => ({ key, name })) };
     if (id === '@/lib/activeClass') return { sameClass: componentFunction('../lib/activeClass.ts', 'sameClass') };
     if (id.startsWith('@/')) return {};

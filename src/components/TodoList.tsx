@@ -297,6 +297,8 @@ const TodoList: React.FC<TodoListProps> = ({ user, onClose, variant = 'page' }) 
       )}
 
       {/* Todo list */}
+      {variant === 'page' && <RookieAdSlot placement="todo_bottom" user={user} />}
+
       <section className="bg-white rounded-2xl border border-[#E5E7EB] p-4 sm:p-5 shadow-sm">
         <h3 className="text-sm font-bold text-[#1A1B23] flex items-center gap-2 mb-3">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00A8E8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -373,10 +375,6 @@ const TodoList: React.FC<TodoListProps> = ({ user, onClose, variant = 'page' }) 
           </div>
         )}
       </section>
-
-      {variant === 'page' && (
-        <RookieAdSlot placement="todo_bottom" user={user} />
-      )}
 
       {variant === 'panel' && onClose && (
         <div className="flex justify-end">

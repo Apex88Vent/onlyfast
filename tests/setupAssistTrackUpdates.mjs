@@ -216,6 +216,37 @@ test('mounted pavement oval changes only surface colors, keeping dirt geometry a
   await act(async () => { dirt.unmount(); pavement.unmount(); });
 });
 
+test('original inline upgrade design works on Android, iOS and web while preserving the iOS post-save Continue behavior', async () => {
+  const previousWindow = globalThis.window;
+  globalThis.window = { matchMedia: () => ({ matches: true, addEventListener() {}, removeEventListener() {} }) };
+  const icon = props => React.createElement('span', props);
+  try {
+    for (const platform of ['android', 'ios', 'web']) {
+      const navigation = []; let pending = 0; let continued = 0;
+      const Ad = compile('RookieHouseAdContent.tsx', {
+        'react-router-dom': { useNavigate: () => (...args) => navigation.push(args) },
+        'lucide-react': { ArrowRight: icon, CheckCircle2: icon, Flag: icon, Gauge: icon, Sparkles: icon },
+        '@/lib/membership': { setPendingPlan() { pending++; } },
+        '@/lib/paymentVisibility': { hideExternalPayments: platform !== 'web', isMedianIOSApp: platform === 'ios' },
+      });
+      let view;
+      await act(async () => { view = create(React.createElement(Ad, { placement: 'home_middle' })); });
+      assert.equal(view.root.findAllByType('button').length, 1);
+      assert.match(text(view.toJSON()), /Unlock all features. No ads./);
+      await act(async () => { view.root.findByType('button').props.onClick(); });
+      assert.deepEqual(navigation, [['/upgrade', { state: { plan: 'pro' } }]]);
+      assert.equal(pending, platform === 'web' ? 1 : 0, 'native house ad must not enable external payment state');
+      await act(async () => { view.unmount(); });
+      if (platform === 'ios') {
+        await act(async () => { view = create(React.createElement(Ad, { placement: 'after_save_interstitial', onContinue: () => { continued++; } })); });
+        assert.equal(text(view.toJSON()), 'Continue');
+        await act(async () => { view.root.findByType('button').props.onClick(); }); assert.equal(continued, 1);
+        await act(async () => { view.unmount(); });
+      }
+    }
+  } finally { globalThis.window = previousWindow; }
+});
+
 test('both What If CTAs use one panel without automatic requests; failures hide bottom CTA', async () => {
   const originalWindow = globalThis.window;
   globalThis.window = new EventTarget();

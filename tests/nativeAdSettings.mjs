@@ -28,6 +28,7 @@ const native = compile('lib/nativeAds.ts', {
   './nativeEnvironment': { isMedianUserAgent: ua => /Median/.test(ua), nativePlatform: () => 'android' },
   './trustedMembership': {},
   './supabase': { supabase: {} },
+  './nativeBannerSafety': { nativeBannerIsSafe: () => true },
 });
 
 test('actual Settings status stays live, reveals no IDs, remains suspended, and disappears on account switching', async () => {
@@ -117,7 +118,7 @@ test('actual Settings status stays live, reveals no IDs, remains suspended, and 
   }
 });
 
-test('mounted house tiles yield only to the confirmed native session and return when its native experience becomes unavailable', async () => {
+test('mounted inline house ads remain independent of native banner availability and keep existing eligibility', async () => {
   const id = native.NATIVE_ADS_ROLLOUT_USER_ID;
   let enabled = true;
   let eligible = true;
@@ -147,24 +148,29 @@ test('mounted house tiles yield only to the confirmed native session and return 
     assert.equal(controller.getDiagnostics().bannerCommandDispatched, true);
     assert.equal(houses(), 1); // A command/GAID match alone does not replace house content.
     await act(async () => { device = 'registered-phone-session'; controller.refresh(); });
-    assert.equal(houses(), 0);
+    assert.equal(houses(), 1);
     for (const placement of ['home_middle', 'home_bottom', 'schedule_bottom', 'setup_dashboard_bottom']) {
       await act(async () => { props = { ...props, placement }; view.update(React.createElement(Slot, props)); });
-      assert.equal(houses(), 0);
+      assert.equal(houses(), 1);
     }
     await act(async () => { props = { ...props, placement: 'after_save_interstitial' }; view.update(React.createElement(Slot, props)); });
     assert.equal(houses(), 1); // Existing separate post-save fallback is preserved.
     await act(async () => { props = { ...props, placement: 'home_middle' }; view.update(React.createElement(Slot, props)); });
     let resume;
     await act(async () => { resume = controller.suspend(); }); assert.equal(houses(), 1);
-    await act(async () => { resume(); }); assert.equal(houses(), 0);
+    await act(async () => { resume(); }); assert.equal(houses(), 1);
     await act(async () => { enabled = false; controller.refresh(); }); assert.equal(houses(), 1);
-    await act(async () => { enabled = true; controller.refresh(); }); assert.equal(houses(), 0);
+    await act(async () => { enabled = true; controller.refresh(); }); assert.equal(houses(), 1);
     await act(async () => { availableBridge = undefined; controller.refresh(); }); assert.equal(houses(), 1);
     await act(async () => { controller.setUser('other-rookie'); props = { ...props, user: { id: 'other-rookie' } }; view.update(React.createElement(Slot, props)); });
     assert.equal(houses(), 1);
+    await act(async () => { props = { ...props, container: 'li' }; view.update(React.createElement(Slot, props)); });
+    assert.equal(view.root.findAllByType('li').length, 1);
+    await act(async () => { props = { ...props, container: 'tr', colSpan: 6 }; view.update(React.createElement(Slot, props)); });
+    assert.equal(view.root.findByType('td').props.colSpan, 6);
     await act(async () => { eligible = false; controller.refresh(); view.update(React.createElement(Slot, props)); });
     assert.equal(houses(), 0);
+    assert.equal(view.root.findAllByType('tr').length, 0, 'paid users must not receive empty ad table rows');
     await act(async () => { props = { ...props, user: null }; view.update(React.createElement(Slot, props)); }); assert.equal(houses(), 0);
   } finally { await act(async () => { view?.unmount(); }); controller.stop(); }
 });

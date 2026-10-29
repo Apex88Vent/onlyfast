@@ -501,7 +501,7 @@ const AppLayout: React.FC = () => {
           onBackToCarSelect={openClassChange}
           onOpenHowOnlyFastWorks={handleOpenHowOnlyFastWorks}
         />
-        <main id="main-content" tabIndex={-1} className="flex-1">
+        <main id="main-content" data-native-banner-layout tabIndex={-1} className="flex-1">
           <h1 className="sr-only">OnlyFast Setup Assist - Dirt Track Racing Setup Tracker</h1>
           <CustomCarGate user={user} selectedCar={selectedCar}>
           <SetupDashboard

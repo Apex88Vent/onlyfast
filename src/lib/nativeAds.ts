@@ -2,6 +2,7 @@ import { shouldShowAds } from './ads';
 import { isMedianUserAgent, nativePlatform } from './nativeEnvironment';
 import { getAdvertisingAuthorizationExpiry, invalidateAdvertisingMembership } from './trustedMembership';
 import { supabase } from './supabase';
+import { nativeBannerIsSafe } from './nativeBannerSafety';
 
 // Verified commands: https://docs.median.co/docs/admob-native-ads
 // Readiness: https://docs.median.co/docs/javascript-bridge
@@ -19,6 +20,7 @@ export function nativeAdsRolloutEnabled(value: unknown, userId: string | null): 
 }
 
 type NativePlatform = 'android' | 'ios';
+const BANNER_VIEWS = ['home', 'setup', 'saved', 'compare', 'create-base', 'todo', 'parts', 'schedule'];
 type DeviceHost = { deviceInfo?: () => Promise<unknown> };
 const registeredDeviceHashes: Record<NativePlatform, readonly string[]> = {
   // SHA-256 of the Android advertising ID verified in AdMob's Test devices list.
@@ -132,6 +134,7 @@ export interface NativeAdsDependencies {
   prepareDevice?(platform: NativePlatform | null, updated: () => void): void;
   deviceStatus?(): string;
   resetDevice?(): void;
+  bannerSafe?(): boolean;
   diagnostic?(value: ReturnType<NativeAdsController['getDiagnostics']>): void;
 }
 
@@ -275,7 +278,8 @@ export class NativeAdsController {
       ...(!this.foreground ? ['not-foreground'] : []),
       ...(!this.routeSupported ? ['unsupported-route'] : []),
       ...(this.suspensions.size ? ['overlay-open'] : []),
-      ...(this.placement?.userId !== this.userId || !['home', 'schedule', 'saved'].includes(this.placement?.view)
+      ...(!(this.deps.bannerSafe?.() ?? true) ? ['banner-space-or-input-unsafe'] : []),
+      ...(this.placement?.userId !== this.userId || !BANNER_VIEWS.includes(this.placement?.view)
         ? ['not-banner-placement'] : []),
       ...(this.consentStatus !== 'unverified' ? [`native-consent-${this.consentStatus}`] : []),
       ...(!deviceAllowed ? [`device-${device}`] : []),
@@ -425,7 +429,7 @@ export class NativeAdsController {
       // re-request the flow. Do not loop when a native form cannot be displayed.
       if (this.deps.enabled(this.userId) && this.canRequestConsent() && this.routeSupported && this.suspensions.size === 0 &&
           this.deps.eligible(this.userId) && this.placement?.userId === this.userId &&
-          ['home', 'schedule', 'saved'].includes(this.placement.view) &&
+          (this.deps.bannerSafe?.() ?? true) && BANNER_VIEWS.includes(this.placement.view) &&
           (!this.consentAttempt || this.consentAttempt.bridge !== bridge || this.consentAttempt.generation !== this.generation)) {
         void this.requestConsent();
       }
@@ -434,7 +438,7 @@ export class NativeAdsController {
         this.deps.prepareDevice?.(this.platform(), () => this.refresh());
       }
       const show = this.allowed() && this.placement?.userId === this.userId &&
-        ['home', 'schedule', 'saved'].includes(this.placement.view) &&
+        (this.deps.bannerSafe?.() ?? true) && BANNER_VIEWS.includes(this.placement.view) &&
         typeof bridge?.banner?.enable === 'function' && typeof bridge?.banner?.disable === 'function';
       // Also clear a banner retained by the native shell across a page reload.
       if (!show || this.banner !== bridge) this.hideBanner(this.platform() !== null ? bridge : undefined);
@@ -569,6 +573,7 @@ export const nativeAds = new NativeAdsController({
   eligible: userId => shouldShowAds({ id: userId }),
   storage: () => window.localStorage,
   now: Date.now,
+  bannerSafe: () => typeof document !== 'undefined' && nativeBannerIsSafe(window, document),
 });
 
 export interface NativeAdsAuthSource {

@@ -1,4 +1,5 @@
 import { setupClassLabel } from '@/lib/setupLibrary';
+import RookieAdSlot from './RookieAdSlot';
 import React, { useState, useEffect, useMemo } from 'react';
 import { isMedianIOSApp } from '@/lib/paymentVisibility';
 import { supabase } from '@/lib/supabase';
@@ -356,6 +357,8 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
           </button>
         </div>
 
+        {(loading || fetchError || groups.length < 2) && <RookieAdSlot placement="setup_dashboard_bottom" user={user} className="my-4" />}
+
         <div aria-live="polite">
           {loading ? (
             <div className="text-center py-8 text-[#9CA3AF]" role="status">Loading setups...</div>
@@ -383,7 +386,7 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
             </div>
           ) : (
             <ul className="space-y-3 max-h-[560px] overflow-y-auto" aria-label="Saved setups list">
-              {groups.map(group => {
+              {groups.map((group, index) => {
                 const isLocked = classLocksEnabled && Boolean(group.raceClass) &&
                   group.raceClass.trim().toLowerCase() !== activeClass.trim().toLowerCase();
                 const subtitleParts = [setupClassLabel(group.raceClass), group.trackName, group.org].filter(p => p && p.trim() !== '');
@@ -398,6 +401,10 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
                 };
 
                 return (
+                  <React.Fragment key={group.key}>
+                  {groups.length >= 2 && index === Math.floor(groups.length / 2) && (
+                    <RookieAdSlot placement="setup_dashboard_bottom" user={user} container="li" />
+                  )}
                   <li
                     key={group.key}
                     className={`rounded-xl border p-4 ${isLocked ? 'border-[#E5E7EB] bg-[#F3F4F6] opacity-75' : 'border-[#E5E7EB] bg-[#F9FAFB] cursor-pointer focus-within:ring-2 focus-within:ring-[#00A8E8]/30'}`}
@@ -496,6 +503,7 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
                       )}
                     </div>
                   </li>
+                  </React.Fragment>
                 );
               })}
             </ul>

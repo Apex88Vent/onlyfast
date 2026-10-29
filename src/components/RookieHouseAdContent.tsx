@@ -838,7 +838,7 @@ const RookieHouseAdContent: React.FC<RookieAdSlotProps> = ({
     setDismissed(true);
   };
 
-  if (isMedianIOSApp) {
+  if (isMedianIOSApp && isInterstitial) {
     // Keep the post-save dismissal available without rendering a subscription ad.
     return isInterstitial ? (
       <button type="button" onClick={handleContinue} className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-[#4B5563]">
@@ -885,7 +885,7 @@ const RookieHouseAdContent: React.FC<RookieAdSlotProps> = ({
       <span className="rookie-banner-slash top-4" aria-hidden="true" />
       <span className="rookie-banner-slash bottom-5" style={{ left: '38%' }} aria-hidden="true" />
 
-      {/* Future ad network integration point: these animated OnlyFast house ads are placeholders. Replace this content with Media.net web ads, AdMob/native ads, or another approved revenue-generating ad provider later. Keep Rookie-only gating so paid users never load ad scripts. */}
+      {/* Inline OnlyFast upgrade promotion; AdMob remains in the native bottom banner area. */}
       <span className="relative z-[2] flex h-full items-center gap-3 sm:gap-4">
         <span
           className="rookie-banner-visual relative flex h-20 w-28 shrink-0 items-center justify-center overflow-hidden text-white shadow-sm sm:h-24 sm:w-36"

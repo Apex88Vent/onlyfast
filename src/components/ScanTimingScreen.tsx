@@ -976,7 +976,7 @@ const ScanTimingScreen: React.FC<Props> = ({
   // ---------- RENDER ----------
   if (step === 'review' && scan) {
     return (
-      <section className="bg-white rounded-2xl border border-[#E5E7EB] p-6 shadow-sm" aria-labelledby="scan-review-heading">
+      <section data-native-banner-unsafe="true" className="bg-white rounded-2xl border border-[#E5E7EB] p-6 shadow-sm" aria-labelledby="scan-review-heading">
         <input
           ref={uploadInputRef}
           type="file"
@@ -1232,7 +1232,7 @@ const ScanTimingScreen: React.FC<Props> = ({
 
   // Idle / scanning / saved states
   return (
-    <section className="bg-white rounded-2xl border border-[#E5E7EB] p-6 shadow-sm" aria-labelledby="scan-heading">
+    <section data-native-banner-unsafe={step === 'scanning' || step === 'saving' ? 'true' : undefined} className="bg-white rounded-2xl border border-[#E5E7EB] p-6 shadow-sm" aria-labelledby="scan-heading">
       <input
         ref={uploadInputRef}
         type="file"

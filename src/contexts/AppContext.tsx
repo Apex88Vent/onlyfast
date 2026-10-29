@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useLayoutEffect } from 'react';
 import { watchNativePurchases } from '@/lib/nativePurchases';
 import { nativeAds, watchNativeAds } from '@/lib/nativeAds';
+import { watchNativeBannerSafety } from '@/lib/nativeBannerSafety';
 import { supabase } from '@/lib/supabase';
 import { useLocation } from 'react-router-dom';
 
@@ -34,7 +35,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return () => data.subscription.unsubscribe();
       },
     }, window, document);
-    return stopAds;
+    const stopBannerSafety = watchNativeBannerSafety(nativeAds, window, document);
+    return () => { stopBannerSafety(); stopAds(); };
   }, []);
   useEffect(() => watchNativePurchases(), []);
 

@@ -1,6 +1,6 @@
 # OnlyFast native AdMob - original production apps
 
-Updated October 28, 2026. A controlled production rollout is authorized only for the existing
+Updated October 29, 2026. A controlled production rollout is authorized only for the existing
 Rookie test account and registered AdMob test devices. No store publication or native rebuild is
 included in this rollout.
 
@@ -47,8 +47,14 @@ or source-level permanent consent constant remains.
 Native commands require authenticated, current-account, fresh server-verified Rookie membership.
 Pro, Teams, admin, promotional/ambassador/ad-free grants, unknown membership and logged-out
 accounts remain excluded. Membership expires after five minutes and is invalidated on backgrounding.
-Banners use home, schedule and saved views. Editing, timing, onboarding, account management,
-unsupported routes, overlays and backgrounding suppress banners. Interstitial attempts follow
+Banners use the authenticated dashboard's home, setup/session, saved, comparison, base-setup,
+To Do/notes, parts and schedule views. The native banner remains below the WebView; no HTML
+AdMob tile or duplicate per-page banner is created. The shared layout marker, dialog/viewport
+observer and focus checks hide banners during onboarding, authentication, purchases/account
+flows, dialogs, keyboard/input editing, active timing scans/review/save and cramped viewports.
+Setup Assist generation retains its existing suspension. Safe-area spacing preserves save bars.
+The existing account/device/consent rollout restrictions remain in force, including unregistered
+iOS devices being blocked. Interstitial attempts follow
 persisted manual saves or explicit dismissal of successful Setup Assist/What If results,
 with ONE existing account-specific 600-second cooldown shared by both triggers. House
 promotions and browser/flag-off fallback remain. Nothing is deferred to interrupt later editing.
@@ -164,13 +170,14 @@ Only the rollout Auth UUID sees the temporary live **AdMob test status** section
 It reports flag, trusted Rookie eligibility, bridge, device authorization source, native consent
 completion and banner command dispatch without identifiers or raw consent payloads. Settings
 itself suspends banners; close it to test the landing page. A dispatch is not an impression.
-The owner subsequently confirmed a visible Google **Test Ad** on this Android phone. Inline
-house tiles are now suppressed only for that verified phone session while its native banner
-experience is active at home/schedule/saved. Flag-off, unavailable bridge/device/consent,
-backgrounding, overlays and other accounts retain fallback behavior. This is a manually
-confirmed rollout policy, not per-impression detection: Median documents no display/no-fill
-callback, so a later silent no-fill cannot automatically restore tiles. Other sessions and
-iOS do not inherit this confirmation. Native banners are never inserted inside HTML tiles.
+The owner subsequently confirmed a visible Google **Test Ad** and a manual-save interstitial
+on this Android phone. House upgrades are now restored independently of native banner state:
+one inline, scrolling promotion per eligible Rookie dashboard page, between complete sections
+or whole list records near the midpoint. The setup/session page shares its single promotion
+across its timing, Setup Assist and notes sections; embedded To Do panels add none. The original
+design and `/upgrade` navigation are reused, including on iOS, without changing Coming Soon
+purchase behavior. Native banners are never inserted inside HTML tiles. Median supplies no
+documented display/no-fill callback, and Setup Assist native display remains unconfirmed.
 
 The preserved rollback Vercel deployment is `dpl_7ZCgZcjPyAVA2i9kUSoNQkBjHULv`, commit
 `5ca8181b74fe85703c1d1f99848d6872646a24ee`, serving onlyfast.app. Keep it available for rollback; this task authorizes a controlled manual replacement of the production alias.

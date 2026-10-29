@@ -1,4 +1,5 @@
 import LockedFeatureNotice from './LockedFeatureNotice';
+import RookieAdSlot from './RookieAdSlot';
 import { setupClassLabel } from '@/lib/setupLibrary';
 import CustomCarSetupForm, { useCustomCarTemplate } from './CustomCarSheet';
 import { CUSTOM_CAR, CUSTOM_SHEET_KEY, customSheetFromRow, readCustomSheet, snapshotCustomSheet, emptyCustomSheet } from '@/lib/customCar';
@@ -614,6 +615,8 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
       />)}
 
       {/* Notes */}
+      <RookieAdSlot placement="setup_track_conditions" user={user} />
+
       <section className="bg-white rounded-2xl border border-[#E5E7EB] p-5 shadow-sm">
         <label htmlFor={`${prefix}-notes`} className="block text-xs font-semibold text-[#4B5563] uppercase tracking-wider mb-1">
           Notes
@@ -629,7 +632,7 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
       </section>
 
       {/* Sticky save bar */}
-      <div className="sticky bottom-4 bg-white border border-[#E5E7EB] rounded-xl shadow-lg p-3 flex items-center justify-between gap-3 flex-wrap">
+      <div className="sticky bottom-[max(1rem,env(safe-area-inset-bottom))] bg-white border border-[#E5E7EB] rounded-xl shadow-lg p-3 flex items-center justify-between gap-3 flex-wrap">
         <div aria-live="polite" className="flex-1 min-w-0">
           {message && (
             <div className={`text-sm font-medium ${message.toLowerCase().includes('error') ? 'text-red-600' : 'text-green-700'}`}>

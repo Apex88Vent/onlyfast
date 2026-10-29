@@ -42,7 +42,6 @@ interface HomeLandingProps {
   performanceStats?: PerformanceStat[];
   upcomingEvents?: UpcomingEvent[];
   middleSlot?: React.ReactNode;
-  bottomSlot?: React.ReactNode;
   onChangeClass: () => void;
   onAction: (action: HomeAction) => void;
 }
@@ -204,7 +203,6 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
   performanceStats = [],
   upcomingEvents = [],
   middleSlot,
-  bottomSlot,
   onChangeClass,
   onAction,
 }) => {
@@ -237,12 +235,6 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
           </p>
         </div>
       </section>
-
-      {middleSlot && (
-        <div className="mb-2 sm:mb-4">
-          {middleSlot}
-        </div>
-      )}
 
       {showTopInfoCard && (
         <section className="mb-2 sm:mb-6 bg-white rounded-2xl border border-[#E5E7EB] shadow-sm px-3 sm:px-4 py-2.5 sm:py-4">
@@ -291,6 +283,10 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
         </section>
       )}
 
+      {middleSlot && !(showCurrentRaceWeekendCard && displayedWeekend || performanceStats.length || upcomingEvents.length) && (
+        middleSlot
+      )}
+
       <section className="grid grid-cols-2 gap-1.5 sm:gap-4 mb-2 sm:mb-5" aria-label="Home actions">
         {actionCards.map(({ action, label, icon: Icon }) => (
             <button
@@ -307,6 +303,10 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
             </button>
         ))}
       </section>
+
+      {middleSlot && Boolean(showCurrentRaceWeekendCard && displayedWeekend || performanceStats.length || upcomingEvents.length) && (
+        middleSlot
+      )}
 
       {showCurrentRaceWeekendCard && displayedWeekend && (
         <section className="mb-2 sm:mb-4 bg-white rounded-2xl border border-[#E5E7EB] shadow-sm overflow-hidden">
@@ -429,11 +429,6 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
         </section>
       )}
 
-      {bottomSlot && (
-        <div className="mt-2 sm:mt-4">
-          {bottomSlot}
-        </div>
-      )}
     </div>
   );
 };

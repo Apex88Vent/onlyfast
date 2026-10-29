@@ -1,4 +1,5 @@
 import { setupClassLabel } from '@/lib/setupLibrary';
+import RookieAdSlot from './RookieAdSlot';
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -260,6 +261,8 @@ ${printContent.innerHTML}</body></html>`);
           </div>
         </div>
 
+        {selectedSetups.length < 2 && <RookieAdSlot placement="setup_dashboard_bottom" user={user} className="mb-4" />}
+
         {loading ? (
           <p className="text-[#9CA3AF] text-sm text-center py-4">Loading setups...</p>
         ) : filteredAvailable.length === 0 ? (
@@ -298,6 +301,8 @@ ${printContent.innerHTML}</body></html>`);
           </div>
         )}
       </div>
+
+      {selectedSetups.length >= 2 && <RookieAdSlot placement="setup_dashboard_bottom" user={user} />}
 
       {/* Comparison Table */}
       {selectedSetups.length >= 2 && (

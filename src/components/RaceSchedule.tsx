@@ -183,6 +183,8 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick, onSche
       )}
 
       {/* Loading */}
+      {(loading || races.length < 2) && <RookieAdSlot placement="schedule_bottom" user={user} className="my-6" />}
+
       {loading && (
         <div className="space-y-3">
           {[0, 1, 2].map(i => (
@@ -211,10 +213,14 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick, onSche
       {/* Cards */}
       {!loading && races.length > 0 && (
         <ul className="space-y-3">
-          {races.map(r => {
+          {races.map((r, index) => {
             const b = dateBadge(r.race_date);
             return (
-              <li key={r.id} className="bg-white rounded-2xl border border-[#E5E7EB] p-4 flex items-center gap-4 shadow-sm hover:border-[#00A8E8]/30 transition-colors">
+              <React.Fragment key={r.id}>
+              {races.length >= 2 && index === Math.floor(races.length / 2) && (
+                <RookieAdSlot placement="schedule_bottom" user={user} container="li" />
+              )}
+              <li className="bg-white rounded-2xl border border-[#E5E7EB] p-4 flex items-center gap-4 shadow-sm hover:border-[#00A8E8]/30 transition-colors">
                 {/* Date badge */}
                 <div className="flex-shrink-0 w-16 sm:w-20 rounded-xl bg-[#00A8E8] text-white flex flex-col items-center justify-center py-2">
                   <span className="text-[11px] font-bold tracking-wide">{b.month}</span>
@@ -253,6 +259,7 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick, onSche
                   </button>
                 </div>
               </li>
+              </React.Fragment>
             );
           })}
         </ul>
@@ -273,9 +280,6 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick, onSche
         onClose={() => setExportOpen(false)}
       />
 
-      <div className="mt-6">
-        <RookieAdSlot placement="schedule_bottom" user={user} />
-      </div>
     </div>
   );
 };

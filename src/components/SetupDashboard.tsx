@@ -2966,7 +2966,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
         </div>
       </nav>
 
-      <div id="view-panel" role="tabpanel" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24">
+      <div id="view-panel" role="tabpanel" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-[calc(6rem+env(safe-area-inset-bottom))]">
 
         {activeView === 'home' ? (
           <HomeLanding
@@ -2980,8 +2980,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
             weekendTransitionClass={weekendTransitionClass}
             performanceStats={performanceStats}
             upcomingEvents={upcomingEvents}
-            middleSlot={<RookieAdSlot placement="home_middle" user={user} />}
-            bottomSlot={<RookieAdSlot placement="home_bottom" user={user} />}
+            middleSlot={<RookieAdSlot placement="home_middle" user={user} className="my-4" />}
             onChangeClass={onChangeClass}
             onAction={handleHomeAction}
           />
@@ -3002,7 +3001,6 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
               classLocksEnabled={classLocksEnabled}
               onUpgrade={onUpgrade}
             />
-            <RookieAdSlot placement="setup_dashboard_bottom" user={user} />
           </div>
         ) : activeView === 'todo' ? (
           <TodoList user={user} variant="page" />
@@ -3293,8 +3291,6 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
                 onChange={handleSharedChange}
               />
 
-              <RookieAdSlot placement="setup_track_conditions" user={user} />
-
               {trackCategory === 'road_course' ? <RoadCourseTrack data={currentSetup} onChange={handleChange} /> : trackCategory === 'pavement_oval' ? <PavementOvalTrack
                 entryHandling={currentSetup.entry_handling}
                 midHandling={currentSetup.mid_handling}
@@ -3330,6 +3326,8 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
                 onToggle={() => setCustomFieldsOpen(!customFieldsOpen)}
               />)}
 
+              <RookieAdSlot placement="setup_session_bottom" user={user} />
+
               <ScanTimingScreen
                 key={savedMeta.ids[activeTab] || activeTab}
                 user={user}
@@ -3346,8 +3344,6 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
                 setupType={activeTab}
               />
 
-              <RookieAdSlot placement="timing_scan_bottom" user={user} />
-
 
               <HandlingFeedback
                 entryHandling={currentSetup.entry_handling}
@@ -3362,14 +3358,13 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
               />
 
 
-              <RookieAdSlot placement="setup_session_bottom" user={user} className="mt-2" />
             </div>
           </div>
         )}
       </div>
 
       {activeView === 'setup' && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#E5E7EB] shadow-lg z-50" role="region" aria-label="Save setup">
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#E5E7EB] shadow-lg z-50" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }} role="region" aria-label="Save setup">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3 flex-wrap" aria-live="polite">
               {saveMessage && (

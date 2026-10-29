@@ -1,9 +1,7 @@
-import React, { Suspense, useSyncExternalStore } from 'react';
+import React, { Suspense } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { shouldShowAds } from '@/lib/ads';
-import { isMedianIOSApp } from '@/lib/paymentVisibility';
 import { useMembershipRevision } from '@/hooks/useMembershipRevision';
-import { nativeAds } from '@/lib/nativeAds';
 
 export type RookieAdPlacement =
   | 'home_middle'
@@ -23,29 +21,32 @@ export interface RookieAdSlotProps {
   className?: string;
   previewMode?: boolean;
   onContinue?: () => void;
+  container?: 'li' | 'tr';
+  colSpan?: number;
 }
 
 const RookieHouseAdContent = React.lazy(() => import('./RookieHouseAdContent'));
-const subscribeNativeAds = (notify: () => void) => nativeAds.subscribeDiagnostics(notify);
 
 const RookieAdSlot: React.FC<RookieAdSlotProps> = (props) => {
   useMembershipRevision();
-  const nativeExperience = useSyncExternalStore(subscribeNativeAds,
-    () => nativeAds.usesConfirmedNativeBannerExperience(props.user?.id ?? null), () => false);
   const isDevPreview = props.previewMode && import.meta.env.DEV;
 
-  if (!isDevPreview && (!shouldShowAds(props.user) ||
-      (props.placement !== 'after_save_interstitial' && nativeExperience))) {
+  if (!isDevPreview && !shouldShowAds(props.user)) {
     return null;
   }
 
-  return (
-    <Suspense fallback={props.placement === 'after_save_interstitial' || isMedianIOSApp ? null : (
+  const content = (
+    <Suspense fallback={props.placement === 'after_save_interstitial' ? null : (
       <div aria-hidden="true" className={`h-[160px] w-full shrink-0 ${props.className || ''}`} />
     )}>
       <RookieHouseAdContent {...props} />
     </Suspense>
   );
+  // Keep semantic list/table containers inside eligibility gating, so paid and
+  // logged-out users do not receive empty ad rows or their spacing.
+  if (props.container === 'li') return <li>{content}</li>;
+  if (props.container === 'tr') return <tr><td colSpan={props.colSpan} className="py-4">{content}</td></tr>;
+  return content;
 };
 
 export default RookieAdSlot;
