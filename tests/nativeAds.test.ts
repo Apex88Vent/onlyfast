@@ -97,8 +97,8 @@ const complete = (f: ReturnType<typeof fixture>, overrides = {}) => f.controller
   f.controller.beginManualSave('a'), { persisted: true, queued: false, editing: false, ...overrides });
 
 test('test authorization is origin-bound and absent from ordinary production policy', () => {
-  for (const origin of ['https://onlyfast.app', 'https://www.onlyfast.app', 'http://onlyfast-admob-test-apex88vents-projects.vercel.app',
-    'https://onlyfast-admob-test-apex88vents-projects.vercel.app.attacker.invalid', 'https://unrelated.vercel.app']) {
+  for (const origin of ['https://onlyfast.app', 'https://www.onlyfast.app', 'http://onlyfast-admob-test.vercel.app',
+    'https://onlyfast-admob-test.vercel.app.attacker.invalid', 'https://onlyfast-admob-test-apex88vents-projects.vercel.app', 'https://unrelated.vercel.app']) {
     assert.equal(testBuild.permissionReady(false, origin), false);
     assert.equal(testBuild.iosEnabled(origin), false);
   }

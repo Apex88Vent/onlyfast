@@ -2,7 +2,7 @@
 
 Both test apps load this same start URL:
 
-**https://onlyfast-admob-test-apex88vents-projects.vercel.app/**
+**https://onlyfast-admob-test.vercel.app/**
 
 This is the separate `onlyfast-admob-test` Vercel project
 (`prj_WXGvVgSNRZl7ytIFK8s4do4wpWA1`), not the live OnlyFast project.
@@ -32,6 +32,8 @@ Keep all in-app navigation in that test origin, including the landing, schedule,
 saved setups, account and privacy pages. Do not configure a native menu item to
 send these screens to `onlyfast.app`. The test authorization rejects any other
 origin, including the generated immutable deployment hostname.
+Use the public canonical URL above; the secondary project/team alias requires
+Vercel sign-in and is deliberately not authorized for demo-ad display.
 
 For iOS, enable **App Tracking Transparency (ATT)** on Median's **Permissions** tab
 and set its tracking usage description, for example:

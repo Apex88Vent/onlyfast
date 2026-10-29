@@ -11,7 +11,7 @@ test('test deployment packs only compiled test assets and refuses ordinary or ex
   await writeFile(path.join(root, 'dist-admob-test/index.html'), '<div id="root"></div>');
   await writeFile(path.join(root, 'dist-admob-test/assets/main-test.js'), 'ordinary production bundle');
   await assert.rejects(prepareAdmobTestDeployment(root), /Refuse/);
-  await writeFile(path.join(root, 'dist-admob-test/assets/main-test.js'), 'https://onlyfast-admob-test-apex88vents-projects.vercel.app');
+  await writeFile(path.join(root, 'dist-admob-test/assets/main-test.js'), 'https://onlyfast-admob-test.vercel.app');
   await writeFile(path.join(root, 'operator-credentials.local.json'), 'synthetic-do-not-upload');
   const output = await prepareAdmobTestDeployment(root);
   assert.deepEqual(JSON.parse(await readFile(path.join(output, 'config.json'), 'utf8')), { version: 3,

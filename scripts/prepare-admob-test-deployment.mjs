@@ -13,7 +13,7 @@ export async function prepareAdmobTestDeployment(root) {
   const main = assets.find(name => /^main-.*\.js$/.test(name));
   assert.ok(main, 'Build the admob-test bundle first.');
   const js = await readFile(path.join(source, 'assets', main), 'utf8');
-  assert.ok(js.includes('https://onlyfast-admob-test-apex88vents-projects.vercel.app'), 'Refuse an ordinary or unrecognized bundle.');
+  assert.ok(js.includes('https://onlyfast-admob-test.vercel.app'), 'Refuse an ordinary or unrecognized bundle.');
   const output = path.join(root, '.vercel', 'output');
   // Refuse to replace unrelated/pre-existing build output.
   await mkdir(path.dirname(output), { recursive: true });
