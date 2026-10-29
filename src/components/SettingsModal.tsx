@@ -75,9 +75,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
 
   useEffect(() => {
     if (!isOpen || user.id !== NATIVE_ADS_ROLLOUT_USER_ID) { setAdDiagnostics(null); return; }
-    return nativeAds.subscribeDiagnostics(value => {
+    const unsubscribe = nativeAds.subscribeDiagnostics(value => {
       setAdDiagnostics(nativeAds.canViewDiagnostics(user.id) && value.rolloutAccount ? value : null);
     });
+    const timer = setInterval(() => {
+      setAdDiagnostics(nativeAds.canViewDiagnostics(user.id) ? nativeAds.getDiagnostics() : null);
+    }, 1000);
+    return () => { unsubscribe(); clearInterval(timer); };
   }, [isOpen, user.id]);
 
 
@@ -359,6 +363,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
                 <dt>Device verification</dt><dd className="break-words">{adDiagnostics.device}</dd>
                 <dt>Native consent</dt><dd>{adDiagnostics.consent === 'unverified' ? 'Completed (permission unverified)' : adDiagnostics.consent}</dd>
                 <dt>Banner request sent</dt><dd>{adDiagnostics.bannerCommandDispatched ? 'Yes' : 'No'}</dd>
+                <dt>Last interstitial trigger</dt><dd>{adDiagnostics.lastInterstitialTrigger ?? 'None'}</dd>
+                <dt>Interstitial request sent</dt><dd>{adDiagnostics.lastInterstitialRequestDispatched ? 'Yes' : 'No'}</dd>
+                <dt>Interstitial suppression</dt><dd className="break-words">{adDiagnostics.lastInterstitialSuppression ?? 'None'}</dd>
+                <dt>Shared cooldown remaining</dt><dd>{adDiagnostics.interstitialCooldownRemainingMs === null ? 'Unavailable' : `${Math.ceil(adDiagnostics.interstitialCooldownRemainingMs / 1000)} seconds`}</dd>
               </dl>
               <p className="mt-2 text-xs text-[#6B7280]">Platform: {adDiagnostics.platform ?? 'web'}. Placement: {adDiagnostics.placement}.</p>
               <p className="mt-2 text-xs text-[#6B7280] break-words">Banner blockers: {adDiagnostics.bannerBlockers.join(', ') || 'none'}.</p>

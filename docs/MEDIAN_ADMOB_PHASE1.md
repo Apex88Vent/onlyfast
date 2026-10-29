@@ -14,13 +14,14 @@ included in this rollout.
   confirmed it is the test phone. Only its SHA-256 comparison digest is present in the bundle.
   No iOS test device is registered, so iOS display commands remain blocked.
 - After the existing ATT/UMP flow, documented `median.deviceInfo()` must report `app.onlyfast`,
-  the matching platform, and a nonzero advertising ID matching the registered device digest.
-  Missing/mismatched IDs, errors, timeouts and host changes deny display. Backgrounding or
+  the matching platform, and either a matching nonzero advertising ID or the separately
+  authorized Android phone-session fallback described below. Mismatched/zeroed IDs,
+  errors, timeouts and host changes deny display. Backgrounding or
   account switching clears device evidence, so changed advertising IDs are rechecked on resume.
 - IMPORTANT: Median documents that `gaid`/`idfa` may be omitted without a supported attribution
   plugin (AdMob alone is not listed as sufficient). This rollout does not add such a plugin or
-  guess an ID. If omitted on the installed app, the exact blocker is `advertising-id-unavailable`;
-  requests remain disabled despite the device's AdMob registration. A missing deviceInfo method
+  guess an ID. An omitted Android GAID can use only the owner-confirmed, remotely verified
+  phone session; unknown sessions remain blocked. A missing deviceInfo method
   is reported as `device-info-unavailable`. Installation IDs are never substituted for AdMob IDs.
 - `VITE_MEDIAN_ADMOB_ENABLED=true` enables only the resolved rollout UUID; other accounts retain
   the existing house post-save fallback. `VITE_MEDIAN_ADMOB_DIAGNOSTICS=true` temporarily logs
@@ -48,8 +49,25 @@ Pro, Teams, admin, promotional/ambassador/ad-free grants, unknown membership and
 accounts remain excluded. Membership expires after five minutes and is invalidated on backgrounding.
 Banners use home, schedule and saved views. Editing, timing, onboarding, account management,
 unsupported routes, overlays and backgrounding suppress banners. Interstitial attempts follow
-persisted manual saves only, with the existing account-specific 600-second cooldown. House
+persisted manual saves or explicit dismissal of successful Setup Assist/What If results,
+with ONE existing account-specific 600-second cooldown shared by both triggers. House
 promotions and browser/flag-off fallback remain. Nothing is deferred to interrupt later editing.
+
+Manual-save dispatch now runs in a layout effect after React removes the save dialog. The
+previous handler invoked the bridge immediately after setting the close state, while the dialog
+could still be mounted; its mutable open-state check could also race a synchronous render.
+Failed, queued/no-write saves, autosaves, cancelled/stale contexts and intervening activity never
+produce native requests. Setup Assist displays its answer normally; only **Dismiss result** on
+a successful response creates an opportunity after the result has been removed. Generation,
+errors, usage-limit notices and stale account/weekend/session responses cannot authorize ads.
+No rewarded behavior or changes to Rookie usage accounting are included.
+
+The existing rollout-only Settings status reports the last interstitial trigger, whether that
+request was dispatched, its suppression reason, and a live shared cooldown countdown. The
+cooldown retains the existing localStorage key and counts attempts, including possible no-fill.
+There is no retry when it expires. `showInterstitialIfReady()` is still the only interstitial
+bridge command. Median preloads ads natively and documents that no ad appears when none is ready;
+website dispatch diagnostics cannot confirm native display or readiness.
 
 Before either native display command, the controller awaits `median.admob.request.consent()`;
 iOS first awaits `median.admob.request.tracking()`. Tracking denial is not converted into permission

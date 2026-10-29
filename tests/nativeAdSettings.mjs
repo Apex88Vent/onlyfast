@@ -39,16 +39,19 @@ test('actual Settings status stays live, reveals no IDs, remains suspended, and 
   let eligible = true;
   let device = false;
   let deviceStatus = 'advertising-id-unavailable';
+  const cooldownStorage = new Map();
+  let now = 1_000_000;
   let view;
   const calls = [];
   const bridge = {
     banner: { enable: () => calls.push('enable'), disable: () => calls.push('disable') },
+    showInterstitialIfReady: () => calls.push('interstitial'),
     request: { consent: async () => ({ result: true }) },
   };
   const controller = new native.NativeAdsController({
     enabled: uid => uid === id, eligible: uid => uid === currentId && eligible,
     userAgent: () => 'MedianAndroid/1.0', bridge: () => bridge,
-    storage: () => ({ getItem: () => null, setItem: () => {} }), now: Date.now,
+    storage: () => ({ getItem: key => cooldownStorage.get(key) ?? null, setItem: (key, value) => cooldownStorage.set(key, value) }), now: () => now,
     deviceAllowed: () => device, deviceStatus: () => deviceStatus,
   });
   const user = { id, email: 'rookie@test.com', user_metadata: {} };
@@ -88,8 +91,15 @@ test('actual Settings status stays live, reveals no IDs, remains suspended, and 
     assert.ok(!calls.includes('enable'), 'Settings must continue suspending native banners');
     await act(async () => { view.update(React.createElement(Settings, { ...props, isOpen: false })); });
     assert.ok(calls.includes('enable'));
+    controller.completeManualSave(controller.beginManualSave(id), { persisted: true, queued: false, editing: false });
     await act(async () => { view.update(React.createElement(Settings, props)); });
     assert.equal(value('Banner request sent'), 'Yes');
+    assert.equal(value('Last interstitial trigger'), 'manual-save');
+    assert.equal(value('Interstitial request sent'), 'Yes');
+    assert.equal(value('Interstitial suppression'), 'None');
+    assert.equal(value('Shared cooldown remaining'), '600 seconds');
+    await act(async () => { now += 1000; controller.refresh(); });
+    assert.equal(value('Shared cooldown remaining'), '599 seconds');
     assert.match(text(status()[0]), /Google ad display is not confirmed/);
     await act(async () => { eligible = false; controller.refresh(); });
     assert.equal(value('Rookie eligible'), 'No');
@@ -157,4 +167,87 @@ test('mounted house tiles yield only to the confirmed native session and return 
     assert.equal(houses(), 0);
     await act(async () => { props = { ...props, user: null }; view.update(React.createElement(Slot, props)); }); assert.equal(houses(), 0);
   } finally { await act(async () => { view?.unmount(); }); controller.stop(); }
+});
+
+test('real Assist answers remain readable before dismissal; generation, failures, usage limits and changed owners cannot produce ads', async () => {
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: new EventTarget() });
+  const id = native.NATIVE_ADS_ROLLOUT_USER_ID;
+  const storage = new Map();
+  let view;
+  let requests = 0;
+  let used = 0;
+  let mode = 'success';
+  let resolveResponse;
+  let ads = 0;
+  const bridge = { banner: { enable() {}, disable() {} }, request: { consent: async () => ({ result: true }) },
+    showInterstitialIfReady() {
+      // The real result is already removed from the committed component tree.
+      assert.equal(view.root.findAllByProps({ 'aria-label': 'AI setup suggestions' }).length, 0);
+      ads++;
+    },
+  };
+  const controller = new native.NativeAdsController({
+    enabled: uid => uid === id, eligible: uid => uid === id,
+    userAgent: () => 'MedianAndroid/1.0', bridge: () => bridge,
+    storage: () => ({ getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) }), now: () => 1_000_000,
+    deviceAllowed: () => true, deviceStatus: () => 'registered-phone-session',
+  });
+  controller.setUser(id); controller.setForeground(true); controller.setRouteSupported(true);
+  controller.setPlacement(id, 'setup'); await controller.requestConsent();
+  const query = { select() { return this; }, eq() { return this; }, maybeSingle: async () => ({ data: { used_count: used } }) };
+  const Feedback = compile('components/HandlingFeedback.tsx', {
+    '@/lib/nativeAds': { nativeAds: controller },
+    '@/lib/supabase': { supabase: {
+      from: () => query, auth: { getSession: async () => ({ data: { session: { access_token: 'fixture' } } }) },
+      functions: { invoke: async () => { requests++; return mode === 'delay' ? new Promise(resolve => { resolveResponse = resolve; }) :
+        mode === 'success' ? { data: { suggestion: 'Useful completed answer' }, error: null } : { data: null, error: null }; } },
+    } },
+    '@/lib/membership': { readMembership: () => ({}), getEffectiveTier: () => 'rookie',
+      checkSetupAssistPermission: (_tier, count) => ({ allowed: count < 1, upgradeText: 'Existing usage limit' }) },
+    '@/hooks/useMembershipRevision': { useMembershipRevision() {} },
+    '@/lib/onlylapsSessionScope': { ONLYLAPS_SESSION_LINK_CHANGED_EVENT: 'fixture-link' },
+    '@/lib/setupLibrary': { EXPANDED_CLASS_CONFIGS: {} },
+    '@/lib/roadTrackFeedback': {},
+    './LockedFeatureNotice': { __esModule: true, default: ({ message }) => React.createElement('p', {}, message) },
+  }).default;
+  let props = { user: { id }, raceWeekendKey: 'Saved Weekend', onlyfastSessionId: 'saved-row',
+    setupData: {}, raceClass: 'dirt', entryHandling: 'loose', midHandling: '', exitHandling: '' };
+  const buttons = () => view.root.findAllByType('button');
+  const suggest = () => buttons().find(button => text(button).includes('Get Setup Suggestions'));
+  const dismiss = () => buttons().find(button => text(button) === 'Dismiss result');
+  try {
+    await act(async () => { view = create(React.createElement(Feedback, props)); });
+    mode = 'delay'; let pending;
+    await act(async () => { pending = suggest().props.onClick(); });
+    assert.equal(dismiss(), undefined); assert.equal(ads, 0);
+    assert.equal(controller.getDiagnostics().overlayOpen, true, 'native ads suspended throughout generation');
+    await act(async () => { resolveResponse({ data: { suggestion: 'Useful completed answer' }, error: null }); await pending; });
+    assert.match(text(view.toJSON()), /Useful completed answer/); assert.equal(ads, 0);
+    controller.noteActivity(); // The real pointer-down on Dismiss precedes creation of its ticket.
+    await act(async () => { dismiss().props.onClick(); });
+    assert.equal(ads, 1); assert.equal(controller.getDiagnostics().lastInterstitialTrigger, 'setup-assist');
+    assert.equal(controller.getDiagnostics().interstitialCooldownRemainingMs, 600_000);
+    mode = 'success';
+    await act(async () => { buttons().find(button => text(button).trim() === 'What If?').props.onClick(); });
+    await act(async () => { view.root.findByProps({ placeholder: 'What if I changed the right rear spring to 200 lbs?' }).props.onChange({ target: { value: 'Change spring?' } }); });
+    await act(async () => { await buttons().find(button => text(button).trim() === 'Ask').props.onClick(); });
+    assert.match(text(view.toJSON()), /Useful completed answer/); assert.equal(ads, 1);
+    await act(async () => { dismiss().props.onClick(); });
+    assert.equal(ads, 1); assert.equal(controller.getDiagnostics().lastInterstitialSuppression, 'cooldown');
+    mode = 'empty'; await act(async () => { await suggest().props.onClick(); });
+    assert.equal(dismiss(), undefined); assert.equal(ads, 1);
+    const previousRequests = requests; used = 1;
+    await act(async () => { await suggest().props.onClick(); });
+    assert.equal(requests, previousRequests); assert.match(text(view.toJSON()), /Existing usage limit/);
+    used = 0; mode = 'delay';
+    await act(async () => { pending = suggest().props.onClick(); });
+    await act(async () => { controller.setUser('other'); props = { ...props, user: { id: 'other' } }; view.update(React.createElement(Feedback, props)); });
+    await act(async () => { resolveResponse({ data: { suggestion: 'Late previous-owner answer' }, error: null }); await pending; });
+    await act(async () => { dismiss().props.onClick(); });
+    assert.equal(ads, 1, 'late result must never authorize an ad for the replacement account');
+  } finally {
+    await act(async () => { view?.unmount(); }); controller.stop();
+    if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow); else Reflect.deleteProperty(globalThis, 'window');
+  }
 });

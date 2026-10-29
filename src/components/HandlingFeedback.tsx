@@ -1,6 +1,7 @@
 import { useMembershipRevision } from '@/hooks/useMembershipRevision';
 import LockedFeatureNotice from './LockedFeatureNotice';
-import React, { useEffect, useId, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useId, useRef, useState } from 'react';
+import { nativeAds } from '@/lib/nativeAds';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import {
@@ -114,6 +115,36 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
   const [whatIfQuestion, setWhatIfQuestion] = useState('');
   const [whatIfResponse, setWhatIfResponse] = useState('');
   const [whatIfLoading, setWhatIfLoading] = useState(false);
+  const [whatIfReady, setWhatIfReady] = useState(false);
+  const assistAdScope = useRef({ userId: user?.id, raceWeekendKey, onlyfastSessionId });
+  const completedAssistAds = useRef<{ suggestions?: string; whatIf?: string }>({});
+  const pendingAssistAd = useRef<ReturnType<typeof nativeAds.beginSetupAssistDismissal>>(null);
+  useLayoutEffect(() => {
+    assistAdScope.current = { userId: user?.id, raceWeekendKey, onlyfastSessionId };
+    completedAssistAds.current = {};
+    pendingAssistAd.current = null;
+    return () => { completedAssistAds.current = {}; pendingAssistAd.current = null; };
+  }, [user?.id, raceWeekendKey, onlyfastSessionId]);
+  useLayoutEffect(() => {
+    if (loading || whatIfLoading) return nativeAds.suspend();
+  }, [loading, whatIfLoading]);
+  useLayoutEffect(() => {
+    if (loading || whatIfLoading || !pendingAssistAd.current) return;
+    const ticket = pendingAssistAd.current;
+    pendingAssistAd.current = null;
+    nativeAds.completeSetupAssistDismissal(ticket);
+  }, [suggestions, whatIfResponse, loading, whatIfLoading]);
+  const dismissAssistResult = (kind: 'suggestions' | 'whatIf') => {
+    // Reading and generating the answer never depends on ad availability. The
+    // ordinary interstitial opportunity begins only at an explicit dismissal.
+    const owner = completedAssistAds.current[kind];
+    delete completedAssistAds.current[kind];
+    if (!loading && !whatIfLoading && owner && owner === user?.id) {
+      pendingAssistAd.current = nativeAds.beginSetupAssistDismissal(owner);
+    }
+    if (kind === 'suggestions') { setSuggestions(''); setSuggestionsReady(false); }
+    else { setWhatIfResponse(''); setWhatIfReady(false); }
+  };
   // Inline notice surfaced when a Rookie hits the per-race-weekend assist limit
   // (or when they need to save the race weekend first to track the free assist).
   const [assistNotice, setAssistNotice] = useState('');
@@ -386,6 +417,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
   };
 
   const getSuggestions = async () => {
+    const adScope = assistAdScope.current;
     // Enforce the per-race-weekend assist limit BEFORE doing anything else.
     const gate = await gateAssist();
     if (!gate.allowed) return;
@@ -393,6 +425,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
     setLoading(true);
     setSuggestions('');
     setSuggestionsReady(false);
+    delete completedAssistAds.current.suggestions;
     setTelemetryRequestDebug(null);
     try {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -418,6 +451,9 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
       if (data?.suggestion) {
         setSuggestions(data.suggestion);
         setSuggestionsReady(true);
+        if (!error && typeof data.suggestion === 'string' && data.suggestion.trim() && adScope === assistAdScope.current) {
+          completedAssistAds.current.suggestions = adScope.userId;
+        }
         setTelemetryRequestDebug(
           onlyLapsTelemetryEnabled
             ? readBetaTelemetryDebug(data.telemetry_debug)
@@ -446,6 +482,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
   };
 
   const askWhatIf = async () => {
+    const adScope = assistAdScope.current;
     if (!whatIfQuestion.trim()) return;
 
     // What-If is part of Setup Assist — gate it through the same limit/scope.
@@ -454,6 +491,8 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
 
     setWhatIfLoading(true);
     setWhatIfResponse('');
+    setWhatIfReady(false);
+    delete completedAssistAds.current.whatIf;
     setTelemetryRequestDebug(null);
     try {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -479,6 +518,10 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
       });
       if (data?.suggestion) {
         setWhatIfResponse(data.suggestion);
+        setWhatIfReady(true);
+        if (!error && typeof data.suggestion === 'string' && data.suggestion.trim() && adScope === assistAdScope.current) {
+          completedAssistAds.current.whatIf = adScope.userId;
+        }
         setTelemetryRequestDebug(
           onlyLapsTelemetryEnabled
             ? readBetaTelemetryDebug(data.telemetry_debug)
@@ -710,6 +753,9 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
           <div className="prose prose-sm max-w-none text-[#4B5563]">
             {renderMarkdown(suggestions)}
           </div>
+          {suggestionsReady && !loading && !whatIfLoading && (
+            <button type="button" onClick={() => dismissAssistResult('suggestions')} className="mt-3 text-sm font-medium text-[#00A8E8] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] rounded">Dismiss result</button>
+          )}
         </div>
       )}
 
@@ -763,6 +809,9 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
               <div className="prose prose-sm max-w-none text-[#4B5563]">
                 {renderMarkdown(whatIfResponse)}
               </div>
+              {whatIfReady && !loading && !whatIfLoading && (
+                <button type="button" onClick={() => dismissAssistResult('whatIf')} className="mt-3 text-sm font-medium text-[#00A8E8] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] rounded">Dismiss result</button>
+              )}
             </div>
           )}
         </div>

@@ -24,6 +24,9 @@ function compile(file, modules = {}) {
     if (name === '@/lib/roadTrackFeedback') return road;
     if (name === '@/lib/setupLibrary') return library;
     if (name === '@/hooks/useMembershipRevision') return { useMembershipRevision: () => 0 };
+    if (name === '@/lib/nativeAds') return { nativeAds: {
+      suspend: () => () => {}, beginSetupAssistDismissal: () => null, completeSetupAssistDismissal: () => 'suppressed',
+    } };
     if (name === './LockedFeatureNotice') return { __esModule: true, default: compile('LockedFeatureNotice.tsx', {
       'react-router-dom': { Link: ({ to, children, ...props }) => React.createElement('a', { ...props, href: to }, children) },
     }) };

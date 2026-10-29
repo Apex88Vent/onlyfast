@@ -449,10 +449,28 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   // Whether ads should be shown to this user at all (rookie + logged in only).
   const adsEnabled = shouldShowAds(user);
   const saveAdContext = useRef({ userId: user?.id, activeView, saveModalOpen });
+  const pendingSaveAd = useRef<{
+    ticket: ReturnType<typeof nativeAds.beginManualSave>;
+    userId: string | undefined;
+    outcome: { persisted: boolean; queued: boolean; editing: boolean };
+  } | null>(null);
   useLayoutEffect(() => {
     saveAdContext.current = { userId: user?.id, activeView, saveModalOpen };
   }, [user?.id, activeView, saveModalOpen]);
   useLayoutEffect(() => nativeAds.setPlacement(user?.id ?? null, activeView), [user?.id, activeView]);
+  useLayoutEffect(() => {
+    if (saveModalOpen || !pendingSaveAd.current) return;
+    const pending = pendingSaveAd.current;
+    pendingSaveAd.current = null;
+    // The save dialog is now absent from the committed UI. Consume this pause
+    // immediately; never queue a retry after navigation, editing or cooldown.
+    const context = saveAdContext.current;
+    const adResult = nativeAds.completeManualSave(pending.ticket, {
+      ...pending.outcome,
+      editing: pending.outcome.editing || context.activeView !== 'setup' || context.userId !== pending.userId,
+    });
+    if (adResult === 'house') setShowPostSaveAd(true);
+  }, [saveModalOpen]);
 
 
   // Swipe animation state
@@ -1435,21 +1453,18 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     const adTicket = nativeAds.beginManualSave(user?.id ?? null);
     const result = await performSave(name);
     if (result) {
+      const context = saveAdContext.current;
+      const outcome = { ...result,
+        editing: !context.saveModalOpen || context.activeView !== 'setup' || context.userId !== user?.id };
+      if (!outcome.editing) pendingSaveAd.current = { ticket: adTicket, userId: user?.id, outcome };
+      else nativeAds.completeManualSave(adTicket, outcome);
       setSaveModalOpen(false);
       // If this save was triggered by "New Setup" flow, clear afterwards
       if (saveThenClear) {
         setSaveThenClear(false);
         doClearAllTabs();
       }
-      // Only the completed save modal owns this immediate pause. No delayed ad
-      // can follow the user back into editing, another screen, or another account.
-      const context = saveAdContext.current;
-      const adResult = nativeAds.completeManualSave(adTicket, {
-        ...result,
-        editing: !context.saveModalOpen || context.activeView !== 'setup' || context.userId !== user?.id,
-      });
-      if (adResult === 'house') setShowPostSaveAd(true);
-    }
+    } else nativeAds.completeManualSave(adTicket, { persisted: false, queued: false, editing: true });
   };
 
   const handleSaveModalClose = () => {

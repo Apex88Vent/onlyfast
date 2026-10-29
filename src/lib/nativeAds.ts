@@ -135,7 +135,8 @@ export interface NativeAdsDependencies {
   diagnostic?(value: ReturnType<NativeAdsController['getDiagnostics']>): void;
 }
 
-type SaveTicket = Readonly<{ userId: string; generation: number; activity: number }>;
+type InterstitialTrigger = 'manual-save' | 'setup-assist';
+type SaveTicket = Readonly<{ userId: string; generation: number; activity: number; trigger: InterstitialTrigger }>;
 export type PostSaveAdResult = 'house' | 'suppressed' | 'requested';
 export type NativeConsentStatus = 'idle' | 'pending' | 'unverified' | 'unavailable' | 'error';
 
@@ -159,6 +160,9 @@ export class NativeAdsController {
   private consentRequest: Promise<NativeConsentStatus> | null = null;
   private bannerDispatches = 0;
   private interstitialDispatches = 0;
+  private lastInterstitialTrigger: InterstitialTrigger | null = null;
+  private lastInterstitialRequestDispatched = false;
+  private lastInterstitialSuppression: string | null = null;
   private diagnosticListeners = new Set<(value: ReturnType<NativeAdsController['getDiagnostics']>) => void>();
 
   constructor(private readonly deps: NativeAdsDependencies) {}
@@ -175,6 +179,9 @@ export class NativeAdsController {
       this.consentAttempt = null;
       this.bannerDispatches = 0;
       this.interstitialDispatches = 0;
+      this.lastInterstitialTrigger = null;
+      this.lastInterstitialRequestDispatched = false;
+      this.lastInterstitialSuppression = null;
       this.hideBanner();
       this.userId = userId;
     }
@@ -290,6 +297,10 @@ export class NativeAdsController {
       interstitialCommandDispatched: this.interstitialDispatches > 0,
       bannerCommandDispatches: this.bannerDispatches,
       interstitialCommandDispatches: this.interstitialDispatches,
+      lastInterstitialTrigger: this.lastInterstitialTrigger,
+      lastInterstitialRequestDispatched: this.lastInterstitialRequestDispatched,
+      lastInterstitialSuppression: this.lastInterstitialSuppression,
+      interstitialCooldownRemainingMs: this.interstitialCooldown().remainingMs,
       adDisplayed: 'unknown',
     };
   }
@@ -438,48 +449,93 @@ export class NativeAdsController {
   }
 
   beginManualSave(userId: string | null): SaveTicket | null {
+    return this.beginInterstitial(userId, 'manual-save');
+  }
+
+  /** Called only when the user dismisses a successfully completed Assist result. */
+  beginSetupAssistDismissal(userId: string | null): SaveTicket | null {
+    return this.beginInterstitial(userId, 'setup-assist');
+  }
+
+  private beginInterstitial(userId: string | null, trigger: InterstitialTrigger): SaveTicket | null {
     this.pendingSave = userId && userId === this.userId
-      ? { userId, generation: this.generation, activity: this.activity } : null;
+      ? { userId, generation: this.generation, activity: this.activity, trigger } : null;
     return this.pendingSave;
   }
 
-  /** Called synchronously at the completed save modal's natural pause. Never queued for later. */
+  /** Called after the successful save dialog has been removed by React. */
   completeManualSave(ticket: SaveTicket | null, outcome: {
     persisted: boolean; queued: boolean; editing: boolean;
   }): PostSaveAdResult {
-    if (!ticket || ticket !== this.pendingSave) return 'suppressed';
-    this.pendingSave = null;
-    if (!outcome.persisted || outcome.queued || outcome.editing || ticket.userId !== this.userId ||
-        ticket.generation !== this.generation || ticket.activity !== this.activity ||
-        !this.foreground || !this.routeSupported || this.suspensions.size > 0 || this.requesting) return 'suppressed';
+    return this.completeInterstitial(ticket, 'manual-save', outcome.queued ? 'offline-save-queued' :
+      !outcome.persisted ? 'save-failed-or-no-write' : outcome.editing ? 'editing-or-context-changed' : null);
+  }
 
+  completeSetupAssistDismissal(ticket: SaveTicket | null): PostSaveAdResult {
+    return this.completeInterstitial(ticket, 'setup-assist');
+  }
+
+  private interstitialCooldown(): { remainingMs: number | null; reason: string | null } {
+    if (!this.userId) return { remainingMs: 0, reason: null };
     try {
-      if (!this.deps.eligible(ticket.userId)) return 'suppressed';
-      const bridge = this.deps.bridge();
-      if (!this.deps.enabled(this.userId) || this.platform() === null || typeof bridge?.showInterstitialIfReady !== 'function') return 'house';
-      if (!this.allowed()) return 'suppressed';
-      const key = `onlyfast_admob_interstitial_v1:${encodeURIComponent(ticket.userId)}`;
-      const storage = this.deps.storage();
-      const raw = storage.getItem(key);
+      const raw = this.deps.storage().getItem(`onlyfast_admob_interstitial_v1:${encodeURIComponent(this.userId)}`);
       const now = this.deps.now();
-      if (!Number.isFinite(now) || now < 0) return 'suppressed';
-      if (raw !== null) {
-        const last = Number(raw);
-        // Unknown/corrupt storage and clock rollback fail closed.
-        if (!raw.trim() || !Number.isFinite(last) || last < 0 || now - last < INTERSTITIAL_COOLDOWN_MS) return 'suppressed';
-      }
-      // Recheck identity/eligibility immediately before persisting and dispatching.
-      if (ticket.userId !== this.userId || !this.allowed()) return 'suppressed';
+      if (!Number.isFinite(now) || now < 0) return { remainingMs: null, reason: 'cooldown-clock-invalid' };
+      if (raw === null) return { remainingMs: 0, reason: null };
+      const last = Number(raw);
+      if (!raw.trim() || !Number.isFinite(last) || last < 0 || last > now) return { remainingMs: null, reason: 'cooldown-storage-invalid' };
+      const remainingMs = Math.max(0, INTERSTITIAL_COOLDOWN_MS - (now - last));
+      return { remainingMs, reason: remainingMs > 0 ? 'cooldown' : null };
+    } catch { return { remainingMs: null, reason: 'cooldown-storage-unavailable' }; }
+  }
+
+  private completeInterstitial(ticket: SaveTicket | null, trigger: InterstitialTrigger,
+    invalidOutcome: string | null = null): PostSaveAdResult {
+    this.lastInterstitialTrigger = trigger;
+    this.lastInterstitialRequestDispatched = false;
+    this.lastInterstitialSuppression = null;
+    const suppress = (reason: string, result: PostSaveAdResult = 'suppressed') => {
+      this.lastInterstitialSuppression = reason;
+      return result;
+    };
+    // A reentrant call must not release the outer dispatch lock.
+    let ownsRequest = false;
+    try {
+      if (!ticket || ticket !== this.pendingSave || ticket.trigger !== trigger) return suppress('invalid-or-consumed-opportunity');
+      this.pendingSave = null;
+      if (invalidOutcome) return suppress(invalidOutcome);
+      if (ticket.userId !== this.userId || ticket.generation !== this.generation) return suppress('account-changed');
+      if (ticket.activity !== this.activity) return suppress('activity-changed');
+      if (!this.foreground) return suppress('not-foreground');
+      if (!this.routeSupported) return suppress('unsupported-route');
+      if (this.suspensions.size > 0) return suppress('overlay-open');
+      if (this.requesting) return suppress('request-in-progress');
+      if (!this.deps.eligible(ticket.userId)) return suppress('membership-not-verified-rookie');
+      const houseFallback = trigger === 'manual-save' ? 'house' : 'suppressed';
+      if (!this.deps.enabled(this.userId)) return suppress('advertising-disabled-for-account', houseFallback);
+      if (this.platform() === null) return suppress('not-median-android-or-ios', houseFallback);
+      const bridge = this.deps.bridge();
+      if (typeof bridge?.showInterstitialIfReady !== 'function') return suppress('interstitial-bridge-unavailable', houseFallback);
+      if (!(this.deps.deviceAllowed?.(this.platform()) ?? true)) return suppress(`device-${this.deps.deviceStatus?.() ?? 'not-authorized'}`);
+      if (this.consentStatus !== 'unverified') return suppress(`native-consent-${this.consentStatus}`);
+      if (!this.allowed()) return suppress('native-consent-or-authorization-changed');
+      const cooldown = this.interstitialCooldown();
+      if (cooldown.reason) return suppress(cooldown.reason);
+      if (ticket.userId !== this.userId || !this.allowed()) return suppress('authorization-changed');
       this.requesting = true;
-      storage.setItem(key, String(now));
+      ownsRequest = true;
+      const key = `onlyfast_admob_interstitial_v1:${encodeURIComponent(ticket.userId)}`;
+      this.deps.storage().setItem(key, String(this.deps.now()));
       // Count attempts: Median supplies no reliable display-success callback.
       bridge.showInterstitialIfReady();
       this.interstitialDispatches++;
+      this.lastInterstitialRequestDispatched = true;
+      this.lastInterstitialSuppression = null;
       return 'requested';
     } catch {
       // A thrown bridge call may already have dispatched. Never stack a house modal.
-      return 'suppressed';
-    } finally { this.requesting = false; this.diagnose(); }
+      return suppress(ownsRequest ? 'storage-write-or-native-command-error' : 'interstitial-check-error');
+    } finally { if (ownsRequest) this.requesting = false; this.diagnose(); }
   }
 
   stop() {

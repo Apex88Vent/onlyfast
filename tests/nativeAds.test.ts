@@ -376,6 +376,62 @@ test('successful manual save requests once, consumes its ticket, and persists a 
   const b = reloaded.controller.beginManualSave('b');
   assert.equal(reloaded.controller.completeManualSave(b, { persisted: true, queued: false, editing: false }), 'requested');
 });
+
+test('manual save and completed Assist dismissal share one persisted cooldown and never schedule a later retry', async () => {
+  for (const first of ['manual-save', 'setup-assist']) {
+    const f = await fixture();
+    const assist = () => f.controller.completeSetupAssistDismissal(f.controller.beginSetupAssistDismissal('a'));
+    assert.equal(first === 'manual-save' ? complete(f) : assist(), 'requested');
+    assert.equal(f.controller.getDiagnostics().lastInterstitialTrigger, first);
+    assert.equal(f.controller.getDiagnostics().lastInterstitialRequestDispatched, true);
+    assert.equal(f.controller.getDiagnostics().interstitialCooldownRemainingMs, 600_000);
+    assert.equal(first === 'manual-save' ? assist() : complete(f), 'suppressed');
+    assert.equal(f.controller.getDiagnostics().lastInterstitialSuppression, 'cooldown');
+    assert.equal(f.controller.getDiagnostics().lastInterstitialRequestDispatched, false);
+    const reloaded = await fixture(f.storage);
+    assert.equal(reloaded.controller.completeSetupAssistDismissal(reloaded.controller.beginSetupAssistDismissal('a')), 'suppressed');
+    f.state.now += 599_999;
+    assert.equal(assist(), 'suppressed');
+    assert.equal(f.controller.getDiagnostics().interstitialCooldownRemainingMs, 1);
+    f.state.now++;
+    f.controller.refresh(); // Expiry alone must not display an ad.
+    assert.equal(f.calls.filter(c => c === 'interstitial').length, 1);
+    assert.equal(assist(), 'requested');
+    assert.equal(f.calls.filter(c => c === 'interstitial').length, 2);
+    f.controller.stop(); reloaded.controller.stop();
+  }
+});
+
+test('both triggers retain consent, native device, membership and lifecycle guards with explicit suppression diagnostics', async () => {
+  const cases = [
+    ['not-foreground', (f: Awaited<ReturnType<typeof fixture>>) => f.controller.setForeground(false)],
+    ['unsupported-route', (f: Awaited<ReturnType<typeof fixture>>) => f.controller.setRouteSupported(false)],
+    ['overlay-open', (f: Awaited<ReturnType<typeof fixture>>) => f.controller.suspend()],
+    ['membership-not-verified-rookie', (f: Awaited<ReturnType<typeof fixture>>) => { f.state.eligible = false; }],
+    ['advertising-disabled-for-account', (f: Awaited<ReturnType<typeof fixture>>) => { f.state.enabled = false; }],
+    ['device-not-authorized', (f: Awaited<ReturnType<typeof fixture>>) => { f.state.device = false; }],
+    ['interstitial-bridge-unavailable', (f: Awaited<ReturnType<typeof fixture>>) => { Reflect.deleteProperty(f.bridge, 'showInterstitialIfReady'); }],
+  ] as const;
+  for (const ua of ['MedianAndroid/1.0 Android', 'MedianIOS/1.0']) {
+    for (const [reason, change] of cases) {
+      const f = await fixture(undefined, false, { ua }); change(f);
+      const result = f.controller.completeSetupAssistDismissal(f.controller.beginSetupAssistDismissal('a'));
+      assert.equal(result, 'suppressed');
+      const diagnostics = f.controller.getDiagnostics();
+      assert.equal(diagnostics.lastInterstitialTrigger, 'setup-assist');
+      assert.equal(diagnostics.lastInterstitialSuppression, reason);
+      assert.equal(diagnostics.lastInterstitialRequestDispatched, false);
+      assert.equal(f.storage.size, 0);
+      assert.ok(!f.calls.includes('interstitial'));
+      f.controller.stop();
+    }
+  }
+  const f = await fixture(); complete(f, { queued: true });
+  assert.equal(f.controller.getDiagnostics().lastInterstitialSuppression, 'offline-save-queued');
+  complete(f, { persisted: false });
+  assert.equal(f.controller.getDiagnostics().lastInterstitialSuppression, 'save-failed-or-no-write');
+  f.controller.stop();
+});
 test('failed/queued/no-write saves and active editing cannot request ads', async () => {
   for (const outcome of [{ persisted: false }, { queued: true }, { editing: true }]) {
     const f = await fixture(); assert.equal(complete(f, outcome), 'suppressed'); assert.equal(f.storage.size, 0);
@@ -482,6 +538,19 @@ function dashboardFunction(name: string, bindings: Record<string, unknown>) {
   return new Function(...Object.keys(bindings), `${js}; return ${name}`)(...Object.values(bindings));
 }
 
+function dashboardSaveClosedEffect(bindings: Record<string, unknown>) {
+  const ast = ts.createSourceFile('dashboard.tsx', dashboardSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let callback: ts.Expression | undefined;
+  const visit = (node: ts.Node) => {
+    if (ts.isCallExpression(node) && node.expression.getText(ast) === 'useLayoutEffect' &&
+        node.arguments[0]?.getText(ast).includes('pendingSaveAd.current')) callback = node.arguments[0];
+    ts.forEachChild(node, visit);
+  };
+  visit(ast); assert.ok(callback);
+  const js = ts.transpileModule(`const effect = ${callback.getText(ast)}`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  return new Function(...Object.keys(bindings), `${js}; return effect`)(...Object.values(bindings));
+}
+
 test('actual save routine distinguishes persisted, queued, failed and empty saves without changing queued success', async () => {
   for (const mode of ['persisted', 'queued', 'failed', 'empty']) {
     const queued: unknown[] = []; const noop = () => {};
@@ -511,6 +580,8 @@ test('actual manual-save hook preserves web fallback and avoids native/house sta
     if (mode === 'flag-off') f.state.enabled = false;
     if (mode === 'consent') { f.bridge.request = { consent: async () => { throw Error('native failure'); } }; await f.controller.requestConsent(); }
     let house = false; const noop = () => {};
+    const context = { current: { userId: 'a', activeView: 'setup', saveModalOpen: mode !== 'editing' } };
+    const pendingSaveAd = { current: null };
     const submit = dashboardFunction('handleSaveModalSubmit', {
       user: { id: 'a' }, nativeAds: f.controller,
       performSave: async () => {
@@ -518,11 +589,15 @@ test('actual manual-save hook preserves web fallback and avoids native/house sta
         if (mode === 'switched') f.controller.setUser('b');
         return mode === 'failed' ? null : { persisted: mode !== 'queued', queued: mode === 'queued' };
       },
-      setSaveModalOpen: noop, saveThenClear: false, doClearAllTabs: noop,
-      saveAdContext: { current: { userId: 'a', activeView: 'setup', saveModalOpen: mode !== 'editing' } },
+      setSaveModalOpen: () => { context.current.saveModalOpen = false; }, saveThenClear: false, doClearAllTabs: noop,
+      saveAdContext: context, pendingSaveAd,
       setShowPostSaveAd: (value: boolean) => { house = value; },
     });
     await submit('Race');
+    assert.equal(f.calls.filter(c => c === 'interstitial').length, 0, 'never call the bridge before the modal-close commit');
+    const commitClose = dashboardSaveClosedEffect({ saveModalOpen: false, pendingSaveAd, saveAdContext: context,
+      nativeAds: f.controller, setShowPostSaveAd: (value: boolean) => { house = value; } });
+    commitClose(); commitClose(); // React effect replays must not consume a second opportunity.
     assert.equal(f.calls.filter(c => c === 'interstitial').length, mode === 'native' ? 1 : 0, mode);
     assert.equal(house, mode === 'browser' || mode === 'flag-off', mode);
   }
