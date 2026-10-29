@@ -58,9 +58,9 @@ query parameter is retained. It loads the production root, not a separate websit
 The real iOS AdMob entry was created for existing App Store ID `6792149373`, not a new Apple app.
 Its interstitial has an AdMob-side cap of 1 impression per user per 10 minutes. No rewarded feature
 was implemented. iOS AdMob currently reports Requires review / limited serving with an app-ads.txt
-verification issue. The publisher line already exists in `public/app-ads.txt`:
+verification issue. The live `https://onlyfast.app/app-ads.txt` and `public/app-ads.txt` both contain the publisher line:
 `google.com, pub-9431443509195212, DIRECT, f08c47fec0942fa0`.
-Resolve the developer-site listing/crawl verification in AdMob before unrestricted live delivery;
+An immediate AdMob verification retry still reported a mismatch; investigate the App Store developer-site association/crawl before unrestricted live delivery;
 do not create a second App Store record or silently publish metadata changes.
 
 ## Native builds and device checks
@@ -83,6 +83,17 @@ do not create a second App Store record or silently publish metadata changes.
    required/error, privacy re-requests, navigation/overlays, editing/scans, resume/account switching,
    manual vs queued/failed/autosaves, cooldown/reload, and native no-fill behavior. Automated tests
    mock the native boundary and do not establish native consent compliance or actual ad delivery.
+
+Native build preparation: Android APK/AAB and a signed iOS IPA were successfully generated in the
+original app. Original automatic (API) signing and the Distribution profile are retained. Automatic
+App Store Connect upload was changed to Manual; nothing was uploaded or submitted. The signed iOS
+`1.0.2` backup (backup 35, October 28 at 9:12 PM local time) was inspected read-only: it preserves
+`app.onlyfast`, the production start URL, all three real iOS IDs, automatic banners disabled, ATT
+enabled with Manual consent and the approved tracking description. Nothing was restored. Median
+nevertheless labeled that IPA OUTDATED after completion; a second, unchanged rebuild also completed
+with Download/Upload available but retained the OUTDATED label. This Median status discrepancy
+remains unresolved; native device readiness is not fully validated. Do not confuse this label with
+absence of a generated IPA.
 
 ## Rollback and removed infrastructure
 
