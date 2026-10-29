@@ -4,11 +4,13 @@ import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 import * as trusted from '../src/lib/trustedMembership.ts';
 import * as environment from '../src/lib/nativeEnvironment.ts';
+import { nativeAdsBuild as productionBuild } from '../src/lib/nativeAdsBuild.ts';
+import { nativeAdsBuild as testBuild, ADMOB_TEST_ORIGIN } from '../src/lib/nativeAdsTestBuild.ts';
 
 // Execute real application modules with isolated browser/network boundaries.
 function loadModule<T>(path: string, dependencies: Record<string, unknown>, env = {}) {
   const source = readFileSync(new URL(path, import.meta.url), 'utf8')
-    .replaceAll('import.meta.env.VITE_MEDIAN_ADMOB_ENABLED', 'testEnvironment.VITE_MEDIAN_ADMOB_ENABLED');
+    .replaceAll('import.meta.env', 'testEnvironment');
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const exports: Record<string, unknown> = {};
   new Function('require', 'exports', 'testEnvironment', js)((name: string) => {
@@ -24,6 +26,7 @@ const membership = loadModule<typeof import('../src/lib/membership.ts')>('../src
 const ads = loadModule<typeof import('../src/lib/ads.ts')>('../src/lib/ads.ts', { '@/lib/membership': membership, '@/lib/trustedMembership': trusted });
 const native = loadModule<typeof import('../src/lib/nativeAds.ts')>('../src/lib/nativeAds.ts', {
   './ads': ads, './nativeEnvironment': environment, './trustedMembership': trusted,
+  '@/lib/nativeAdsBuild': { nativeAdsBuild: productionBuild },
 }, { VITE_MEDIAN_ADMOB_ENABLED: 'true' });
 
 const paid = (plan: string) => ({ plan, status: 'active', subscription_source: 'stripe' });
@@ -69,19 +72,20 @@ test('unknown subscription plans are ambiguous for advertising without changing 
 });
 
 function fixture(storage = new Map<string, string>(), useTrustedMembership = false,
-  initial: Partial<{ enabled: boolean; consent: boolean; eligible: boolean }> = {}) {
+  initial: Partial<{ enabled: boolean; consent: boolean; eligible: boolean; ios: boolean; touch: number; ua: string }> = {}) {
   const calls: string[] = [];
-  const state = { enabled: true, consent: true, eligible: true, ua: 'MedianAndroid/1.0 Android', now: 1_000_000, ...initial };
+  const state = { enabled: true, consent: true, eligible: true, ios: false, touch: 0, ua: 'MedianAndroid/1.0 Android', now: 1_000_000, ...initial };
   const bridge = {
     banner: { enable: () => { calls.push('enable'); }, disable: () => { calls.push('disable'); } },
     showInterstitialIfReady: () => { calls.push('interstitial'); },
-    request: undefined as { consent: () => Promise<unknown> } | undefined,
+    request: undefined as { consent: () => Promise<unknown>; tracking?: () => Promise<unknown> } | undefined,
   };
   const host = { bridge: bridge as typeof bridge | undefined };
   const controller = new native.NativeAdsController({
     enabled: () => state.enabled, consentReady: () => state.consent,
     eligible: (id: string) => state.eligible && (!useTrustedMembership || ads.shouldShowAds({ id })), userAgent: () => state.ua,
     bridge: () => host.bridge, now: () => state.now,
+    iosEnabled: () => state.ios, maxTouchPoints: () => state.touch,
     storage: () => ({ getItem: (key: string) => storage.get(key) ?? null,
       setItem: (key: string, value: string) => { storage.set(key, value); } }),
   });
@@ -91,6 +95,76 @@ function fixture(storage = new Map<string, string>(), useTrustedMembership = fal
 }
 const complete = (f: ReturnType<typeof fixture>, overrides = {}) => f.controller.completeManualSave(
   f.controller.beginManualSave('a'), { persisted: true, queued: false, editing: false, ...overrides });
+
+test('test authorization is origin-bound and absent from ordinary production policy', () => {
+  for (const origin of ['https://onlyfast.app', 'https://www.onlyfast.app', 'http://onlyfast-admob-test-apex88vents-projects.vercel.app',
+    'https://onlyfast-admob-test-apex88vents-projects.vercel.app.attacker.invalid', 'https://unrelated.vercel.app']) {
+    assert.equal(testBuild.permissionReady(false, origin), false);
+    assert.equal(testBuild.iosEnabled(origin), false);
+  }
+  assert.equal(testBuild.permissionReady(false, ADMOB_TEST_ORIGIN), true);
+  assert.equal(testBuild.iosEnabled(ADMOB_TEST_ORIGIN), true);
+  assert.equal(productionBuild.permissionReady(false, ADMOB_TEST_ORIGIN), false);
+  assert.equal(productionBuild.iosEnabled(ADMOB_TEST_ORIGIN), false);
+  assert.equal(native.NATIVE_ADS_CONSENT_VERIFIED, false);
+});
+
+test('both isolated platforms display Rookie demo banners and post-save interstitials with the production hold still false', () => {
+  for (const ua of ['MedianAndroid/1.0 Android', 'MedianIOS/1.0 iPhone', 'GoNativeIOS/1.0', 'Mozilla/5.0 Macintosh Median/1.0']) {
+    trusted.setTrustedAuthorization('a', null, {});
+    const f = fixture(new Map(), true, { ua, touch: 5, ios: testBuild.iosEnabled(ADMOB_TEST_ORIGIN),
+      consent: testBuild.permissionReady(native.NATIVE_ADS_CONSENT_VERIFIED, ADMOB_TEST_ORIGIN) });
+    assert.ok(f.calls.includes('enable'), ua);
+    assert.equal(complete(f), 'requested', ua);
+    assert.equal(complete(f), 'suppressed', '600-second cooldown still applies');
+    f.controller.setPlacement('a', 'scan');
+    assert.equal(f.calls.at(-1), 'disable');
+    trusted.clearTrustedMembership();
+  }
+});
+
+test('test authorization never overrides verified paid, admin, promotional or logged-out ad restrictions on either platform', () => {
+  for (const ua of ['MedianAndroid/1.0 Android', 'MedianIOS/1.0']) {
+    for (const [row, grants] of [[paid('pro'), {}], [paid('teams'), {}], [null, { has_admin_full_access: true }],
+      [null, { promo_access_level: 'ambassador' }], [null, { promo_access_level: 'ad_free' }], [null, { promo_access_level: 'pro' }]] as const) {
+      trusted.setTrustedAuthorization('a', row, grants);
+      const f = fixture(new Map(), true, { ua, ios: true, consent: testBuild.permissionReady(false, ADMOB_TEST_ORIGIN) });
+      assert.ok(!f.calls.includes('enable'));
+      assert.equal(complete(f), 'suppressed');
+      f.controller.setUser(null); f.controller.refresh();
+      assert.ok(!f.calls.includes('interstitial'));
+      trusted.clearTrustedMembership();
+    }
+  }
+});
+
+test('iOS ATT precedes UMP and denied or restricted tracking still permits isolated Google demo ads', async () => {
+  for (const status of ['authorized', 'denied', 'restricted']) {
+    const f = fixture(new Map(), false, { ua: 'MedianIOS/1.0', ios: true,
+      consent: testBuild.permissionReady(false, ADMOB_TEST_ORIGIN) });
+    const events: string[] = [];
+    f.bridge.request = {
+      tracking: async () => { events.push('tracking'); return { status }; },
+      consent: async () => { events.push('consent'); return { result: false }; },
+    };
+    assert.equal(await f.controller.requestConsent(), 'unverified');
+    assert.deepEqual(events, ['tracking', 'consent']);
+    assert.deepEqual(f.controller.getConsentStatus().trackingResponse, { status });
+    assert.equal(complete(f), 'requested');
+  }
+});
+
+test('test iOS banners follow the existing placements and modal/editor exclusions', () => {
+  const f = fixture(new Map(), false, { ua: 'MedianIOS/1.0', ios: true });
+  for (const view of ['home', 'schedule', 'saved']) {
+    f.controller.setPlacement('a', view); assert.equal(f.calls.at(-1), 'enable');
+    const resume = f.controller.suspend(); assert.equal(f.calls.at(-1), 'disable'); resume();
+  }
+  for (const view of ['setup', 'scan', 'onboarding', 'account', 'pricing']) {
+    f.controller.setPlacement('a', view); assert.equal(f.calls.at(-1), 'disable');
+  }
+  f.controller.setForeground(false); assert.equal(complete(f), 'suppressed');
+});
 
 test('one banner follows only home, schedule and saved; unsupported screens and stale cleanup hide it', () => {
   const f = fixture();

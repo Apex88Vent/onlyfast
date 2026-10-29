@@ -11,6 +11,8 @@ node_modules
 dist
 review-dist
 dist-ssr
+/dist-admob-test/
+/.vercel/
 *.local
 
 # Editor directories and files

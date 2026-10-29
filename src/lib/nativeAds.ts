@@ -1,13 +1,14 @@
 import { shouldShowAds } from './ads';
 import { isMedianUserAgent, nativePlatform } from './nativeEnvironment';
 import { getAdvertisingAuthorizationExpiry, invalidateAdvertisingMembership } from './trustedMembership';
+import { nativeAdsBuild } from '@/lib/nativeAdsBuild';
 
 // Verified commands: https://docs.median.co/docs/admob-native-ads
 // Readiness: https://docs.median.co/docs/javascript-bridge
 export interface MedianAdmobBridge {
   banner?: { enable?: () => void; disable?: () => void };
   showInterstitialIfReady?: () => void;
-  request?: { consent?: () => Promise<unknown> };
+  request?: { consent?: () => Promise<unknown>; tracking?: () => Promise<unknown> };
 }
 
 export const INTERSTITIAL_COOLDOWN_MS = 600_000;
@@ -27,6 +28,8 @@ export interface NativeAdsDependencies {
   eligible(userId: string): boolean;
   storage(): Pick<Storage, 'getItem' | 'setItem'>;
   now(): number;
+  iosEnabled?(): boolean;
+  maxTouchPoints?(): number;
 }
 
 type SaveTicket = Readonly<{ userId: string; generation: number; activity: number }>;
@@ -48,6 +51,7 @@ export class NativeAdsController {
   private requesting = false;
   private consentStatus: NativeConsentStatus = 'idle';
   private consentResponse: unknown;
+  private trackingResponse: unknown;
   private consentAttempt: { bridge: MedianAdmobBridge; generation: number } | null = null;
   private consentRequest: Promise<NativeConsentStatus> | null = null;
 
@@ -59,6 +63,7 @@ export class NativeAdsController {
       this.pendingSave = null;
       this.consentStatus = 'idle';
       this.consentResponse = undefined;
+      this.trackingResponse = undefined;
       this.consentAttempt = null;
       this.hideBanner();
       this.userId = userId;
@@ -104,13 +109,13 @@ export class NativeAdsController {
   canRequestConsent(): boolean {
     try {
       // Manual privacy access is independent of advertising eligibility/display.
-      return !!this.userId && this.android() && this.foreground &&
+      return !!this.userId && this.platform() !== null && this.foreground &&
         typeof this.deps.bridge()?.request?.consent === 'function';
     } catch { return false; }
   }
 
   /** Native diagnostics only; never persisted or interpreted as a personalization choice. */
-  getConsentStatus() { return { status: this.consentStatus, response: this.consentResponse }; }
+  getConsentStatus() { return { status: this.consentStatus, response: this.consentResponse, trackingResponse: this.trackingResponse }; }
 
   /** Re-request only the documented native consent flow, including from Settings. */
   requestConsent(): Promise<NativeConsentStatus> {
@@ -130,7 +135,20 @@ export class NativeAdsController {
       try {
         // The Promise form is explicitly documented by Median. Do not manufacture
         // success for older/callback-only bridge implementations returning void.
-        const result = bridge.request.consent();
+        const requestConsent = () => bridge.request.consent();
+        let result: Promise<unknown>;
+        if (this.platform() === 'ios' && typeof bridge.request.tracking === 'function') {
+          // ATT is separate from UMP. Denied/restricted ATT is not an ad-display
+          // failure and never becomes authorization to track or personalize ads.
+          const tracking = bridge.request.tracking();
+          if (!tracking || typeof tracking.then !== 'function') return 'unavailable';
+          result = Promise.resolve(tracking).then(response => {
+            if (generation !== this.generation || bridge !== this.deps.bridge()) return undefined;
+            this.trackingResponse = response;
+            if (!this.foreground) return undefined;
+            return requestConsent();
+          });
+        } else result = requestConsent();
         if (!result || typeof result.then !== 'function') return 'unavailable';
         nativePending = true;
         nativeCompletion = Promise.resolve(result).then(
@@ -169,13 +187,15 @@ export class NativeAdsController {
     return this.consentRequest;
   }
 
-  private android() {
+  private platform(): 'android' | 'ios' | null {
     const ua = this.deps.userAgent();
-    return isMedianUserAgent(ua) && nativePlatform(ua) === 'android';
+    if (!isMedianUserAgent(ua)) return null;
+    const platform = nativePlatform(ua, this.deps.maxTouchPoints?.() ?? 0);
+    return platform === 'android' || (platform === 'ios' && this.deps.iosEnabled?.()) ? platform : null;
   }
 
   private allowed() {
-    return !!this.userId && this.deps.enabled() && this.android() && this.foreground &&
+    return !!this.userId && this.deps.enabled() && this.platform() !== null && this.foreground &&
       this.routeSupported && this.suspensions.size === 0 && this.consentStatus !== 'pending' && this.deps.consentReady() &&
       this.deps.eligible(this.userId);
   }
@@ -206,7 +226,7 @@ export class NativeAdsController {
         ['home', 'schedule', 'saved'].includes(this.placement.view) &&
         typeof bridge?.banner?.enable === 'function' && typeof bridge?.banner?.disable === 'function';
       // Also clear a banner retained by the native shell across a page reload.
-      if (!show || this.banner !== bridge) this.hideBanner(this.android() ? bridge : undefined);
+      if (!show || this.banner !== bridge) this.hideBanner(this.platform() !== null ? bridge : undefined);
       if (show && !this.banner) {
         this.banner = bridge;
         this.disabledBanner = null;
@@ -234,7 +254,7 @@ export class NativeAdsController {
     try {
       if (!this.deps.eligible(ticket.userId)) return 'suppressed';
       const bridge = this.deps.bridge();
-      if (!this.deps.enabled() || !this.android() || typeof bridge?.showInterstitialIfReady !== 'function') return 'house';
+      if (!this.deps.enabled() || this.platform() === null || typeof bridge?.showInterstitialIfReady !== 'function') return 'house';
       if (!this.allowed()) return 'suppressed';
       const key = `onlyfast_admob_interstitial_v1:${encodeURIComponent(ticket.userId)}`;
       const storage = this.deps.storage();
@@ -270,7 +290,9 @@ type NativeAdsWindow = Window & { median?: { admob?: MedianAdmobBridge }; median
 
 export const nativeAds = new NativeAdsController({
   enabled: () => nativeAdsFeatureEnabled(import.meta.env.VITE_MEDIAN_ADMOB_ENABLED),
-  consentReady: () => NATIVE_ADS_CONSENT_VERIFIED,
+  consentReady: () => nativeAdsBuild.permissionReady(NATIVE_ADS_CONSENT_VERIFIED, window.location.origin),
+  iosEnabled: () => nativeAdsBuild.iosEnabled(window.location.origin),
+  maxTouchPoints: () => navigator.maxTouchPoints,
   userAgent: () => navigator.userAgent,
   bridge: () => (window as NativeAdsWindow).median?.admob,
   eligible: userId => shouldShowAds({ id: userId }),

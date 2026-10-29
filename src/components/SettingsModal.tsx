@@ -503,10 +503,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
                     try {
                       const status = await nativeAds.requestConsent();
                       setAdPrivacyMessage(status === 'unverified'
-                        ? 'Your native privacy request completed. Ad permission could not be verified, so ads remain off.'
-                        : 'Advertising privacy controls are unavailable right now. Ads remain off.');
+                        ? 'Your native privacy request completed. Advertising permission remains unverified.'
+                        : 'Advertising privacy controls are unavailable right now.');
                     } catch {
-                      setAdPrivacyMessage('Advertising privacy controls are unavailable right now. Ads remain off.');
+                      setAdPrivacyMessage('Advertising privacy controls are unavailable right now.');
                     } finally { setRequestingAdPrivacy(false); }
                   }}
                   className="text-sm font-semibold text-[#00A8E8] underline-offset-2 hover:underline disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"

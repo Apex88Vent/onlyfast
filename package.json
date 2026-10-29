@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:admob-test": "vite build --mode admob-test",
     "build:dev": "vite build --mode development",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "lint": "eslint .",

@@ -1,5 +1,10 @@
 # Median AdMob Phase 1 — Android release hold
 
+For current isolated Android/iOS Google demo-ad builds, see
+[MEDIAN_ADMOB_TEST_BUILDS.md](MEDIAN_ADMOB_TEST_BUILDS.md). The production hold
+described here is unchanged; test-only permission authorization is a separate
+compile-time module, not verified consent or production activation.
+
 Native ad display is **disabled by default and held disabled even when the feature flag is true**.
 No production AdMob IDs are embedded in the website. Unit IDs remain native Median configuration.
 No rewarded ads, iOS ads, deployment or Median configuration changes are included.
