@@ -130,6 +130,25 @@ absence of a generated IPA.
 
 ## Rollback and removed infrastructure
 
+### Restricted Android phone-session fallback and visible status
+
+The device gate originally required a matching GAID, but [Median device info](https://docs.median.co/docs/device-info)
+only supplies GAID with supported attribution plugins; AdMob alone is insufficient. The owner
+confirmed the Samsung SM-S938U's current production login belongs to the already registered AdMob
+test phone. When Android deviceInfo identifies `app.onlyfast` and **omits** GAID, the controller
+can authorize only that login's hashed session ID after remote Auth validation of its original
+access token and a current-session continuity check. It does not infer GAID, Google test mode,
+or personalized-ad permission. Different/zeroed/malformed IDs, unknown sessions and unregistered
+iOS devices remain blocked. Auth events/backgrounding discard device evidence; signing out and
+back in creates a different session requiring explicit reauthorization. No native build is needed.
+
+Only the rollout Auth UUID sees the temporary live **AdMob test status** section in Settings.
+It reports flag, trusted Rookie eligibility, bridge, device authorization source, native consent
+completion and banner command dispatch without identifiers or raw consent payloads. Settings
+itself suspends banners; close it to test the landing page. A dispatch is not an impression.
+House tiles remain fallback content until actual Google banner display is confirmed; Median
+documents no display callback and native banners cannot be placed inside HTML house tiles.
+
 The preserved rollback Vercel deployment is `dpl_7ZCgZcjPyAVA2i9kUSoNQkBjHULv`, commit
 `5ca8181b74fe85703c1d1f99848d6872646a24ee`, serving onlyfast.app. Keep it available for rollback; this task authorizes a controlled manual replacement of the production alias.
 The disposable standalone Vercel project was verified separate (no Git connection, secrets or

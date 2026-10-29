@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
-import { nativeAds } from '@/lib/nativeAds';
+import { nativeAds, NATIVE_ADS_ROLLOUT_USER_ID } from '@/lib/nativeAds';
 import NativeSubscriptionControls from '@/components/NativeSubscriptionControls';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -70,6 +70,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [adPrivacyMessage, setAdPrivacyMessage] = useState('');
   const [requestingAdPrivacy, setRequestingAdPrivacy] = useState(false);
+  const [adDiagnostics, setAdDiagnostics] = useState<ReturnType<typeof nativeAds.getDiagnostics> | null>(() =>
+    nativeAds?.canViewDiagnostics?.(user.id) ? nativeAds.getDiagnostics() : null);
+
+  useEffect(() => {
+    if (!isOpen || user.id !== NATIVE_ADS_ROLLOUT_USER_ID) { setAdDiagnostics(null); return; }
+    return nativeAds.subscribeDiagnostics(value => {
+      setAdDiagnostics(nativeAds.canViewDiagnostics(user.id) && value.rolloutAccount ? value : null);
+    });
+  }, [isOpen, user.id]);
 
 
   useEffect(() => {
@@ -337,6 +346,30 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
             <div className={`px-4 py-2 rounded-lg text-sm ${message.startsWith('Error') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>
               {message}
             </div>
+          )}
+
+          {/* Temporary rollout status: no native identifiers or consent response payloads. */}
+          {user.id === NATIVE_ADS_ROLLOUT_USER_ID && nativeAds.canViewDiagnostics(user.id) && adDiagnostics?.rolloutAccount && (
+            <section aria-label="AdMob test status" className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-3">
+              <h3 className="text-sm font-bold text-[#1A1B23] mb-2">AdMob test status</h3>
+              <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-[#6B7280]" aria-live="polite">
+                <dt>Advertising enabled</dt><dd>{adDiagnostics.enabled ? 'Yes' : 'No'}</dd>
+                <dt>Rookie eligible</dt><dd>{adDiagnostics.eligible ? 'Yes' : 'No'}</dd>
+                <dt>Median bridge available</dt><dd>{adDiagnostics.bridgeAvailable ? 'Yes' : 'No'}</dd>
+                <dt>Device verification</dt><dd className="break-words">{adDiagnostics.device}</dd>
+                <dt>Native consent</dt><dd>{adDiagnostics.consent === 'unverified' ? 'Completed (permission unverified)' : adDiagnostics.consent}</dd>
+                <dt>Banner request sent</dt><dd>{adDiagnostics.bannerCommandDispatched ? 'Yes' : 'No'}</dd>
+              </dl>
+              <p className="mt-2 text-xs text-[#6B7280]">Platform: {adDiagnostics.platform ?? 'web'}. Placement: {adDiagnostics.placement}.</p>
+              <p className="mt-2 text-xs text-[#6B7280] break-words">Banner blockers: {adDiagnostics.bannerBlockers.join(', ') || 'none'}.</p>
+              {adDiagnostics.device === 'advertising-id-unavailable' && (
+                <p className="mt-2 text-xs text-[#6B7280]">Median did not return a usable advertising ID. This phone cannot be matched to its AdMob test-device registration, so ad requests remain blocked.</p>
+              )}
+              {adDiagnostics.device === 'registered-phone-session' && (
+                <p className="mt-2 text-xs text-[#6B7280]">Authorized using your confirmed test phone’s verified login session because Median omitted its advertising ID. This does not confirm Google test mode. Signing out requires reauthorization.</p>
+              )}
+              <p className="mt-2 text-xs text-[#6B7280]">Settings pauses native banners. Close Settings to test the landing page. Request sent records a command during this session; Google ad display is not confirmed.</p>
+            </section>
           )}
 
           {/* Profile */}

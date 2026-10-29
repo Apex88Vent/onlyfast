@@ -24,6 +24,7 @@ const membership = loadModule<typeof import('../src/lib/membership.ts')>('../src
 const ads = loadModule<typeof import('../src/lib/ads.ts')>('../src/lib/ads.ts', { '@/lib/membership': membership, '@/lib/trustedMembership': trusted });
 const native = loadModule<typeof import('../src/lib/nativeAds.ts')>('../src/lib/nativeAds.ts', {
   './ads': ads, './nativeEnvironment': environment, './trustedMembership': trusted,
+  './supabase': { supabase: {} },
 }, { VITE_MEDIAN_ADMOB_ENABLED: 'true' });
 
 const paid = (plan: string) => ({ plan, status: 'active', subscription_source: 'stripe' });
@@ -644,6 +645,88 @@ test('background/account invalidation clears device evidence and ignores pending
   assert.equal(gate.allowed('android', pending), false); assert.equal(updates, 0);
 });
 
+test('phone-session fallback permits only omitted Android GAID in the original app and clears on reset', async () => {
+  const hash = await advertisingHash(testAdvertisingId);
+  let verified = true;
+  let checks = 0;
+  const gate = new native.NativeAdTestDevice({ android: [hash], ios: [] }, async () => { checks++; return verified; });
+  const host = { deviceInfo: async () => ({ platform: 'android', appId: 'app.onlyfast' }) };
+  await deviceUpdate(gate, 'android', host);
+  assert.equal(gate.allowed('android', host), true);
+  assert.equal(gate.getStatus(), 'registered-phone-session');
+  gate.reset(); verified = false;
+  await deviceUpdate(gate, 'android', host);
+  assert.equal(gate.getStatus(), 'phone-session-not-authorized');
+  assert.equal(gate.allowed('android', host), false);
+  const priorChecks = checks;
+  for (const info of [undefined, {}, { platform: 'android', appId: 'other.app' },
+    { platform: 'ios', appId: 'app.onlyfast' },
+    ...['', null, 'invalid', '00000000-0000-0000-0000-000000000000',
+      '11111111-2222-4333-8444-555555555556'].map(gaid => ({ platform: 'android', appId: 'app.onlyfast', gaid }))]) {
+    const other = { deviceInfo: async () => info };
+    await deviceUpdate(gate, 'android', other);
+    assert.equal(gate.allowed('android', other), false);
+  }
+  assert.equal(checks, priorChecks); // Never bypass an explicit nonmatching/opted-out ID.
+  gate.prepare('ios', host, () => {});
+  assert.equal(gate.getStatus(), 'no-registered-device');
+  assert.equal(checks, priorChecks);
+});
+
+test('phone-session authorization verifies the original JWT remotely and rejects another session, user, malformed claims and auth failures', async () => {
+  const id = native.NATIVE_ADS_ROLLOUT_USER_ID;
+  const sessionId = testAdvertisingId; // Fixture only; no production session identifier.
+  const hash = await advertisingHash(sessionId);
+  const jwt = (sub = id, sid: unknown = sessionId) => `header.${btoa(JSON.stringify({ sub, session_id: sid }))}.signature`;
+  const authFixture = () => {
+    const state = { token: jwt(), current: jwt(), user: id, error: false, sessionError: false, checked: '' };
+    let reads = 0;
+    const auth = {
+      getSession: async () => ({ error: state.sessionError ? Error('session') : null,
+        data: { session: { user: { id }, access_token: reads++ ? state.current : state.token } } }),
+      getUser: async (token: string) => { state.checked = token; return {
+        data: { user: { id: state.user } }, error: state.error ? Error('unverified') : null,
+      }; },
+    } as unknown as Parameters<typeof native.verifyNativeAdPhoneSession>[0];
+    return { state, auth };
+  };
+  const valid = authFixture();
+  assert.equal(await native.verifyNativeAdPhoneSession(valid.auth, id, hash), true);
+  assert.equal(valid.state.checked, valid.state.token);
+  for (const mutate of [
+    (s: ReturnType<typeof authFixture>['state']) => { s.current = jwt(id, '11111111-2222-4333-8444-555555555556'); },
+    (s: ReturnType<typeof authFixture>['state']) => { s.user = 'other'; },
+    (s: ReturnType<typeof authFixture>['state']) => { s.error = true; },
+    (s: ReturnType<typeof authFixture>['state']) => { s.sessionError = true; },
+    (s: ReturnType<typeof authFixture>['state']) => { s.token = jwt('other'); },
+    (s: ReturnType<typeof authFixture>['state']) => { s.token = jwt(id, null); },
+    (s: ReturnType<typeof authFixture>['state']) => { s.token = 'broken'; },
+    (s: ReturnType<typeof authFixture>['state']) => { s.token = jwt(id, '11111111-2222-4333-8444-555555555556'); },
+  ]) {
+    const f = authFixture(); mutate(f.state);
+    assert.equal(await native.verifyNativeAdPhoneSession(f.auth, id, hash), false);
+  }
+});
+
+test('same-user auth events invalidate cached device authorization before another dispatch', async () => {
+  const f = await fixture();
+  let allowed = true;
+  const controller = new native.NativeAdsController({
+    enabled: () => true, eligible: () => true, userAgent: () => f.state.ua, bridge: () => f.bridge,
+    now: Date.now, storage: () => ({ getItem: () => null, setItem: () => {} }),
+    deviceAllowed: () => allowed, resetDevice: () => { allowed = false; },
+  });
+  controller.setUser('a'); controller.setForeground(true); controller.setRouteSupported(true);
+  controller.setPlacement('a', 'home'); await controller.requestConsent();
+  allowed = true; controller.refresh();
+  assert.equal(controller.getDiagnostics().bannerCommandDispatched, true);
+  controller.setUser('a');
+  assert.equal(controller.getDiagnostics().deviceAllowed, false);
+  assert.equal(controller.completeManualSave(controller.beginManualSave('a'),
+    { persisted: true, queued: false, editing: false }), 'suppressed');
+  controller.stop();
+});
+
 test('actual production singleton never enables another Rookie, unverified account, paid account or unidentified test device', async () => {
   const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
   const previousNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
@@ -679,4 +762,37 @@ test('actual production singleton never enables another Rookie, unverified accou
     if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow); else Reflect.deleteProperty(globalThis, 'window');
     if (previousNavigator) Object.defineProperty(globalThis, 'navigator', previousNavigator); else Reflect.deleteProperty(globalThis, 'navigator');
   }
+});
+
+
+test('Settings diagnostics notify live consent/device/placement gates and unsubscribe without changing ad policy', async () => {
+  const f = await fixture(new Map(), false, { completeConsent: false });
+  const id = native.NATIVE_ADS_ROLLOUT_USER_ID;
+  f.controller.setUser(id); f.controller.setPlacement(id, 'home');
+  assert.equal(f.controller.canViewDiagnostics(id), true);
+  assert.equal(f.controller.canViewDiagnostics('another-user'), false);
+  const values: ReturnType<typeof f.controller.getDiagnostics>[] = [];
+  const unsubscribe = f.controller.subscribeDiagnostics(value => values.push(value));
+  const unlistenBroken = f.controller.subscribeDiagnostics(() => {});
+  let finish!: (value: unknown) => void;
+  f.bridge.request = { consent: () => new Promise(resolve => { finish = resolve; }) };
+  const pending = f.controller.requestConsent();
+  assert.equal(values.at(-1)?.consent, 'pending');
+  assert.ok(values.at(-1)?.bannerBlockers.includes('native-consent-pending'));
+  finish({ success: true }); await pending;
+  assert.equal(values.at(-1)?.consentRequestCompleted, true);
+  assert.equal(values.at(-1)?.adDisplayed, 'unknown');
+  const resume = f.controller.suspend();
+  assert.ok(values.at(-1)?.bannerBlockers.includes('overlay-open'));
+  assert.equal(values.at(-1)?.bannerCommandDispatched, true, 'dispatch history survives a Settings suspension');
+  resume();
+  f.state.eligible = false; f.controller.refresh();
+  assert.ok(values.at(-1)?.bannerBlockers.includes('membership-not-verified-rookie'));
+  f.controller.setUser('another-user');
+  assert.equal(values.at(-1)?.rolloutAccount, false);
+  assert.equal(f.controller.canViewDiagnostics(id), false);
+  assert.equal(values.at(-1)?.bannerCommandDispatched, false);
+  const count = values.length; unsubscribe(); unlistenBroken(); f.controller.refresh();
+  assert.equal(values.length, count);
+  assert.ok(!JSON.stringify(values).includes('success'), 'native consent payloads are never included');
 });

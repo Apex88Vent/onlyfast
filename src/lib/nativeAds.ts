@@ -1,6 +1,7 @@
 import { shouldShowAds } from './ads';
 import { isMedianUserAgent, nativePlatform } from './nativeEnvironment';
 import { getAdvertisingAuthorizationExpiry, invalidateAdvertisingMembership } from './trustedMembership';
+import { supabase } from './supabase';
 
 // Verified commands: https://docs.median.co/docs/admob-native-ads
 // Readiness: https://docs.median.co/docs/javascript-bridge
@@ -25,21 +26,56 @@ const registeredDeviceHashes: Record<NativePlatform, readonly string[]> = {
   ios: [], // No iOS test device is registered. Never substitute the Android ID.
 };
 
-/** Uses only documented median.deviceInfo(); no ID is sent to another service. */
+async function identifierHash(value: string) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+// Owner confirmed this existing Samsung login belongs to the registered test phone.
+// This is session authorization, NOT GAID verification or proof of Google test mode.
+const registeredPhoneSessionHash = '758fd88999bde05e6b0e0056ecf55ebc9d9651b8ff208651877141ab7773ab76';
+type SessionAuth = Pick<typeof supabase.auth, 'getSession' | 'getUser'>;
+export async function verifyNativeAdPhoneSession(auth: SessionAuth, userId: string, expectedHash: string): Promise<boolean> {
+  try {
+    const initial = await auth.getSession();
+    const session = initial.data.session;
+    if (initial.error || !session?.access_token || session.user.id !== userId) return false;
+    // Validate the ORIGINAL token remotely before reading its signed session claim.
+    // https://supabase.com/docs/reference/javascript/auth-getuser
+    const verified = await auth.getUser(session.access_token);
+    if (verified.error || verified.data.user?.id !== userId) return false;
+    const sessionId = (token: string) => {
+      const part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      const claims = JSON.parse(atob(part.padEnd(Math.ceil(part.length / 4) * 4, '=')));
+      return claims.sub === userId && typeof claims.session_id === 'string' &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(claims.session_id)
+        ? claims.session_id : null;
+    };
+    const id = sessionId(session.access_token);
+    if (!id || await identifierHash(id) !== expectedHash) return false;
+    const current = await auth.getSession();
+    return !current.error && current.data.session?.user.id === userId &&
+      sessionId(current.data.session.access_token) === id;
+  } catch { return false; }
+}
+
+/** Documented deviceInfo plus a separately approved, verified phone-session fallback. */
 export class NativeAdTestDevice {
   private request: DeviceHost['deviceInfo'];
   private host: DeviceHost | undefined;
   private platform: NativePlatform | null = null;
   private revision = 0;
   private status = 'idle';
-  constructor(private readonly hashes = registeredDeviceHashes) {}
+  constructor(private readonly hashes = registeredDeviceHashes,
+    private readonly verifyPhoneSession?: () => Promise<boolean>) {}
 
   getStatus() { return this.status; }
   reset() {
     this.revision++; this.request = undefined; this.host = undefined; this.platform = null; this.status = 'idle';
   }
   allowed(platform: NativePlatform | null, host: DeviceHost | undefined) {
-    return this.status === 'matched' && platform === this.platform && host === this.host && host?.deviceInfo === this.request;
+    return ['matched', 'registered-phone-session'].includes(this.status) &&
+      platform === this.platform && host === this.host && host?.deviceInfo === this.request;
   }
   prepare(platform: NativePlatform | null, host: DeviceHost | undefined, updated: () => void) {
     if (this.platform === platform && this.host === host && this.request === host?.deviceInfo && this.status !== 'idle') return;
@@ -54,21 +90,28 @@ export class NativeAdTestDevice {
       try {
         const operation = request.call(host);
         if (!operation || typeof operation.then !== 'function') throw Error('Device info Promise unavailable');
-        const info = await Promise.race([operation, new Promise<never>((_resolve, reject) => {
+        const verification = async () => {
+          const info = await operation;
+          if (!info || typeof info !== 'object') return 'advertising-id-unavailable';
+          const device = info as Record<string, unknown>;
+          if (device.platform !== platform || device.appId !== 'app.onlyfast') return 'app-or-platform-mismatch';
+          const raw = platform === 'android' ? device.gaid : device.idfa;
+          // AdMob alone does not expose GAID through Median deviceInfo. Only an
+          // OMITTED identifier may use the owner-confirmed Android session. Never
+          // override a zeroed, malformed or different advertising identifier.
+          if (raw === undefined && platform === 'android' && this.verifyPhoneSession) {
+            return await this.verifyPhoneSession() ? 'registered-phone-session' : 'phone-session-not-authorized';
+          }
+          const id = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+          if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id) || /^0{8}-0{4}-0{4}-0{4}-0{12}$/.test(id)) {
+            return 'advertising-id-unavailable';
+          }
+          return this.hashes[platform].includes(await identifierHash(id)) ? 'matched' : 'unregistered-device';
+        };
+        const status = await Promise.race([verification(), new Promise<never>((_resolve, reject) => {
           timer = setTimeout(() => reject(Error('Device info timed out')), 10_000);
         })]);
-        if (revision !== this.revision) return;
-        if (!info || typeof info !== 'object') { this.status = 'advertising-id-unavailable'; return; }
-        const device = info as Record<string, unknown>;
-        if (device.platform !== platform || device.appId !== 'app.onlyfast') { this.status = 'app-or-platform-mismatch'; return; }
-        const raw = platform === 'android' ? device.gaid : device.idfa;
-        const id = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
-        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id) || /^0{8}-0{4}-0{4}-0{4}-0{12}$/.test(id)) {
-          this.status = 'advertising-id-unavailable'; return;
-        }
-        const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(id));
-        const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
-        if (revision === this.revision) this.status = this.hashes[platform].includes(hash) ? 'matched' : 'unregistered-device';
+        if (revision === this.revision) this.status = status;
       } catch { if (revision === this.revision) this.status = 'device-info-error'; }
       finally { clearTimeout(timer); if (revision === this.revision) updated(); }
     })();
@@ -116,12 +159,14 @@ export class NativeAdsController {
   private consentRequest: Promise<NativeConsentStatus> | null = null;
   private bannerDispatches = 0;
   private interstitialDispatches = 0;
+  private diagnosticListeners = new Set<(value: ReturnType<NativeAdsController['getDiagnostics']>) => void>();
 
   constructor(private readonly deps: NativeAdsDependencies) {}
 
   setUser(userId: string | null) {
+    // Auth changes can replace a session without changing its user ID.
+    this.deps.resetDevice?.();
     if (userId !== this.userId) {
-      this.deps.resetDevice?.();
       this.generation++;
       this.pendingSave = null;
       this.consentStatus = 'idle';
@@ -182,18 +227,50 @@ export class NativeAdsController {
   /** Native diagnostics only; never persisted or interpreted as a personalization choice. */
   getConsentStatus() { return { status: this.consentStatus, response: this.consentResponse, trackingResponse: this.trackingResponse }; }
 
+  canViewDiagnostics(userId: string | null) {
+    return userId === NATIVE_ADS_ROLLOUT_USER_ID && this.userId === userId;
+  }
+
+  subscribeDiagnostics(listener: (value: ReturnType<NativeAdsController['getDiagnostics']>) => void): () => void {
+    this.diagnosticListeners.add(listener);
+    listener(this.getDiagnostics());
+    return () => { this.diagnosticListeners.delete(listener); };
+  }
+
   /** Command diagnostics are not a native impression or personalization callback. */
   getDiagnostics() {
     const bridge = this.deps.bridge();
+    const enabled = this.deps.enabled(this.userId);
+    const eligible = !!this.userId && this.deps.eligible(this.userId);
+    const platform = this.platform();
+    const bridgeAvailable = typeof bridge?.banner?.enable === 'function' && typeof bridge?.banner?.disable === 'function';
+    const consentBridgeAvailable = typeof bridge?.request?.consent === 'function';
+    const device = this.deps.deviceStatus?.() ?? 'not-configured';
+    const deviceAllowed = this.deps.deviceAllowed?.(platform) ?? true;
+    const bannerBlockers = [
+      ...(!enabled ? ['advertising-disabled-for-account'] : []),
+      ...(!eligible ? ['membership-not-verified-rookie'] : []),
+      ...(!platform ? ['not-median-android-or-ios'] : []),
+      ...(!bridgeAvailable ? ['banner-bridge-unavailable'] : []),
+      ...(!consentBridgeAvailable ? ['consent-bridge-unavailable'] : []),
+      ...(!this.foreground ? ['not-foreground'] : []),
+      ...(!this.routeSupported ? ['unsupported-route'] : []),
+      ...(this.suspensions.size ? ['overlay-open'] : []),
+      ...(this.placement?.userId !== this.userId || !['home', 'schedule', 'saved'].includes(this.placement?.view)
+        ? ['not-banner-placement'] : []),
+      ...(this.consentStatus !== 'unverified' ? [`native-consent-${this.consentStatus}`] : []),
+      ...(!deviceAllowed ? [`device-${device}`] : []),
+    ];
     return {
       rolloutAccount: this.userId === NATIVE_ADS_ROLLOUT_USER_ID,
-      eligible: !!this.userId && this.deps.eligible(this.userId),
-      enabled: this.deps.enabled(this.userId),
-      platform: this.platform(),
-      bridgeAvailable: typeof bridge?.banner?.enable === 'function' && typeof bridge?.banner?.disable === 'function',
+      eligible, enabled, platform, bridgeAvailable, consentBridgeAvailable,
       interstitialBridgeAvailable: typeof bridge?.showInterstitialIfReady === 'function',
-      device: this.deps.deviceStatus?.() ?? 'not-configured',
-      deviceAllowed: this.deps.deviceAllowed?.(this.platform()) ?? true,
+      device, deviceAllowed,
+      foreground: this.foreground,
+      routeSupported: this.routeSupported,
+      placement: this.placement?.view ?? 'none',
+      overlayOpen: this.suspensions.size > 0,
+      bannerBlockers,
       consent: this.consentStatus,
       consentRequestCompleted: this.consentStatus === 'unverified',
       advertisingPermission: 'not-exposed-by-native-bridge',
@@ -206,7 +283,12 @@ export class NativeAdsController {
   }
 
   private diagnose() {
-    try { this.deps.diagnostic?.(this.getDiagnostics()); } catch { /* Diagnostics cannot affect advertising behavior. */ }
+    let value: ReturnType<NativeAdsController['getDiagnostics']>;
+    try { value = this.getDiagnostics(); } catch { return; }
+    try { this.deps.diagnostic?.(value); } catch { /* Diagnostics cannot affect advertising behavior. */ }
+    for (const listener of Array.from(this.diagnosticListeners)) {
+      try { listener(value); } catch { /* One observer cannot interrupt other observers or ads. */ }
+    }
   }
 
   /** Re-request only the documented native consent flow, including from Settings. */
@@ -220,6 +302,7 @@ export class NativeAdsController {
     this.consentResponse = undefined;
     this.noteActivity(); // A consent prompt must never precede a delayed save ad.
     this.hideBanner();
+    this.diagnose();
     let timer: ReturnType<typeof setTimeout>;
     let nativePending = false;
     let nativeCompletion: Promise<unknown> | null = null;
@@ -396,7 +479,8 @@ export class NativeAdsController {
 
 type NativeAdsWindow = Window & { median?: DeviceHost & { admob?: MedianAdmobBridge }; median_library_ready?: () => void };
 
-const testDevice = new NativeAdTestDevice();
+const testDevice = new NativeAdTestDevice(registeredDeviceHashes,
+  () => verifyNativeAdPhoneSession(supabase.auth, NATIVE_ADS_ROLLOUT_USER_ID, registeredPhoneSessionHash));
 let lastDiagnostic = '';
 
 export const nativeAds = new NativeAdsController({
