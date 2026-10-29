@@ -227,6 +227,18 @@ export class NativeAdsController {
   /** Native diagnostics only; never persisted or interpreted as a personalization choice. */
   getConsentStatus() { return { status: this.consentStatus, response: this.consentResponse, trackingResponse: this.trackingResponse }; }
 
+  usesConfirmedNativeBannerExperience(userId: string | null): boolean {
+    try {
+      // The owner visually confirmed a Google Test Ad in this exact approved
+      // Android phone session. This is rollout policy, not a native impression
+      // callback: a dispatched command on another device/session is insufficient.
+      return userId === NATIVE_ADS_ROLLOUT_USER_ID && this.userId === userId &&
+        this.platform() === 'android' && this.deps.deviceStatus?.() === 'registered-phone-session' &&
+        this.allowed() && !!this.banner && this.banner === this.deps.bridge() &&
+        this.placement?.userId === userId && ['home', 'schedule', 'saved'].includes(this.placement.view);
+    } catch { return false; }
+  }
+
   canViewDiagnostics(userId: string | null) {
     return userId === NATIVE_ADS_ROLLOUT_USER_ID && this.userId === userId;
   }

@@ -796,3 +796,43 @@ test('Settings diagnostics notify live consent/device/placement gates and unsubs
   assert.equal(values.length, count);
   assert.ok(!JSON.stringify(values).includes('success'), 'native consent payloads are never included');
 });
+
+test('house replacement requires the visually confirmed Android session and an active allowed banner, not dispatch history', async () => {
+  const f = await fixture(undefined, false, { rollout: true });
+  const id = native.NATIVE_ADS_ROLLOUT_USER_ID;
+  let deviceStatus = 'matched';
+  const controller = new native.NativeAdsController({
+    enabled: uid => f.state.enabled && native.nativeAdsRolloutEnabled('true', uid),
+    eligible: () => f.state.eligible, userAgent: () => f.state.ua, bridge: () => f.host.bridge,
+    deviceAllowed: () => f.state.device, deviceStatus: () => deviceStatus,
+    now: Date.now, storage: () => ({ getItem: () => null, setItem: () => {} }),
+  });
+  controller.setUser(id); controller.setForeground(true); controller.setRouteSupported(true);
+  controller.setPlacement(id, 'home'); await controller.requestConsent();
+  assert.equal(controller.getDiagnostics().bannerCommandDispatched, true);
+  assert.equal(controller.usesConfirmedNativeBannerExperience(id), false); // Dispatch/GAID match alone never suppress tiles.
+  deviceStatus = 'registered-phone-session'; controller.refresh();
+  for (const placement of ['home', 'schedule', 'saved']) {
+    controller.setPlacement(id, placement);
+    assert.equal(controller.usesConfirmedNativeBannerExperience(id), true);
+  }
+  assert.equal(controller.usesConfirmedNativeBannerExperience('other-rookie'), false);
+  const resume = controller.suspend();
+  assert.equal(controller.usesConfirmedNativeBannerExperience(id), false);
+  resume(); assert.equal(controller.usesConfirmedNativeBannerExperience(id), true);
+  for (const key of ['enabled', 'eligible', 'device'] as const) {
+    f.state[key] = false; controller.refresh();
+    assert.equal(controller.usesConfirmedNativeBannerExperience(id), false);
+    f.state[key] = true; controller.refresh();
+  }
+  controller.setPlacement(id, 'timing'); assert.equal(controller.usesConfirmedNativeBannerExperience(id), false);
+  controller.setPlacement(id, 'home');
+  controller.setForeground(false); assert.equal(controller.usesConfirmedNativeBannerExperience(id), false);
+  controller.setForeground(true);
+  f.host.bridge = undefined; controller.refresh(); assert.equal(controller.usesConfirmedNativeBannerExperience(id), false);
+  f.host.bridge = f.bridge; controller.refresh();
+  f.state.ua = 'MedianIOS/1.0'; controller.refresh(); await controller.requestConsent();
+  assert.equal(controller.usesConfirmedNativeBannerExperience(id), false);
+  controller.setUser(null); assert.equal(controller.usesConfirmedNativeBannerExperience(id), false);
+  controller.stop();
+});

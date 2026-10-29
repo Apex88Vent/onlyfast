@@ -106,3 +106,55 @@ test('actual Settings status stays live, reveals no IDs, remains suspended, and 
     }
   }
 });
+
+test('mounted house tiles yield only to the confirmed native session and return when its native experience becomes unavailable', async () => {
+  const id = native.NATIVE_ADS_ROLLOUT_USER_ID;
+  let enabled = true;
+  let eligible = true;
+  let device = 'matched';
+  const bridge = { banner: { enable() {}, disable() {} }, request: { consent: async () => ({ result: true }) } };
+  let availableBridge = bridge;
+  const controller = new native.NativeAdsController({
+    enabled: uid => enabled && uid === id, eligible: () => eligible,
+    userAgent: () => 'MedianAndroid/1.0', bridge: () => availableBridge,
+    storage: () => ({ getItem: () => null, setItem() {} }), now: Date.now,
+    deviceAllowed: () => true, deviceStatus: () => device,
+  });
+  controller.setUser(id); controller.setForeground(true); controller.setRouteSupported(true);
+  controller.setPlacement(id, 'home'); await controller.requestConsent();
+  const Slot = compile('components/RookieAdSlot.tsx', {
+    '@/lib/ads': { shouldShowAds: user => !!user && eligible },
+    '@/lib/paymentVisibility': { isMedianIOSApp: false },
+    '@/hooks/useMembershipRevision': { useMembershipRevision() {} },
+    '@/lib/nativeAds': { nativeAds: controller },
+    './RookieHouseAdContent': { __esModule: true, default: () => React.createElement('aside', {}, 'House ad') },
+  }).default;
+  let view;
+  let props = { placement: 'home_middle', user: { id } };
+  const houses = () => view.root.findAllByType('aside').length;
+  try {
+    await act(async () => { view = create(React.createElement(Slot, props)); });
+    assert.equal(controller.getDiagnostics().bannerCommandDispatched, true);
+    assert.equal(houses(), 1); // A command/GAID match alone does not replace house content.
+    await act(async () => { device = 'registered-phone-session'; controller.refresh(); });
+    assert.equal(houses(), 0);
+    for (const placement of ['home_middle', 'home_bottom', 'schedule_bottom', 'setup_dashboard_bottom']) {
+      await act(async () => { props = { ...props, placement }; view.update(React.createElement(Slot, props)); });
+      assert.equal(houses(), 0);
+    }
+    await act(async () => { props = { ...props, placement: 'after_save_interstitial' }; view.update(React.createElement(Slot, props)); });
+    assert.equal(houses(), 1); // Existing separate post-save fallback is preserved.
+    await act(async () => { props = { ...props, placement: 'home_middle' }; view.update(React.createElement(Slot, props)); });
+    let resume;
+    await act(async () => { resume = controller.suspend(); }); assert.equal(houses(), 1);
+    await act(async () => { resume(); }); assert.equal(houses(), 0);
+    await act(async () => { enabled = false; controller.refresh(); }); assert.equal(houses(), 1);
+    await act(async () => { enabled = true; controller.refresh(); }); assert.equal(houses(), 0);
+    await act(async () => { availableBridge = undefined; controller.refresh(); }); assert.equal(houses(), 1);
+    await act(async () => { controller.setUser('other-rookie'); props = { ...props, user: { id: 'other-rookie' } }; view.update(React.createElement(Slot, props)); });
+    assert.equal(houses(), 1);
+    await act(async () => { eligible = false; controller.refresh(); view.update(React.createElement(Slot, props)); });
+    assert.equal(houses(), 0);
+    await act(async () => { props = { ...props, user: null }; view.update(React.createElement(Slot, props)); }); assert.equal(houses(), 0);
+  } finally { await act(async () => { view?.unmount(); }); controller.stop(); }
+});

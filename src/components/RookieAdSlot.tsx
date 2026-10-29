@@ -1,8 +1,9 @@
-import React, { Suspense } from 'react';
+import React, { Suspense, useSyncExternalStore } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { shouldShowAds } from '@/lib/ads';
 import { isMedianIOSApp } from '@/lib/paymentVisibility';
 import { useMembershipRevision } from '@/hooks/useMembershipRevision';
+import { nativeAds } from '@/lib/nativeAds';
 
 export type RookieAdPlacement =
   | 'home_middle'
@@ -25,12 +26,16 @@ export interface RookieAdSlotProps {
 }
 
 const RookieHouseAdContent = React.lazy(() => import('./RookieHouseAdContent'));
+const subscribeNativeAds = (notify: () => void) => nativeAds.subscribeDiagnostics(notify);
 
 const RookieAdSlot: React.FC<RookieAdSlotProps> = (props) => {
   useMembershipRevision();
+  const nativeExperience = useSyncExternalStore(subscribeNativeAds,
+    () => nativeAds.usesConfirmedNativeBannerExperience(props.user?.id ?? null), () => false);
   const isDevPreview = props.previewMode && import.meta.env.DEV;
 
-  if (!isDevPreview && !shouldShowAds(props.user)) {
+  if (!isDevPreview && (!shouldShowAds(props.user) ||
+      (props.placement !== 'after_save_interstitial' && nativeExperience))) {
     return null;
   }
 

@@ -146,8 +146,13 @@ Only the rollout Auth UUID sees the temporary live **AdMob test status** section
 It reports flag, trusted Rookie eligibility, bridge, device authorization source, native consent
 completion and banner command dispatch without identifiers or raw consent payloads. Settings
 itself suspends banners; close it to test the landing page. A dispatch is not an impression.
-House tiles remain fallback content until actual Google banner display is confirmed; Median
-documents no display callback and native banners cannot be placed inside HTML house tiles.
+The owner subsequently confirmed a visible Google **Test Ad** on this Android phone. Inline
+house tiles are now suppressed only for that verified phone session while its native banner
+experience is active at home/schedule/saved. Flag-off, unavailable bridge/device/consent,
+backgrounding, overlays and other accounts retain fallback behavior. This is a manually
+confirmed rollout policy, not per-impression detection: Median documents no display/no-fill
+callback, so a later silent no-fill cannot automatically restore tiles. Other sessions and
+iOS do not inherit this confirmation. Native banners are never inserted inside HTML tiles.
 
 The preserved rollback Vercel deployment is `dpl_7ZCgZcjPyAVA2i9kUSoNQkBjHULv`, commit
 `5ca8181b74fe85703c1d1f99848d6872646a24ee`, serving onlyfast.app. Keep it available for rollback; this task authorizes a controlled manual replacement of the production alias.
