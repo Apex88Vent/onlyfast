@@ -69,9 +69,9 @@ test('unknown subscription plans are ambiguous for advertising without changing 
 });
 
 async function fixture(storage = new Map<string, string>(), useTrustedMembership = false,
-  initial: Partial<{ enabled: boolean; completeConsent: boolean; eligible: boolean; touch: number; ua: string }> = {}) {
+  initial: Partial<{ enabled: boolean; completeConsent: boolean; eligible: boolean; touch: number; ua: string; rollout: boolean; device: boolean }> = {}) {
   const calls: string[] = [];
-  const state = { enabled: true, completeConsent: true, eligible: true, touch: 0, ua: 'MedianAndroid/1.0 Android', now: 1_000_000, ...initial };
+  const state = { enabled: true, completeConsent: true, eligible: true, rollout: false, device: true, touch: 0, ua: 'MedianAndroid/1.0 Android', now: 1_000_000, ...initial };
   const bridge = {
     banner: { enable: () => { calls.push('enable'); }, disable: () => { calls.push('disable'); } },
     showInterstitialIfReady: () => { calls.push('interstitial'); },
@@ -81,7 +81,8 @@ async function fixture(storage = new Map<string, string>(), useTrustedMembership
   };
   const host = { bridge: bridge as typeof bridge | undefined };
   const controller = new native.NativeAdsController({
-    enabled: () => state.enabled,
+    enabled: id => state.enabled && (!state.rollout || native.nativeAdsRolloutEnabled('true', id)),
+    deviceAllowed: () => state.device,
     eligible: (id: string) => state.eligible && (!useTrustedMembership || ads.shouldShowAds({ id })), userAgent: () => state.ua,
     bridge: () => host.bridge, now: () => state.now,
     maxTouchPoints: () => state.touch,
@@ -523,5 +524,159 @@ test('actual manual-save hook preserves web fallback and avoids native/house sta
     await submit('Race');
     assert.equal(f.calls.filter(c => c === 'interstitial').length, mode === 'native' ? 1 : 0, mode);
     assert.equal(house, mode === 'browser' || mode === 'flag-off', mode);
+  }
+});
+
+
+test('rollout account selection uses the resolved Auth UUID; all other accounts retain house fallback', async () => {
+  assert.equal(native.nativeAdsRolloutEnabled('true', native.NATIVE_ADS_ROLLOUT_USER_ID), true);
+  for (const value of [undefined, 'false', false, true]) assert.equal(native.nativeAdsRolloutEnabled(value, native.NATIVE_ADS_ROLLOUT_USER_ID), false);
+  for (const userId of ['a', 'other-rookie', 'rookie@test.com', null]) {
+    assert.equal(native.nativeAdsRolloutEnabled('true', userId), false);
+    const f = await fixture(new Map(), false, { rollout: true });
+    f.controller.setUser(userId); f.controller.setPlacement(userId, 'home');
+    assert.ok(!f.calls.includes('enable'));
+    if (userId) assert.equal(f.controller.completeManualSave(f.controller.beginManualSave(userId),
+      { persisted: true, queued: false, editing: false }), 'house');
+    assert.ok(!f.calls.includes('interstitial'));
+  }
+});
+
+test('only the rollout UUID plus current trusted Rookie evidence and a verified device can dispatch on either platform', async () => {
+  const id = native.NATIVE_ADS_ROLLOUT_USER_ID;
+  for (const ua of ['MedianAndroid/1.0 Android', 'MedianIOS/1.0']) {
+    trusted.clearTrustedMembership();
+    const f = await fixture(new Map(), true, { ua, rollout: true });
+    f.controller.setUser(id); f.controller.setPlacement(id, 'home');
+    assert.ok(!f.calls.includes('enable'), 'no default Rookie authorization');
+    trusted.setTrustedAuthorization(id, null, {}); f.controller.refresh();
+    await f.controller.requestConsent();
+    assert.ok(f.calls.includes('enable'));
+    const save = () => f.controller.completeManualSave(f.controller.beginManualSave(id), { persisted: true, queued: false, editing: false });
+    f.state.device = false; f.controller.refresh();
+    assert.equal(f.calls.at(-1), 'disable'); assert.equal(save(), 'suppressed');
+    assert.equal(f.storage.size, 0);
+    f.state.device = true; f.controller.refresh();
+    assert.equal(save(), 'requested'); assert.equal(save(), 'suppressed');
+    const diagnostic = f.controller.getDiagnostics();
+    assert.equal(diagnostic.rolloutAccount, true); assert.equal(diagnostic.eligible, true);
+    assert.equal(diagnostic.consentRequestCompleted, true); assert.equal(diagnostic.bridgeAvailable, true);
+    assert.equal(diagnostic.bannerCommandDispatched, true); assert.equal(diagnostic.interstitialCommandDispatched, true);
+    assert.equal(diagnostic.adDisplayed, 'unknown');
+    for (const [row, grants] of [[paid('pro'), {}], [paid('teams'), {}], [null, { has_admin_full_access: true }],
+      [null, { promo_access_level: 'ambassador' }], [null, { promo_access_level: 'ad_free' }]] as const) {
+      trusted.setTrustedAuthorization(id, row, grants); f.controller.refresh();
+      assert.equal(f.calls.at(-1), 'disable'); assert.equal(save(), 'suppressed');
+    }
+    trusted.clearTrustedMembership();
+  }
+});
+
+const testAdvertisingId = '11111111-2222-4333-8444-555555555555';
+async function advertisingHash(id: string) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(id));
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+function deviceUpdate(device: InstanceType<typeof native.NativeAdTestDevice>, platform: 'android' | 'ios',
+  host: { deviceInfo: () => Promise<unknown> }) {
+  return new Promise<void>(resolve => device.prepare(platform, host, resolve));
+}
+
+test('registered-device gate matches platform-specific advertising IDs without persisting or authorizing a different native host', async () => {
+  const hash = await advertisingHash(testAdvertisingId);
+  for (const platform of ['android', 'ios'] as const) {
+    const gate = new native.NativeAdTestDevice({ android: [hash], ios: [hash] });
+    const host = { deviceInfo: async () => ({ platform, appId: 'app.onlyfast', [platform === 'android' ? 'gaid' : 'idfa']: testAdvertisingId.toUpperCase() }) };
+    await deviceUpdate(gate, platform, host);
+    assert.equal(gate.getStatus(), 'matched'); assert.equal(gate.allowed(platform, host), true);
+    assert.equal(gate.allowed(platform === 'android' ? 'ios' : 'android', host), false);
+    assert.equal(gate.allowed(platform, { ...host }), false);
+  }
+});
+
+test('missing, zeroed, foreign-app and unregistered advertising IDs fail closed; installation IDs are never substituted', async () => {
+  const hash = await advertisingHash(testAdvertisingId);
+  for (const info of [undefined, {}, { platform: 'android', appId: 'app.onlyfast', installationId: testAdvertisingId },
+    { platform: 'android', appId: 'app.onlyfast', gaid: '00000000-0000-0000-0000-000000000000' },
+    { platform: 'android', appId: 'other.app', gaid: testAdvertisingId },
+    { platform: 'ios', appId: 'app.onlyfast', gaid: testAdvertisingId },
+    { platform: 'android', appId: 'app.onlyfast', gaid: '11111111-2222-4333-8444-555555555556' }]) {
+    const gate = new native.NativeAdTestDevice({ android: [hash], ios: [] });
+    const host = { deviceInfo: async () => info };
+    await deviceUpdate(gate, 'android', host);
+    assert.equal(gate.allowed('android', host), false);
+    assert.notEqual(gate.getStatus(), 'matched');
+  }
+  const gate = new native.NativeAdTestDevice();
+  const host = { deviceInfo: async () => { assert.fail('no registered iOS device'); } };
+  gate.prepare('ios', host, () => {});
+  assert.equal(gate.getStatus(), 'no-registered-device'); assert.equal(gate.allowed('ios', host), false);
+});
+
+test('device errors, timeouts and late native host responses never release advertising', async t => {
+  const hash = await advertisingHash(testAdvertisingId);
+  const gate = new native.NativeAdTestDevice({ android: [hash], ios: [] });
+  const failed = { deviceInfo: async () => { throw Error('native failure'); } };
+  await deviceUpdate(gate, 'android', failed); assert.equal(gate.allowed('android', failed), false);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let finish!: (value: unknown) => void;
+  const delayed = { deviceInfo: () => new Promise(resolve => { finish = resolve; }) };
+  const pending = deviceUpdate(gate, 'android', delayed);
+  t.mock.timers.tick(10_000); await pending;
+  finish({ platform: 'android', appId: 'app.onlyfast', gaid: testAdvertisingId });
+  await Promise.resolve();
+  assert.equal(gate.getStatus(), 'device-info-error'); assert.equal(gate.allowed('android', delayed), false);
+});
+
+
+test('background/account invalidation clears device evidence and ignores pending native results', async () => {
+  const hash = await advertisingHash(testAdvertisingId);
+  const gate = new native.NativeAdTestDevice({ android: [hash], ios: [] });
+  const host = { deviceInfo: async () => ({ platform: 'android', appId: 'app.onlyfast', gaid: testAdvertisingId }) };
+  await deviceUpdate(gate, 'android', host); assert.equal(gate.allowed('android', host), true);
+  gate.reset(); assert.equal(gate.allowed('android', host), false); assert.equal(gate.getStatus(), 'idle');
+  let finish!: (value: unknown) => void;
+  let updates = 0;
+  const pending = { deviceInfo: () => new Promise(resolve => { finish = resolve; }) };
+  gate.prepare('android', pending, () => { updates++; });
+  gate.reset(); finish({ platform: 'android', appId: 'app.onlyfast', gaid: testAdvertisingId });
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(gate.allowed('android', pending), false); assert.equal(updates, 0);
+});
+
+test('actual production singleton never enables another Rookie, unverified account, paid account or unidentified test device', async () => {
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  const previousNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  const calls: string[] = [];
+  const host = Object.assign(new EventTarget(), { localStorage: { getItem: () => null, setItem: () => {} }, median: { admob: {
+    banner: { enable: () => calls.push('enable'), disable: () => calls.push('disable') },
+    showInterstitialIfReady: () => calls.push('interstitial'),
+    request: { consent: async () => { calls.push('consent'); return { result: true }; } },
+  } } });
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: host });
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { userAgent: 'MedianAndroid/1.0 Android', maxTouchPoints: 0 } });
+  const controller = native.nativeAds;
+  try {
+    controller.setForeground(true); controller.setRouteSupported(true);
+    for (const [id, row, verified] of [['other-rookie', null, true], [native.NATIVE_ADS_ROLLOUT_USER_ID, paid('pro'), true],
+      [native.NATIVE_ADS_ROLLOUT_USER_ID, null, false]] as const) {
+      trusted.clearTrustedMembership(); controller.setUser(id);
+      if (verified) trusted.setTrustedAuthorization(id, row, {});
+      controller.setPlacement(id, 'home'); controller.refresh();
+      assert.equal(controller.getDiagnostics().enabled, id === native.NATIVE_ADS_ROLLOUT_USER_ID);
+      assert.ok(!calls.includes('enable') && !calls.includes('interstitial') && !calls.includes('consent'));
+    }
+    const id = native.NATIVE_ADS_ROLLOUT_USER_ID;
+    trusted.setTrustedAuthorization(id, null, {}); controller.refresh(); await controller.requestConsent();
+    const snapshot = controller.getDiagnostics();
+    assert.equal(snapshot.eligible, true); assert.equal(snapshot.consentRequestCompleted, true);
+    assert.equal(snapshot.device, 'device-info-unavailable'); assert.equal(snapshot.deviceAllowed, false);
+    assert.equal(controller.completeManualSave(controller.beginManualSave(id), { persisted: true, queued: false, editing: false }), 'suppressed');
+    assert.ok(!calls.includes('enable') && !calls.includes('interstitial'));
+    controller.setForeground(false); assert.equal(controller.getDiagnostics().device, 'idle');
+  } finally {
+    controller.stop(); trusted.clearTrustedMembership();
+    if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow); else Reflect.deleteProperty(globalThis, 'window');
+    if (previousNavigator) Object.defineProperty(globalThis, 'navigator', previousNavigator); else Reflect.deleteProperty(globalThis, 'navigator');
   }
 });

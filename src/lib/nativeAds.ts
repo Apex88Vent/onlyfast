@@ -11,17 +11,85 @@ export interface MedianAdmobBridge {
 }
 
 export const INTERSTITIAL_COOLDOWN_MS = 600_000;
+// Resolved read-only from production Auth, not an email or editable metadata claim.
+export const NATIVE_ADS_ROLLOUT_USER_ID = '58a1db2f-8d4d-412e-afe5-abadf57f6ae1';
+export function nativeAdsRolloutEnabled(value: unknown, userId: string | null): boolean {
+  return nativeAdsFeatureEnabled(value) && userId === NATIVE_ADS_ROLLOUT_USER_ID;
+}
+
+type NativePlatform = 'android' | 'ios';
+type DeviceHost = { deviceInfo?: () => Promise<unknown> };
+const registeredDeviceHashes: Record<NativePlatform, readonly string[]> = {
+  // SHA-256 of the Android advertising ID verified in AdMob's Test devices list.
+  android: ['b852c51655b137b99f626bce5bb63a4757787247d602e6954cb6afc042eb29f4'],
+  ios: [], // No iOS test device is registered. Never substitute the Android ID.
+};
+
+/** Uses only documented median.deviceInfo(); no ID is sent to another service. */
+export class NativeAdTestDevice {
+  private request: DeviceHost['deviceInfo'];
+  private host: DeviceHost | undefined;
+  private platform: NativePlatform | null = null;
+  private revision = 0;
+  private status = 'idle';
+  constructor(private readonly hashes = registeredDeviceHashes) {}
+
+  getStatus() { return this.status; }
+  reset() {
+    this.revision++; this.request = undefined; this.host = undefined; this.platform = null; this.status = 'idle';
+  }
+  allowed(platform: NativePlatform | null, host: DeviceHost | undefined) {
+    return this.status === 'matched' && platform === this.platform && host === this.host && host?.deviceInfo === this.request;
+  }
+  prepare(platform: NativePlatform | null, host: DeviceHost | undefined, updated: () => void) {
+    if (this.platform === platform && this.host === host && this.request === host?.deviceInfo && this.status !== 'idle') return;
+    const revision = ++this.revision;
+    this.platform = platform; this.host = host; this.request = host?.deviceInfo;
+    if (!platform || !this.hashes[platform].length) { this.status = 'no-registered-device'; return; }
+    const request = this.request;
+    if (typeof request !== 'function') { this.status = 'device-info-unavailable'; return; }
+    this.status = 'pending';
+    let timer: ReturnType<typeof setTimeout>;
+    void (async () => {
+      try {
+        const operation = request.call(host);
+        if (!operation || typeof operation.then !== 'function') throw Error('Device info Promise unavailable');
+        const info = await Promise.race([operation, new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(() => reject(Error('Device info timed out')), 10_000);
+        })]);
+        if (revision !== this.revision) return;
+        if (!info || typeof info !== 'object') { this.status = 'advertising-id-unavailable'; return; }
+        const device = info as Record<string, unknown>;
+        if (device.platform !== platform || device.appId !== 'app.onlyfast') { this.status = 'app-or-platform-mismatch'; return; }
+        const raw = platform === 'android' ? device.gaid : device.idfa;
+        const id = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id) || /^0{8}-0{4}-0{4}-0{4}-0{12}$/.test(id)) {
+          this.status = 'advertising-id-unavailable'; return;
+        }
+        const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(id));
+        const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+        if (revision === this.revision) this.status = this.hashes[platform].includes(hash) ? 'matched' : 'unregistered-device';
+      } catch { if (revision === this.revision) this.status = 'device-info-error'; }
+      finally { clearTimeout(timer); if (revision === this.revision) updated(); }
+    })();
+  }
+}
 
 export function nativeAdsFeatureEnabled(value: unknown): boolean { return value === 'true'; }
 
 export interface NativeAdsDependencies {
-  enabled(): boolean;
+  enabled(userId: string | null): boolean;
   userAgent(): string;
   bridge(): MedianAdmobBridge | undefined;
   eligible(userId: string): boolean;
   storage(): Pick<Storage, 'getItem' | 'setItem'>;
   now(): number;
   maxTouchPoints?(): number;
+  deviceAllowed?(platform: NativePlatform | null): boolean;
+  prepareDevice?(platform: NativePlatform | null, updated: () => void): void;
+  deviceStatus?(): string;
+  resetDevice?(): void;
+  diagnostic?(value: ReturnType<NativeAdsController['getDiagnostics']>): void;
 }
 
 type SaveTicket = Readonly<{ userId: string; generation: number; activity: number }>;
@@ -46,17 +114,22 @@ export class NativeAdsController {
   private trackingResponse: unknown;
   private consentAttempt: { bridge: MedianAdmobBridge; generation: number } | null = null;
   private consentRequest: Promise<NativeConsentStatus> | null = null;
+  private bannerDispatches = 0;
+  private interstitialDispatches = 0;
 
   constructor(private readonly deps: NativeAdsDependencies) {}
 
   setUser(userId: string | null) {
     if (userId !== this.userId) {
+      this.deps.resetDevice?.();
       this.generation++;
       this.pendingSave = null;
       this.consentStatus = 'idle';
       this.consentResponse = undefined;
       this.trackingResponse = undefined;
       this.consentAttempt = null;
+      this.bannerDispatches = 0;
+      this.interstitialDispatches = 0;
       this.hideBanner();
       this.userId = userId;
     }
@@ -64,7 +137,7 @@ export class NativeAdsController {
   }
 
   setForeground(visible: boolean) {
-    if (!visible) this.noteActivity();
+    if (!visible) { this.noteActivity(); this.deps.resetDevice?.(); }
     this.foreground = visible;
     this.refresh();
   }
@@ -108,6 +181,33 @@ export class NativeAdsController {
 
   /** Native diagnostics only; never persisted or interpreted as a personalization choice. */
   getConsentStatus() { return { status: this.consentStatus, response: this.consentResponse, trackingResponse: this.trackingResponse }; }
+
+  /** Command diagnostics are not a native impression or personalization callback. */
+  getDiagnostics() {
+    const bridge = this.deps.bridge();
+    return {
+      rolloutAccount: this.userId === NATIVE_ADS_ROLLOUT_USER_ID,
+      eligible: !!this.userId && this.deps.eligible(this.userId),
+      enabled: this.deps.enabled(this.userId),
+      platform: this.platform(),
+      bridgeAvailable: typeof bridge?.banner?.enable === 'function' && typeof bridge?.banner?.disable === 'function',
+      interstitialBridgeAvailable: typeof bridge?.showInterstitialIfReady === 'function',
+      device: this.deps.deviceStatus?.() ?? 'not-configured',
+      deviceAllowed: this.deps.deviceAllowed?.(this.platform()) ?? true,
+      consent: this.consentStatus,
+      consentRequestCompleted: this.consentStatus === 'unverified',
+      advertisingPermission: 'not-exposed-by-native-bridge',
+      bannerCommandDispatched: this.bannerDispatches > 0,
+      interstitialCommandDispatched: this.interstitialDispatches > 0,
+      bannerCommandDispatches: this.bannerDispatches,
+      interstitialCommandDispatches: this.interstitialDispatches,
+      adDisplayed: 'unknown',
+    };
+  }
+
+  private diagnose() {
+    try { this.deps.diagnostic?.(this.getDiagnostics()); } catch { /* Diagnostics cannot affect advertising behavior. */ }
+  }
 
   /** Re-request only the documented native consent flow, including from Settings. */
   requestConsent(): Promise<NativeConsentStatus> {
@@ -194,7 +294,8 @@ export class NativeAdsController {
   }
 
   private allowed() {
-    return !!this.userId && this.deps.enabled() && this.platform() !== null && this.foreground &&
+    return !!this.userId && this.deps.enabled(this.userId) && this.platform() !== null && this.foreground &&
+      (this.deps.deviceAllowed?.(this.platform()) ?? true) &&
       this.routeSupported && this.suspensions.size === 0 && this.consentStatus === 'unverified' &&
       this.consentAttempt?.bridge === this.deps.bridge() && this.consentAttempt.generation === this.generation &&
       this.deps.eligible(this.userId);
@@ -216,11 +317,15 @@ export class NativeAdsController {
       // Run UMP at an eligible, non-editing screen, before either native format.
       // Once per account/bridge attempt; Settings may explicitly retry errors or
       // re-request the flow. Do not loop when a native form cannot be displayed.
-      if (this.deps.enabled() && this.canRequestConsent() && this.routeSupported && this.suspensions.size === 0 &&
+      if (this.deps.enabled(this.userId) && this.canRequestConsent() && this.routeSupported && this.suspensions.size === 0 &&
           this.deps.eligible(this.userId) && this.placement?.userId === this.userId &&
           ['home', 'schedule', 'saved'].includes(this.placement.view) &&
           (!this.consentAttempt || this.consentAttempt.bridge !== bridge || this.consentAttempt.generation !== this.generation)) {
         void this.requestConsent();
+      }
+      if (this.deps.enabled(this.userId) && this.userId && this.deps.eligible(this.userId) &&
+          this.consentStatus === 'unverified' && this.foreground && this.routeSupported && this.suspensions.size === 0) {
+        this.deps.prepareDevice?.(this.platform(), () => this.refresh());
       }
       const show = this.allowed() && this.placement?.userId === this.userId &&
         ['home', 'schedule', 'saved'].includes(this.placement.view) &&
@@ -231,8 +336,10 @@ export class NativeAdsController {
         this.banner = bridge;
         this.disabledBanner = null;
         bridge.banner.enable();
+        this.bannerDispatches++;
       }
     } catch { this.hideBanner(); }
+    this.diagnose();
   }
 
   beginManualSave(userId: string | null): SaveTicket | null {
@@ -254,7 +361,7 @@ export class NativeAdsController {
     try {
       if (!this.deps.eligible(ticket.userId)) return 'suppressed';
       const bridge = this.deps.bridge();
-      if (!this.deps.enabled() || this.platform() === null || typeof bridge?.showInterstitialIfReady !== 'function') return 'house';
+      if (!this.deps.enabled(this.userId) || this.platform() === null || typeof bridge?.showInterstitialIfReady !== 'function') return 'house';
       if (!this.allowed()) return 'suppressed';
       const key = `onlyfast_admob_interstitial_v1:${encodeURIComponent(ticket.userId)}`;
       const storage = this.deps.storage();
@@ -272,11 +379,12 @@ export class NativeAdsController {
       storage.setItem(key, String(now));
       // Count attempts: Median supplies no reliable display-success callback.
       bridge.showInterstitialIfReady();
+      this.interstitialDispatches++;
       return 'requested';
     } catch {
       // A thrown bridge call may already have dispatched. Never stack a house modal.
       return 'suppressed';
-    } finally { this.requesting = false; }
+    } finally { this.requesting = false; this.diagnose(); }
   }
 
   stop() {
@@ -286,10 +394,23 @@ export class NativeAdsController {
   }
 }
 
-type NativeAdsWindow = Window & { median?: { admob?: MedianAdmobBridge }; median_library_ready?: () => void };
+type NativeAdsWindow = Window & { median?: DeviceHost & { admob?: MedianAdmobBridge }; median_library_ready?: () => void };
+
+const testDevice = new NativeAdTestDevice();
+let lastDiagnostic = '';
 
 export const nativeAds = new NativeAdsController({
-  enabled: () => nativeAdsFeatureEnabled(import.meta.env.VITE_MEDIAN_ADMOB_ENABLED),
+  enabled: userId => nativeAdsRolloutEnabled(import.meta.env.VITE_MEDIAN_ADMOB_ENABLED, userId),
+  deviceAllowed: platform => testDevice.allowed(platform, (window as NativeAdsWindow).median),
+  prepareDevice: (platform, updated) => testDevice.prepare(platform, (window as NativeAdsWindow).median, updated),
+  deviceStatus: () => testDevice.getStatus(),
+  resetDevice: () => testDevice.reset(),
+  diagnostic: value => {
+    if (!value.rolloutAccount || import.meta.env.VITE_MEDIAN_ADMOB_DIAGNOSTICS !== 'true') return;
+    const current = JSON.stringify(value);
+    if (current !== lastDiagnostic) console.debug('[OnlyFast AdMob]', value);
+    lastDiagnostic = current;
+  },
   maxTouchPoints: () => navigator.maxTouchPoints,
   userAgent: () => navigator.userAgent,
   bridge: () => (window as NativeAdsWindow).median?.admob,

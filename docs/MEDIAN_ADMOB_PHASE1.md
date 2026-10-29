@@ -1,12 +1,45 @@
 # OnlyFast native AdMob - original production apps
 
-Updated October 28, 2026. No website deployment or ad activation is authorized by this change.
+Updated October 28, 2026. A controlled production rollout is authorized only for the existing
+Rookie test account and registered AdMob test devices. No store publication or native rebuild is
+included in this rollout.
+
+## Limited Rookie test rollout
+
+- `rookie@test.com` resolves in production Auth to `58a1db2f-8d4d-412e-afe5-abadf57f6ae1`.
+  Read-only database verification found no subscription row, admin/promo grant, or experimental
+  full-access override. Runtime eligibility still requires the existing fresh server-owned
+  membership evidence; no email, editable metadata, or default Rookie fallback authorizes ads.
+- AdMob has one Android test device named `phone`, advertising ID ending `7442`; the owner
+  confirmed it is the test phone. Only its SHA-256 comparison digest is present in the bundle.
+  No iOS test device is registered, so iOS display commands remain blocked.
+- After the existing ATT/UMP flow, documented `median.deviceInfo()` must report `app.onlyfast`,
+  the matching platform, and a nonzero advertising ID matching the registered device digest.
+  Missing/mismatched IDs, errors, timeouts and host changes deny display. Backgrounding or
+  account switching clears device evidence, so changed advertising IDs are rechecked on resume.
+- IMPORTANT: Median documents that `gaid`/`idfa` may be omitted without a supported attribution
+  plugin (AdMob alone is not listed as sufficient). This rollout does not add such a plugin or
+  guess an ID. If omitted on the installed app, the exact blocker is `advertising-id-unavailable`;
+  requests remain disabled despite the device's AdMob registration. A missing deviceInfo method
+  is reported as `device-info-unavailable`. Installation IDs are never substituted for AdMob IDs.
+- `VITE_MEDIAN_ADMOB_ENABLED=true` enables only the resolved rollout UUID; other accounts retain
+  the existing house post-save fallback. `VITE_MEDIAN_ADMOB_DIAGNOSTICS=true` temporarily logs
+  `[OnlyFast AdMob]` snapshots only for that UUID. Read console fields `eligible`, `enabled`,
+  `bridgeAvailable`, `device`, `deviceAllowed`, `consentRequestCompleted`,
+  `bannerCommandDispatched`, and `interstitialCommandDispatched`. `adDisplayed` stays `unknown`:
+  a returned JavaScript command is not evidence of an impression or personalized-ad permission.
+- On the confirmed registered Android phone: fully close/reopen OnlyFast, log in with the
+  Rookie test account, finish onboarding if needed, close overlays, and remain on the landing
+  page while native privacy choices and device checks complete. Confirm the Google Test Ad
+  label. Do not repeatedly save/click ads to diagnose missing fill. If no ad appears, inspect
+  the scoped console snapshot; do not broaden the account/device gate to force an impression.
+
 
 ## Website behavior
 
 The ordinary production build supports Median Android and iOS at `https://onlyfast.app/`.
 `VITE_MEDIAN_ADMOB_ENABLED` remains the master switch, off when absent or anything other than
-`true`. The Vercel production value was left absent. `vercel.json` still disables Git deployment
+`true`. The controlled production rollout enables the master switch with the account/device restrictions above. `vercel.json` still disables Git deployment
 for main. No test-origin authorization, sample units, alternate app identity, test build mode,
 or source-level permanent consent constant remains.
 
@@ -77,8 +110,8 @@ do not create a second App Store record or silently publish metadata changes.
    units. Confirm Test Ad labels; never click unregistered live ads or generate repeated live
    impressions. Include the iOS app in applicable AdMob Privacy & Messaging configurations.
 5. After separate approval, deploy this source to the existing production website and enable the
-   production master switch. Until that deployment/activation, these native binaries load the
-   existing ad-disabled website. Rebuilding a shell does not deploy these website changes.
+   production master switch. This rollout authorizes activation only for the verified account and matched registered
+   Android device; iOS requires its own registered test device. Rebuilding a shell does not deploy these website changes.
 6. Verify Rookie vs Pro/Teams/admin/promotional/logout, ATT denied/restricted, UMP required/not
    required/error, privacy re-requests, navigation/overlays, editing/scans, resume/account switching,
    manual vs queued/failed/autosaves, cooldown/reload, and native no-fill behavior. Automated tests
@@ -97,15 +130,15 @@ absence of a generated IPA.
 
 ## Rollback and removed infrastructure
 
-The live Vercel deployment remains `dpl_7ZCgZcjPyAVA2i9kUSoNQkBjHULv`, commit
-`5ca8181b74fe85703c1d1f99848d6872646a24ee`, serving onlyfast.app. It was not replaced or deleted.
+The preserved rollback Vercel deployment is `dpl_7ZCgZcjPyAVA2i9kUSoNQkBjHULv`, commit
+`5ca8181b74fe85703c1d1f99848d6872646a24ee`, serving onlyfast.app. Keep it available for rollback; this task authorizes a controlled manual replacement of the production alias.
 The disposable standalone Vercel project was verified separate (no Git connection, secrets or
 connectors; one separate generated domain) and deleted. Its test build/env/alias modules, script,
 specialized deployment test and obsolete build guide were removed. Normal regression coverage is
 preserved. Generated old test outputs were moved out of deployment/build paths into ignored
 `tmp/retired-admob-output/`; recovery backups and unrelated apps were preserved.
 
-Validation: all 450 automated tests, TypeScript app validation, focused application lint and normal
+Validation: all 457 automated tests, TypeScript app/node validation, focused application lint and normal
 production build passed. The existing large-bundle warning is unchanged.
 
 Sources: [Median AdMob](https://docs.median.co/docs/admob-native-ads),
