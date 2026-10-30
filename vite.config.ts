@@ -14,6 +14,11 @@ export default defineConfig(({ mode }) => ({
     port: 8080,
   },
   plugins: [react()].filter(Boolean),
+  define: {
+    // Vite PROD alone is also true in preview builds. Never use it alone to
+    // authorize live ads, and never trust a URL/localStorage mode override.
+    'import.meta.env.ONLYFAST_ADS_DEPLOYMENT': JSON.stringify(process.env.VERCEL_ENV || 'local'),
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

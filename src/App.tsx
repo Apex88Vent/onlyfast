@@ -22,8 +22,8 @@ import { AppProvider } from "./contexts/AppContext";
 import { BETA_FEATURES } from "./lib/betaFeatures";
 
 const queryClient = new QueryClient();
-const OnboardingPreview = lazy(() => import("./pages/OnboardingPreview"));
-const RookieAdSlotPreview = lazy(() => import("./pages/RookieAdSlotPreview"));
+const OnboardingPreview = import.meta.env.DEV ? lazy(() => import("./pages/OnboardingPreview")) : null;
+const RookieAdSlotPreview = import.meta.env.DEV ? lazy(() => import("./pages/RookieAdSlotPreview")) : null;
 const NativeSubscriptionTest = import.meta.env.MODE === 'native-sandbox'
   ? lazy(() => import("./pages/NativeSubscriptionTest")) : null;
 
@@ -51,7 +51,7 @@ const App = () => (
               {NativeSubscriptionTest && <Route path="/native-subscription-test" element={
                 <Suspense fallback={<div aria-busy="true" />}><NativeSubscriptionTest /></Suspense>
               } />}
-              <Route
+              {OnboardingPreview && <Route
                 path="/onboarding-preview"
                 element={
                   <BetaRoute feature={BETA_FEATURES.onboardingPreviewRoute}>
@@ -60,8 +60,8 @@ const App = () => (
                     </Suspense>
                   </BetaRoute>
                 }
-              />
-              <Route
+              />}
+              {RookieAdSlotPreview && <Route
                 path="/rookie-ad-slot-preview"
                 element={
                   <BetaRoute feature={BETA_FEATURES.rookieAdSlotPreviewRoute}>
@@ -70,7 +70,7 @@ const App = () => (
                     </Suspense>
                   </BetaRoute>
                 }
-              />
+              />}
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="*" element={<NotFound />} />
             </Routes>

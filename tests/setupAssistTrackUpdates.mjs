@@ -233,6 +233,8 @@ test('original inline upgrade design works on Android, iOS and web while preserv
       await act(async () => { view = create(React.createElement(Ad, { placement: 'home_middle' })); });
       assert.equal(view.root.findAllByType('button').length, 1);
       assert.match(text(view.toJSON()), /Unlock all features. No ads./);
+      assert.match(text(view.toJSON()), platform === 'web' ? /\$5\/mo/ : /View store pricing/);
+      if (platform !== 'web') assert.doesNotMatch(text(view.toJSON()), /\$5/);
       await act(async () => { view.root.findByType('button').props.onClick(); });
       assert.deepEqual(navigation, [['/upgrade', { state: { plan: 'pro' } }]]);
       assert.equal(pending, platform === 'web' ? 1 : 0, 'native house ad must not enable external payment state');

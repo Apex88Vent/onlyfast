@@ -3,7 +3,6 @@ import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import RaceScheduleForm, { RaceEntry } from './RaceScheduleForm';
 import RaceScheduleExport from './RaceScheduleExport';
-import RookieAdSlot from './RookieAdSlot';
 import { sortScheduleEntriesByDate } from '@/lib/scheduleSelection';
 
 interface RaceScheduleProps {
@@ -152,7 +151,7 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick, onSche
   return (
     <div>
       {/* Header row */}
-      <div className="flex items-center justify-between flex-wrap gap-3 mb-5">
+      <div data-house-ad-boundary className="flex items-center justify-between flex-wrap gap-3 mb-5">
         <div>
           <h2 className="text-2xl font-bold text-[#1A1B23]">Race Schedule</h2>
           <p className="text-[#6B7280] text-sm mt-1">Your upcoming &amp; past races, sorted by date.</p>
@@ -183,8 +182,6 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick, onSche
       )}
 
       {/* Loading */}
-      {(loading || races.length < 2) && <RookieAdSlot placement="schedule_bottom" user={user} className="my-6" />}
-
       {loading && (
         <div className="space-y-3">
           {[0, 1, 2].map(i => (
@@ -213,14 +210,10 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick, onSche
       {/* Cards */}
       {!loading && races.length > 0 && (
         <ul className="space-y-3">
-          {races.map((r, index) => {
+          {races.map(r => {
             const b = dateBadge(r.race_date);
             return (
-              <React.Fragment key={r.id}>
-              {races.length >= 2 && index === Math.floor(races.length / 2) && (
-                <RookieAdSlot placement="schedule_bottom" user={user} container="li" />
-              )}
-              <li className="bg-white rounded-2xl border border-[#E5E7EB] p-4 flex items-center gap-4 shadow-sm hover:border-[#00A8E8]/30 transition-colors">
+              <li key={r.id} className="bg-white rounded-2xl border border-[#E5E7EB] p-4 flex items-center gap-4 shadow-sm hover:border-[#00A8E8]/30 transition-colors">
                 {/* Date badge */}
                 <div className="flex-shrink-0 w-16 sm:w-20 rounded-xl bg-[#00A8E8] text-white flex flex-col items-center justify-center py-2">
                   <span className="text-[11px] font-bold tracking-wide">{b.month}</span>
@@ -259,7 +252,6 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick, onSche
                   </button>
                 </div>
               </li>
-              </React.Fragment>
             );
           })}
         </ul>

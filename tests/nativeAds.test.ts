@@ -5,6 +5,7 @@ import ts from 'typescript';
 import * as trusted from '../src/lib/trustedMembership.ts';
 import * as environment from '../src/lib/nativeEnvironment.ts';
 import * as bannerSafety from '../src/lib/nativeBannerSafety.ts';
+import * as adsMode from '../src/lib/nativeAdsMode.ts';
 
 // Execute real application modules with isolated browser/network boundaries.
 function loadModule<T>(path: string, dependencies: Record<string, unknown>, env = {}) {
@@ -27,6 +28,7 @@ const native = loadModule<typeof import('../src/lib/nativeAds.ts')>('../src/lib/
   './ads': ads, './nativeEnvironment': environment, './trustedMembership': trusted,
   './supabase': { supabase: {} },
   './nativeBannerSafety': bannerSafety,
+  './nativeAdsMode': adsMode,
 }, { VITE_MEDIAN_ADMOB_ENABLED: 'true' });
 
 const paid = (plan: string) => ({ plan, status: 'active', subscription_source: 'stripe' });
@@ -821,7 +823,7 @@ test('same-user auth events invalidate cached device authorization before anothe
   controller.stop();
 });
 
-test('actual production singleton never enables another Rookie, unverified account, paid account or unidentified test device', async () => {
+test('actual default test-mode singleton never enables another Rookie, unverified account, paid account or unidentified test device', async () => {
   const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
   const previousNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
   const calls: string[] = [];
@@ -858,6 +860,66 @@ test('actual production singleton never enables another Rookie, unverified accou
   }
 });
 
+test('actual live-mode singleton serves verified Rookie users on both platforms without test-device authorization, retaining paid exclusions', async () => {
+  const previous = ['window', 'document', 'navigator'].map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)] as const);
+  try {
+    for (const ua of ['MedianAndroid/1.0 Android', 'MedianIOS/1.0 iPhone']) {
+      const calls: string[] = [];
+      const bridge = { banner: { enable: () => calls.push('banner'), disable: () => calls.push('hide') },
+        showInterstitialIfReady: () => calls.push('interstitial'),
+        request: { consent: async () => ({ result: true }), tracking: async () => ({ status: 'denied' }) } };
+      Object.defineProperty(globalThis, 'window', { configurable: true, value: Object.assign(new EventTarget(), {
+        location: { origin: 'https://onlyfast.app' }, localStorage: { getItem: () => null, setItem() {} },
+        median: { admob: bridge, deviceInfo: () => { assert.fail('Live mode must not require GAID/IDFA or a registered test device'); } },
+      }) });
+      Object.defineProperty(globalThis, 'document', { configurable: true, value: {} });
+      Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { userAgent: ua, maxTouchPoints: 5 } });
+      const live = loadModule<typeof native>('../src/lib/nativeAds.ts', {
+        './ads': ads, './nativeEnvironment': environment, './trustedMembership': trusted, './supabase': { supabase: {} },
+        './nativeBannerSafety': { nativeBannerIsSafe: () => true }, './nativeAdsMode': adsMode,
+      }, { VITE_MEDIAN_ADMOB_ENABLED: 'true', VITE_MEDIAN_ADMOB_MODE: 'production', PROD: true, ONLYFAST_ADS_DEPLOYMENT: 'production' }).nativeAds;
+      const id = 'another-authenticated-rookie';
+      trusted.setTrustedAuthorization(id, null, {});
+      live.setUser(id); live.setForeground(true); live.setRouteSupported(true); live.setPlacement(id, 'home');
+      await live.requestConsent();
+      assert.ok(calls.includes('banner'), ua);
+      assert.equal(live.getDiagnostics().mode, 'production');
+      assert.equal(live.getDiagnostics().device, 'production-device-check-not-required');
+      assert.equal(live.completeManualSave(live.beginManualSave(id), { persisted: true, queued: false, editing: false }), 'requested');
+      for (const [row, grants] of [[paid('pro'), {}], [paid('teams'), {}], [null, { has_admin_full_access: true }],
+        [null, { promo_access_level: 'ad_free' }], [null, { promo_access_level: 'ambassador' }]] as const) {
+        trusted.setTrustedAuthorization(id, row, grants); live.refresh();
+        assert.equal(live.getDiagnostics().eligible, false);
+        assert.equal(live.completeSetupAssistDismissal(live.beginSetupAssistDismissal(id)), 'suppressed');
+      }
+      assert.equal(calls.filter(value => value === 'interstitial').length, 1);
+      live.stop(); trusted.clearTrustedMembership();
+    }
+  } finally {
+    for (const [name, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, name, descriptor); else Reflect.deleteProperty(globalThis, name);
+    }
+    trusted.clearTrustedMembership();
+  }
+});
+
+
+test('live production advertising never exposes tester diagnostic controls', () => {
+  let mode: 'off' | 'test' | 'production' = 'production';
+  const id = native.NATIVE_ADS_ROLLOUT_USER_ID;
+  const controller = new native.NativeAdsController({
+    mode: () => mode, enabled: () => false, eligible: () => false,
+    userAgent: () => 'MedianAndroid/1.0', bridge: () => undefined,
+    storage: () => ({ getItem: () => null, setItem() {} }), now: () => 0,
+  });
+  controller.setUser(id);
+  assert.equal(controller.canViewDiagnostics(id), false);
+  mode = 'off';
+  assert.equal(controller.canViewDiagnostics(id), false);
+  mode = 'test';
+  assert.equal(controller.canViewDiagnostics(id), true);
+  controller.stop();
+});
 
 test('Settings diagnostics notify live consent/device/placement gates and unsubscribe without changing ad policy', async () => {
   const f = await fixture(new Map(), false, { completeConsent: false });

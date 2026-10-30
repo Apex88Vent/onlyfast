@@ -92,8 +92,8 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userI
                   {plan.tier === 'team' ? 'Teams' : plan.displayName}
                 </h3>
                 <p className="text-3xl font-extrabold text-[#1A1B23] mt-2">
-                  {plan.priceDisplay === 'FREE' ? 'FREE' : plan.priceDisplay.split('/')[0]}
-                  {plan.priceDisplay !== 'FREE' && (
+                  {plan.tier === 'rookie' ? 'FREE' : hideExternalPayments ? 'Store pricing' : plan.priceDisplay.split('/')[0]}
+                  {plan.tier !== 'rookie' && !hideExternalPayments && (
                     <span className="text-base font-medium text-[#6B7280]"> / month</span>
                   )}
                 </p>

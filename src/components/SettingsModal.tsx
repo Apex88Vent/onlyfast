@@ -358,6 +358,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
               <h3 className="text-sm font-bold text-[#1A1B23] mb-2">AdMob test status</h3>
               <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-[#6B7280]" aria-live="polite">
                 <dt>Advertising enabled</dt><dd>{adDiagnostics.enabled ? 'Yes' : 'No'}</dd>
+                <dt>Advertising mode</dt><dd>{adDiagnostics.mode}</dd>
                 <dt>Rookie eligible</dt><dd>{adDiagnostics.eligible ? 'Yes' : 'No'}</dd>
                 <dt>Median bridge available</dt><dd>{adDiagnostics.bridgeAvailable ? 'Yes' : 'No'}</dd>
                 <dt>Device verification</dt><dd className="break-words">{adDiagnostics.device}</dd>

@@ -1,5 +1,4 @@
 import LockedFeatureNotice from './LockedFeatureNotice';
-import RookieAdSlot from './RookieAdSlot';
 import { setupClassLabel } from '@/lib/setupLibrary';
 import CustomCarSetupForm, { useCustomCarTemplate } from './CustomCarSheet';
 import { CUSTOM_CAR, CUSTOM_SHEET_KEY, customSheetFromRow, readCustomSheet, snapshotCustomSheet, emptyCustomSheet } from '@/lib/customCar';
@@ -615,8 +614,6 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
       />)}
 
       {/* Notes */}
-      <RookieAdSlot placement="setup_track_conditions" user={user} />
-
       <section className="bg-white rounded-2xl border border-[#E5E7EB] p-5 shadow-sm">
         <label htmlFor={`${prefix}-notes`} className="block text-xs font-semibold text-[#4B5563] uppercase tracking-wider mb-1">
           Notes

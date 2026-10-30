@@ -74,41 +74,41 @@ const count = (html: string) => (html.match(/data-house-ad="true"/g) || []).leng
 const savedRows = (n: number) => Array.from({ length: n }, (_, index) => ({ id: `row-${index}`, setup_type: 'base_template',
   setup_name: `[BASE TEMPLATE] Row ${index}`, race_class: raceClass, race_date: '2026-10-28', created_at: '2026-10-28' }));
 
-test('schedule, saved setups and parts keep exactly one inline ad as lists load, filter and grow', () => {
+test('schedule, saved setups and parts never duplicate the shared page ad as lists load, filter and grow', () => {
   for (const size of [0, 1, 2, 7, 12]) {
     const races = Array.from({ length: size }, (_, index) => ({ id: `race-${index}`, track: `Track ${index}`, race_date: '2026-10-28' }));
-    assert.equal(count(renderPage('RaceSchedule', { races })), 1, `schedule ${size}`);
-    assert.equal(count(renderPage('SavedSetups', { setups: savedRows(size), loading: false })), 1, `saved ${size}`);
+    assert.equal(count(renderPage('RaceSchedule', { races })), 0, `schedule ${size}`);
+    assert.equal(count(renderPage('SavedSetups', { setups: savedRows(size), loading: false })), 0, `saved ${size}`);
     const rows = Array.from({ length: size }, (_, index) => ({ id: `part-${index}`, part_type: `Part ${index}`, cost: 1, notes: '' }));
-    assert.equal(count(renderPage('PartsReference', { rows })), 1, `parts ${size}`);
+    assert.equal(count(renderPage('PartsReference', { rows })), 0, `parts ${size}`);
   }
   for (const file of ['RaceSchedule', 'SavedSetups', 'PartsReference']) {
-    assert.equal(count(renderPage(file, { loading: true })), 1, `${file} loading`);
+    assert.equal(count(renderPage(file, { loading: true })), 0, `${file} loading`);
     assert.equal(count(renderPage(file, {}, {}, false)), 0, `${file} paid`);
     assert.equal(count(renderPage(file, {}, { user: null })), 0, `${file} logged out`);
   }
 });
 
-test('long lists put the ad between complete records, not in a form or inside one record', () => {
+test('long list records retain their original ordering for measured midpoint placement', () => {
   const races = Array.from({ length: 6 }, (_, index) => ({ id: `race-${index}`, track: `Track ${index}`, race_date: '2026-10-28' }));
   const html = renderPage('RaceSchedule', { races });
-  assert.ok(html.indexOf('Track 2') < html.indexOf('data-house-ad'));
-  assert.ok(html.indexOf('data-house-ad') < html.indexOf('Track 3'));
-  assert.doesNotMatch(html.slice(html.indexOf('data-house-ad') - 15, html.indexOf('data-house-ad')), /fixed|sticky/);
+  assert.ok(html.indexOf('Track 2') < html.indexOf('Track 3'));
+  assert.equal(count(html), 0);
 });
 
-test('To Do page has one ad between complete sections; embedded panels have none', () => {
+test('To Do page and embedded panels leave ad ownership to the shared dashboard', () => {
   const html = renderPage('TodoList', {}, { variant: 'page' });
-  assert.equal(count(html), 1);
+  assert.equal(count(html), 0);
   assert.equal(count(renderPage('TodoList', {}, { variant: 'panel' })), 0);
   assert.equal(count(renderPage('TodoList', {}, { variant: 'page' }, false)), 0);
 });
 
-test('base setup and comparison have one central ad without splitting chassis fields', () => {
+test('base setup keeps complete chassis fields and comparison keeps ads out of print output', () => {
   const base = renderPage('CreateBaseSetupView', { loaded: true });
-  assert.equal(count(base), 1); assert.ok(base.indexOf('Complete chassis form') < base.indexOf('data-house-ad'));
-  assert.ok(base.indexOf('data-house-ad') < base.indexOf('Baseline philosophy'));
-  assert.equal(count(renderPage('SetupComparison', { loading: false })), 1);
+  assert.equal(count(base), 0); assert.ok(base.indexOf('Complete chassis form') < base.indexOf('Baseline philosophy'));
+  assert.equal(count(renderPage('SetupComparison', { loading: false })), 0);
+  const source = readFileSync(new URL('../src/components/SetupComparison.tsx', import.meta.url), 'utf8');
+  assert.ok(source.includes('[data-house-ad-host]{display:none!important}'));
   assert.equal(count(renderPage('SetupComparison', { loading: false }, {}, false)), 0);
 });
 

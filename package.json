@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "release:check": "node scripts/verify-production-release.mjs",
     "build:dev": "vite build --mode development",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "lint": "eslint .",

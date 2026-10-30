@@ -82,7 +82,10 @@ element('identify').addEventListener('click', () => { void run(async () => {
   if (!settings.storeActionsApproved) throw Error('Native store actions have not been approved.');
   const session = await authorize(); await controller.setUser(session.user.id); await authorize();
   identified = true;
-  show({ initializedFor: session.user.id, next: 'Operator: approve and verify this customer’s offering override before opening the paywall. No purchase or restore performed.' });
+  show({ initializedFor: session.user.id,
+    ...(session.user.id === '5ea2a2af-876a-42bb-84cc-4e4319a90a7e' ?
+      { offeringApproval: 'onlyfast_monthly_v1 — already verified and approved by the operator for this isolated test.' } : {}),
+    next: 'Tap Open native Pro / Teams paywall, then select Pro. Purchase and restore are manual; neither has been performed automatically.' });
 }); });
 for (const [id, action] of [['paywall', 'purchase'], ['restore', 'restore']] as const) {
   element(id).addEventListener('click', () => { void run(async () => {

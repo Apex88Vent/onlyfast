@@ -976,7 +976,7 @@ const ScanTimingScreen: React.FC<Props> = ({
   // ---------- RENDER ----------
   if (step === 'review' && scan) {
     return (
-      <section data-native-banner-unsafe="true" className="bg-white rounded-2xl border border-[#E5E7EB] p-6 shadow-sm" aria-labelledby="scan-review-heading">
+      <section className="bg-white rounded-2xl border border-[#E5E7EB] p-6 shadow-sm" aria-labelledby="scan-review-heading">
         <input
           ref={uploadInputRef}
           type="file"

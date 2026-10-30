@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
-import RookieAdSlot from './RookieAdSlot';
 
 interface PartsReferenceProps {
   user: User | null;
@@ -267,8 +266,6 @@ const PartsReference: React.FC<PartsReferenceProps> = ({ user, onSignInClick }) 
       </section>
 
       {/* List */}
-      {(loading || filtered.length < 6) && <RookieAdSlot placement="parts_reference_bottom" user={user} />}
-
       <section className="bg-white rounded-2xl border border-[#E5E7EB] p-4 sm:p-6 shadow-sm">
         <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
           <h3 className="text-sm font-bold text-[#1A1B23]">
@@ -312,13 +309,10 @@ const PartsReference: React.FC<PartsReferenceProps> = ({ user, onSignInClick }) 
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((r, index) => {
+                {filtered.map(r => {
                   const isEditing = editId === r.id;
                   return (
                     <React.Fragment key={r.id}>
-                    {filtered.length >= 6 && index === Math.floor(filtered.length / 2) && (
-                      <RookieAdSlot placement="parts_reference_bottom" user={user} container="tr" colSpan={6} />
-                    )}
                     {isEditing ? (
                       <tr key={r.id} className="border-b border-[#F0F0F2] bg-[#F9FAFB]">
                         <td className="py-2 pr-3">

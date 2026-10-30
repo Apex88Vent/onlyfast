@@ -68,6 +68,7 @@ import {
   isRaceWeekendEditLocked,
 } from '@/lib/membership';
 import RookieAdSlot from './RookieAdSlot';
+import RookieHouseAdPage from './RookieHouseAdPage';
 import { shouldShowAds } from '@/lib/ads';
 import { nativeAds } from '@/lib/nativeAds';
 import {
@@ -2967,7 +2968,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       </nav>
 
       <div id="view-panel" role="tabpanel" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-[calc(6rem+env(safe-area-inset-bottom))]">
-
+        <RookieHouseAdPage user={user} view={activeView}>
         {activeView === 'home' ? (
           <HomeLanding
             selectedCar={selectedCar}
@@ -2980,7 +2981,6 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
             weekendTransitionClass={weekendTransitionClass}
             performanceStats={performanceStats}
             upcomingEvents={upcomingEvents}
-            middleSlot={<RookieAdSlot placement="home_middle" user={user} className="my-4" />}
             onChangeClass={onChangeClass}
             onAction={handleHomeAction}
           />
@@ -3326,8 +3326,6 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
                 onToggle={() => setCustomFieldsOpen(!customFieldsOpen)}
               />)}
 
-              <RookieAdSlot placement="setup_session_bottom" user={user} />
-
               <ScanTimingScreen
                 key={savedMeta.ids[activeTab] || activeTab}
                 user={user}
@@ -3361,6 +3359,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
             </div>
           </div>
         )}
+        </RookieHouseAdPage>
       </div>
 
       {activeView === 'setup' && (

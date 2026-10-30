@@ -1,8 +1,8 @@
 # OnlyFast native AdMob - original production apps
 
-Updated October 29, 2026. A controlled production rollout is authorized only for the existing
-Rookie test account and registered AdMob test devices. No store publication or native rebuild is
-included in this rollout.
+Updated October 29, 2026. Local layout/banner fixes and a separately gated live mode are prepared.
+This task does not authorize deployment, pushing, native builds, or changing production variables.
+The existing deployment remains the restricted Rookie-account/registered-device test rollout.
 
 ## Limited Rookie test rollout
 
@@ -23,7 +23,7 @@ included in this rollout.
   guess an ID. An omitted Android GAID can use only the owner-confirmed, remotely verified
   phone session; unknown sessions remain blocked. A missing deviceInfo method
   is reported as `device-info-unavailable`. Installation IDs are never substituted for AdMob IDs.
-- `VITE_MEDIAN_ADMOB_ENABLED=true` enables only the resolved rollout UUID; other accounts retain
+- In the default `test` mode, `VITE_MEDIAN_ADMOB_ENABLED=true` enables only the resolved rollout UUID; other accounts retain
   the existing house post-save fallback. `VITE_MEDIAN_ADMOB_DIAGNOSTICS=true` temporarily logs
   `[OnlyFast AdMob]` snapshots only for that UUID. Read console fields `eligible`, `enabled`,
   `bridgeAvailable`, `device`, `deviceAllowed`, `consentRequestCompleted`,
@@ -40,9 +40,25 @@ included in this rollout.
 
 The ordinary production build supports Median Android and iOS at `https://onlyfast.app/`.
 `VITE_MEDIAN_ADMOB_ENABLED` remains the master switch, off when absent or anything other than
-`true`. The controlled production rollout enables the master switch with the account/device restrictions above. `vercel.json` still disables Git deployment
-for main. No test-origin authorization, sample units, alternate app identity, test build mode,
-or source-level permanent consent constant remains.
+`true`. Missing `VITE_MEDIAN_ADMOB_MODE` defaults to the existing restricted `test` mode.
+`vercel.json` still disables Git deployment for main. No sample units, alternate app identity,
+client URL/storage override or source-level permanent consent constant is introduced.
+
+| Configuration | Result |
+| --- | --- |
+| Master switch absent/false | Native display commands off; existing house promotions remain. |
+| Master true; mode absent, empty or `test` | Existing test UUID + registered-device gate, on either platform. |
+| Master true; mode `production`; Vite production build; build-time `VERCEL_ENV=production`; origin exactly `https://onlyfast.app` | Fresh trusted Rookie users may request native ads without the test-device/session gate. |
+| Requested production mode on local/dev/preview/another origin, or unknown mode | Native display commands off. |
+
+Vite embeds only the non-secret deployment environment enum as `ONLYFAST_ADS_DEPLOYMENT`.
+`import.meta.env.PROD` alone cannot authorize live ads because preview builds also set it.
+The native IDs remain the real platform-specific Median IDs below in both modes. Test mode does
+not magically convert traffic to test traffic: the phone must remain registered in Google AdMob;
+the website only admits its existing verified ID/session. The Android fallback is not hardware
+attestation. Revalidate registration if the advertising ID or authorized login changes. No iOS
+test device is registered yet. Production mode adds no SDK test flag or sample IDs; Google may
+still return test ads to a phone registered as a test device, as intended.
 
 Native commands require authenticated, current-account, fresh server-verified Rookie membership.
 Pro, Teams, admin, promotional/ambassador/ad-free grants, unknown membership and logged-out
@@ -50,11 +66,16 @@ accounts remain excluded. Membership expires after five minutes and is invalidat
 Banners use the authenticated dashboard's home, setup/session, saved, comparison, base-setup,
 To Do/notes, parts and schedule views. The native banner remains below the WebView; no HTML
 AdMob tile or duplicate per-page banner is created. The shared layout marker, dialog/viewport
-observer and focus checks hide banners during onboarding, authentication, purchases/account
-flows, dialogs, keyboard/input editing, active timing scans/review/save and cramped viewports.
+observer and keyboard checks hide banners during onboarding, authentication, purchases/account
+flows, visible dialogs, open keyboards, active timing scans/save and cramped viewports.
 Setup Assist generation retains its existing suspension. Safe-area spacing preserves save bars.
-The existing account/device/consent rollout restrictions remain in force, including unregistered
-iOS devices being blocked. Interstitial attempts follow
+The documented `median.keyboard.listen()` and `median.keyboard.info()` supply actual keyboard
+visibility; tapping Done restores banners even when an input retains focus. Older packages use
+viewport geometry as fallback. Hidden/non-interacting dialogs no longer suppress banners, and
+inline timing review no longer carries a blanket scan suppression marker. Navigation and layout
+mutations refresh the same shared controller; no second banner is created. Ordinary browsers
+without the Median bridge cannot display native banners. In test mode unregistered iOS devices
+remain blocked. Interstitial attempts follow
 persisted manual saves or explicit dismissal of successful Setup Assist/What If results,
 with ONE existing account-specific 600-second cooldown shared by both triggers. House
 promotions and browser/flag-off fallback remain. Nothing is deferred to interrupt later editing.
@@ -127,15 +148,22 @@ do not create a second App Store record or silently publish metadata changes.
 2. Permissions > App Tracking Transparency: Enable, Consent On Load = Manual, description:
    "With your permission, OnlyFast uses device identifiers to deliver and measure advertising in
    the Rookie plan." Save. Preserve other permissions and signing settings.
-3. Build & Deploy: Android APK/AAB > Rebuild, then Download > APK for device installation.
-   iOS IPA > Rebuild, then Download. Do not enable automatic App Store Connect uploads or submit
-   a release. Preserve bundle/package IDs and the existing Apple team/certificates/profiles.
+3. Compare the installed package/build against the saved native settings before deciding to
+   rebuild. These web layout/mode/keyboard changes alone do not require a native rebuild when
+   the installed plugin/configuration is correct. Rebuild the same original app only if its
+   installed binary lacks required IDs/plugin/ATT/SDK configuration. Preserve identities/signing;
+   do not upload or submit a release as part of this task.
 4. Register each physical Android/iOS device in AdMob Settings > Test devices before testing real
    units. Confirm Test Ad labels; never click unregistered live ads or generate repeated live
    impressions. Include the iOS app in applicable AdMob Privacy & Messaging configurations.
-5. After separate approval, deploy this source to the existing production website and enable the
-   production master switch. This rollout authorizes activation only for the verified account and matched registered
-   Android device; iOS requires its own registered test device. Rebuilding a shell does not deploy these website changes.
+5. After separate approval, deploy this source with the existing test-mode configuration first.
+   Confirm test labels on registered phones. For broad live activation, first resolve each app's
+   AdMob readiness/app-ads.txt/Privacy & messaging and store disclosures, and confirm native UMP
+   load gating/privacy-options behavior below. Then set the production-scoped mode to
+   `VITE_MEDIAN_ADMOB_MODE=production` (master true) and create an authorized production deployment
+   with Vercel production build provenance. Do not set that mode for preview/development. Merely
+   editing variables does not alter a previously built bundle. None of these external changes
+   were made in this local-only task. Rebuilding a shell does not deploy website changes.
 6. Verify Rookie vs Pro/Teams/admin/promotional/logout, ATT denied/restricted, UMP required/not
    required/error, privacy re-requests, navigation/overlays, editing/scans, resume/account switching,
    manual vs queued/failed/autosaves, cooldown/reload, and native no-fill behavior. Automated tests
@@ -151,6 +179,19 @@ nevertheless labeled that IPA OUTDATED after completion; a second, unchanged reb
 with Download/Upload available but retained the OUTDATED label. This Median status discrepancy
 remains unresolved; native device readiness is not fully validated. Do not confuse this label with
 absence of a generated IPA.
+
+The installed iPhone package is not accessible here, so its embedded configuration and SDK
+cannot be established from the builder's current settings or backup alone. iOS conclusion is
+**C: additional configuration/verification** (test-device registration, AdMob review/app-ads.txt,
+native privacy checks and real iPhone validation). **B** is necessary only if comparison proves
+the installed package lacks the saved required native configuration or a required SDK capability.
+**A** applies to these web changes when installed native prerequisites are already present.
+Android's banner and manual-save Test Ad are owner-confirmed; unrestricted live serving is not.
+Verify Android app readiness/Policy centre too; test serving does not prove live approval.
+Confirm App Store privacy labels include the actual advertising/identifier practices, the ATT
+purpose is accurate, and refusal of tracking does not block app functionality. No store metadata
+or native settings were changed. Settings' consent re-request remains unverified as an actual
+saved privacy-options entry point; Median must confirm this where Google requires one.
 
 ## Rollback and removed infrastructure
 
@@ -172,25 +213,38 @@ completion and banner command dispatch without identifiers or raw consent payloa
 itself suspends banners; close it to test the landing page. A dispatch is not an impression.
 The owner subsequently confirmed a visible Google **Test Ad** and a manual-save interstitial
 on this Android phone. House upgrades are now restored independently of native banner state:
-one inline, scrolling promotion per eligible Rookie dashboard page, between complete sections
-or whole list records near the midpoint. The setup/session page shares its single promotion
+one inline, scrolling promotion per eligible Rookie dashboard page. `RookieHouseAdPage` is the
+single owner; `houseAdMidpoint` measures actual rendered section/record boundaries, including
+overflowing lists, and chooses the boundary nearest half the content height. Resize, loaded
+images, list filtering/growth and navigation remeasure it; the inserted ad's own height is excluded.
+Home uses complete action/weekend/stat/event sections; schedule and To Do use whole records;
+saved/base setup lists use complete templates; parts and comparison results use complete table
+rows; forms use complete related sections. Empty/short views use the nearest available boundary,
+or the end when there is no section. Comparison print output excludes the ad host. Nested page
+components add no tiles. The setup/session page shares its single promotion
 across its timing, Setup Assist and notes sections; embedded To Do panels add none. The original
 design and `/upgrade` navigation are reused, including on iOS, without changing Coming Soon
 purchase behavior. Native banners are never inserted inside HTML tiles. Median supplies no
 documented display/no-fill callback, and Setup Assist native display remains unconfirmed.
 
-The preserved rollback Vercel deployment is `dpl_7ZCgZcjPyAVA2i9kUSoNQkBjHULv`, commit
-`5ca8181b74fe85703c1d1f99848d6872646a24ee`, serving onlyfast.app. Keep it available for rollback; this task authorizes a controlled manual replacement of the production alias.
+At this inspection, onlyfast.app still pointed to deployment `dpl_7ciuL157WXDmuUUJuPAVZ9Qh8feA`,
+commit `fec41a9cf26befed779a360ccd1cb7f7552cdff3`, predating the newer `bb0053db` main changes.
+Thus old placements and the older home/schedule/saved-only native banner coverage were still
+expected on installed apps loading production. Keep previous deployments available for rollback.
+No alias replacement is authorized by this task.
 The disposable standalone Vercel project was verified separate (no Git connection, secrets or
 connectors; one separate generated domain) and deleted. Its test build/env/alias modules, script,
 specialized deployment test and obsolete build guide were removed. Normal regression coverage is
 preserved. Generated old test outputs were moved out of deployment/build paths into ignored
 `tmp/retired-admob-output/`; recovery backups and unrelated apps were preserved.
 
-Validation: all 457 automated tests, TypeScript app/node validation, focused application lint and normal
-production build passed. The existing large-bundle warning is unchanged.
+Validation results for the local changes are reported with the completion report. Native display
+and consent compliance still require physical devices; Setup Assist display remains unconfirmed.
 
 Sources: [Median AdMob](https://docs.median.co/docs/admob-native-ads),
+[Median keyboard state](https://docs.median.co/docs/keyboard-state-tracking),
+[AdMob app readiness](https://support.google.com/admob/answer/10564477),
+[AdMob app-ads.txt verification](https://support.google.com/admob/answer/14538460),
 [Google Android UMP](https://developers.google.com/admob/android/privacy),
 [Google iOS UMP](https://developers.google.com/admob/ios/privacy),
 [Android test devices](https://developers.google.com/admob/android/test-ads),

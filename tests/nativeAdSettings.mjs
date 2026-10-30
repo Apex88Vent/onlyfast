@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import test from 'node:test';
 import ts from 'typescript';
+import * as adsMode from '../src/lib/nativeAdsMode.ts';
+import { HOUSE_BOUNDARIES } from '../src/lib/houseAdMidpoint.ts';
 
 const qaRequire = createRequire(process.env.REACT_TEST_RENDERER_MODULE);
 const React = qaRequire('react');
@@ -29,6 +31,62 @@ const native = compile('lib/nativeAds.ts', {
   './trustedMembership': {},
   './supabase': { supabase: {} },
   './nativeBannerSafety': { nativeBannerIsSafe: () => true },
+  './nativeAdsMode': adsMode,
+});
+
+test('shared measured house owner keeps one scrolling ad across every view, content growth and paid/logout transitions', async () => {
+  const names = ['window', 'MutationObserver', 'ResizeObserver', 'requestAnimationFrame', 'cancelAnimationFrame'];
+  const previous = names.map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]);
+  const frames = new Map(); let frameId = 0; let onMutation; let onResize;
+  const node = tag => ({ tagName: tag.toUpperCase(), style: {}, children: [], parentElement: null,
+    setAttribute() {}, closest: () => null, addEventListener() {}, removeEventListener() {},
+    appendChild(child) { child.remove(); this.children.push(child); child.parentElement = this; },
+    insertBefore(child, next) { child.remove(); const i = this.children.indexOf(next); this.children.splice(i < 0 ? this.children.length : i, 0, child); child.parentElement = this; },
+    remove() { if (this.parentElement) { const siblings = this.parentElement.children; siblings.splice(siblings.indexOf(this), 1); this.parentElement = null; } },
+    get firstElementChild() { return this.children[0]; },
+    get nextSibling() { const siblings = this.parentElement?.children ?? []; return siblings[siblings.indexOf(this) + 1] ?? null; },
+  });
+  const root = node('div');
+  root.ownerDocument = { createElement: node };
+  const list = node('ul'); root.appendChild(list);
+  const records = Array.from({ length: 6 }, () => node('li')); records.forEach(record => list.appendChild(record));
+  root.querySelectorAll = selector => { assert.equal(selector, HOUSE_BOUNDARIES); return records; };
+  let midpoint = records[2]; let eligible = true;
+  const Page = compile('components/RookieHouseAdPage.tsx', {
+    'react-dom': { createPortal: (children, target) => { assert.ok(target.parentElement); return children; } },
+    '@/lib/ads': { shouldShowAds: user => !!user && eligible },
+    '@/hooks/useMembershipRevision': { useMembershipRevision() {} },
+    '@/lib/houseAdMidpoint': { HOUSE_BOUNDARIES, measureHouseBoundary: () => midpoint },
+    './RookieAdSlot': { __esModule: true, default: () => React.createElement('aside', { 'data-house-ad': true }, 'Original house ad') },
+  }).default;
+  Object.defineProperties(globalThis, {
+    window: { configurable: true, value: new EventTarget() },
+    requestAnimationFrame: { configurable: true, value: fn => { frames.set(++frameId, fn); return frameId; } },
+    cancelAnimationFrame: { configurable: true, value: id => frames.delete(id) },
+    MutationObserver: { configurable: true, value: class { constructor(fn) { onMutation = fn; } observe() {} disconnect() {} } },
+    ResizeObserver: { configurable: true, value: class { constructor(fn) { onResize = fn; } observe() {} unobserve() {} disconnect() {} } },
+  });
+  let view; let props = { user: { id: 'rookie' }, view: 'home', children: React.createElement('p', {}, 'Page content') };
+  const flush = async () => { const pending = [...frames.values()]; frames.clear(); await act(async () => pending.forEach(fn => fn())); };
+  const hosts = () => list.children.filter(child => !records.includes(child));
+  const assertOne = () => { assert.equal(view.root.findAllByType('aside').length, 1); assert.equal(hosts().length, 1); assert.equal(midpoint.nextSibling, hosts()[0]); assert.equal(hosts()[0].style.position, undefined); };
+  try {
+    await act(async () => { view = create(React.createElement(Page, props), { createNodeMock: element => element.props['data-house-ad-page'] ? root : null }); });
+    assertOne();
+    midpoint = records[4]; onResize(); onMutation(); await flush(); assertOne();
+    for (const page of ['setup', 'saved', 'create-base', 'compare', 'schedule', 'todo', 'parts', 'home']) {
+      midpoint = records[1]; props = { ...props, view: page };
+      await act(async () => view.update(React.createElement(Page, props))); assertOne();
+    }
+    eligible = false; await act(async () => view.update(React.createElement(Page, props)));
+    assert.equal(hosts().length, 0); assert.equal(view.root.findAllByType('aside').length, 0);
+    eligible = true; props = { ...props, user: null }; await act(async () => view.update(React.createElement(Page, props)));
+    assert.equal(hosts().length, 0); assert.equal(view.root.findAllByType('aside').length, 0);
+    props = { ...props, user: { id: 'another-rookie' } }; await act(async () => view.update(React.createElement(Page, props))); assertOne();
+  } finally {
+    await act(async () => view?.unmount()); assert.equal(hosts().length, 0); assert.equal(frames.size, 0);
+    for (const [name, descriptor] of previous) { if (descriptor) Object.defineProperty(globalThis, name, descriptor); else Reflect.deleteProperty(globalThis, name); }
+  }
 });
 
 test('actual Settings status stays live, reveals no IDs, remains suspended, and disappears on account switching', async () => {

@@ -16,16 +16,17 @@ const PrivacyPolicy: React.FC = () => {
             <img src={LOGO_URL} alt="OnlyFast" className="h-12 w-auto" />
           </Link>
           <h1 className="mt-5 text-3xl font-bold text-[#1A1B23]">Privacy Policy</h1>
-          <p className="mt-2 text-sm text-[#9CA3AF]">Last updated: October 26, 2026</p>
+          <p className="mt-2 text-sm text-[#9CA3AF]">Last updated: October 29, 2026</p>
         </header>
 
         <div className="space-y-5 text-sm leading-relaxed text-[#4B5563]">
           <section>
             <h2 className="text-base font-bold text-[#1A1B23]">1. Information We Collect</h2>
             <p className="mt-2">
-              OnlyFast collects the following information when you create an account: email address,
-              password (encrypted), and selected subscription plan. When you use the app, we store
-              your chassis setup data, track information, and session notes.
+              OnlyFast uses your email address and account identifier to authenticate your account.
+              Supabase Auth securely processes your password; passwords are hashed, not stored in plain text.
+              We store your membership status, chassis setup data, track information, session notes,
+              and timing results. Images you select for timing scans are processed to extract timing data.
             </p>
           </section>
 
@@ -35,6 +36,9 @@ const PrivacyPolicy: React.FC = () => {
               Your setup data is used to provide the OnlyFast setup tracking service. We use your
               email for account authentication and important service communications. Setup data is
               used to provide AI-powered suggestions and setup comparison features.
+              When you request Setup Assist, the relevant setup information and driver feedback are
+              sent through our server to OpenAI for processing. Timing images you submit for scanning
+              are also sent through our server to OpenAI to read the results.
             </p>
           </section>
 
@@ -45,17 +49,20 @@ const PrivacyPolicy: React.FC = () => {
               Passwords are hashed and never stored in plain text. Service providers process data
               needed to operate OnlyFast. Google AdMob may process advertising-related device and
               interaction data in the Android and iOS apps as described below.
+              Native Apple and Google subscriptions are processed by the applicable store and RevenueCat.
+              RevenueCat processes the OnlyFast account identifier, purchase and receipt information,
+              subscription status and related transaction information so our server can verify membership.
+              Website payments continue to use Stripe. OnlyFast does not receive your full payment-card details.
             </p>
           </section>
 
           <section>
             <h2 className="text-base font-bold text-[#1A1B23]">4. Cookies & Advertising</h2>
             <p className="mt-2">
-              We use essential cookies for authentication and session management. The Android and iOS apps are
-              being prepared to offer Google AdMob ads to eligible signed-in Rookie accounts.
+              We use essential cookies for authentication and session management. The Android and iOS apps may
+              display Google AdMob ads to eligible signed-in Rookie accounts. Pro and Teams do not display advertisements.
               AdMob may process device identifiers, IP addresses, device information, and ad interactions
-              for ad delivery, measurement, and fraud prevention. Native ad display is disabled in this
-              release until activation is approved. Ad display settings do not
+              for ad delivery, measurement, diagnostics and fraud prevention. Ad display settings do not
               necessarily stop an SDK included in the native app from initializing or making requests.
               Required advertising privacy choices must be collected separately; accepting essential
               cookies does not authorize personalized advertising. On iOS, tracking permission is requested separately through Apple's native prompt. Tracking denial does not grant permission to track or personalize ads.
@@ -66,8 +73,10 @@ const PrivacyPolicy: React.FC = () => {
             <h2 className="text-base font-bold text-[#1A1B23]">5. Your Rights</h2>
             <p className="mt-2">
               You have the right to access, correct, or delete your personal data at any time. You can
-              delete your account and all associated data by contacting support. You can export your
-              setup data from the Saved Setups section.
+              delete your account through Account Settings or contact support for assistance. Setup
+              exports are available from Saved Setups with an eligible membership. Deleting your
+              OnlyFast account does not cancel an Apple, Google or Stripe subscription; manage cancellation
+              through the provider where you subscribed.
             </p>
           </section>
 

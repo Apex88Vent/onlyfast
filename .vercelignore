@@ -1,0 +1,14 @@
+# Source deployments must not upload local QA services, credentials or history.
+.git
+node_modules
+dist
+dist-native-sandbox
+review-dist
+tmp
+qa
+native
+tests
+docs
+.env*
+*.local
+*.log

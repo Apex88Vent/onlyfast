@@ -41,7 +41,8 @@ const RACE_BACKGROUNDS = {
 } as const;
 const FINAL_COPY = 'Unlock all features. No ads.';
 const FINAL_TITLE = 'Go Pro today!';
-const FINAL_PRICE = '$5/mo';
+// RevenueCatUI owns localized native prices and eligible offers.
+const FINAL_PRICE = hideExternalPayments ? 'View store pricing' : '$5/mo';
 
 const compactPlacementCopy: Record<Exclude<RookieAdPlacement, 'after_save_interstitial'>, RookieAdConfig> = {
   home_middle: {

@@ -1,5 +1,4 @@
 import { setupClassLabel } from '@/lib/setupLibrary';
-import RookieAdSlot from './RookieAdSlot';
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -208,6 +207,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:20px;color:
 .logo{height:75px;margin-bottom:16px}h1{font-size:20px;margin-bottom:4px}
 
 .subtitle{color:#6B7280;font-size:13px;margin-bottom:20px}
+[data-house-ad-host]{display:none!important}
 table{width:100%;border-collapse:collapse;font-size:12px}
 th,td{border:1px solid #E5E7EB;padding:6px 10px;text-align:left}
 th{background:#F9FAFB;font-weight:600}
@@ -239,8 +239,8 @@ ${printContent.innerHTML}</body></html>`);
   return (
     <div className="space-y-6">
       {/* Selection Panel */}
-      <div className="bg-white rounded-2xl border border-[#E5E7EB] p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
+      <div data-house-ad-boundary className="bg-white rounded-2xl border border-[#E5E7EB] p-6 shadow-sm">
+        <div data-house-ad-boundary className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-lg font-bold text-[#1A1B23] flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00A8E8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -260,8 +260,6 @@ ${printContent.innerHTML}</body></html>`);
             <button onClick={fetchSetups} className="text-[#00A8E8] hover:text-[#0090c7] text-sm font-medium px-3 py-2">Refresh</button>
           </div>
         </div>
-
-        {selectedSetups.length < 2 && <RookieAdSlot placement="setup_dashboard_bottom" user={user} className="mb-4" />}
 
         {loading ? (
           <p className="text-[#9CA3AF] text-sm text-center py-4">Loading setups...</p>
@@ -301,8 +299,6 @@ ${printContent.innerHTML}</body></html>`);
           </div>
         )}
       </div>
-
-      {selectedSetups.length >= 2 && <RookieAdSlot placement="setup_dashboard_bottom" user={user} />}
 
       {/* Comparison Table */}
       {selectedSetups.length >= 2 && (

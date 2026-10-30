@@ -3,6 +3,7 @@ import { isMedianUserAgent, nativePlatform } from './nativeEnvironment';
 import { getAdvertisingAuthorizationExpiry, invalidateAdvertisingMembership } from './trustedMembership';
 import { supabase } from './supabase';
 import { nativeBannerIsSafe } from './nativeBannerSafety';
+import { resolveNativeAdsMode, nativeAdsAccountEnabled, type NativeAdsMode } from './nativeAdsMode';
 
 // Verified commands: https://docs.median.co/docs/admob-native-ads
 // Readiness: https://docs.median.co/docs/javascript-bridge
@@ -135,6 +136,7 @@ export interface NativeAdsDependencies {
   deviceStatus?(): string;
   resetDevice?(): void;
   bannerSafe?(): boolean;
+  mode?(): NativeAdsMode;
   diagnostic?(value: ReturnType<NativeAdsController['getDiagnostics']>): void;
 }
 
@@ -250,7 +252,8 @@ export class NativeAdsController {
   }
 
   canViewDiagnostics(userId: string | null) {
-    return userId === NATIVE_ADS_ROLLOUT_USER_ID && this.userId === userId;
+    return (this.deps.mode?.() ?? 'test') === 'test' &&
+      userId === NATIVE_ADS_ROLLOUT_USER_ID && this.userId === userId;
   }
 
   subscribeDiagnostics(listener: (value: ReturnType<NativeAdsController['getDiagnostics']>) => void): () => void {
@@ -286,6 +289,7 @@ export class NativeAdsController {
     ];
     return {
       rolloutAccount: this.userId === NATIVE_ADS_ROLLOUT_USER_ID,
+      mode: this.deps.mode?.() ?? 'test',
       eligible, enabled, platform, bridgeAvailable, consentBridgeAvailable,
       interstitialBridgeAvailable: typeof bridge?.showInterstitialIfReady === 'function',
       device, deviceAllowed,
@@ -554,15 +558,27 @@ type NativeAdsWindow = Window & { median?: DeviceHost & { admob?: MedianAdmobBri
 const testDevice = new NativeAdTestDevice(registeredDeviceHashes,
   () => verifyNativeAdPhoneSession(supabase.auth, NATIVE_ADS_ROLLOUT_USER_ID, registeredPhoneSessionHash));
 let lastDiagnostic = '';
+const currentAdsMode = () => resolveNativeAdsMode({
+  enabled: import.meta.env.VITE_MEDIAN_ADMOB_ENABLED,
+  mode: import.meta.env.VITE_MEDIAN_ADMOB_MODE,
+  productionBuild: import.meta.env.PROD === true,
+  deployment: import.meta.env.ONLYFAST_ADS_DEPLOYMENT,
+  origin: typeof window !== 'undefined' ? window.location?.origin ?? '' : '',
+});
 
 export const nativeAds = new NativeAdsController({
-  enabled: userId => nativeAdsRolloutEnabled(import.meta.env.VITE_MEDIAN_ADMOB_ENABLED, userId),
-  deviceAllowed: platform => testDevice.allowed(platform, (window as NativeAdsWindow).median),
-  prepareDevice: (platform, updated) => testDevice.prepare(platform, (window as NativeAdsWindow).median, updated),
-  deviceStatus: () => testDevice.getStatus(),
+  mode: currentAdsMode,
+  enabled: userId => nativeAdsAccountEnabled(currentAdsMode(), userId, NATIVE_ADS_ROLLOUT_USER_ID),
+  // Production keeps trusted Rookie membership + native consent enforcement,
+  // but does not turn advertising identifiers or test allowlists into ad consent.
+  deviceAllowed: platform => currentAdsMode() === 'production' || testDevice.allowed(platform, (window as NativeAdsWindow).median),
+  prepareDevice: (platform, updated) => {
+    if (currentAdsMode() === 'test') testDevice.prepare(platform, (window as NativeAdsWindow).median, updated);
+  },
+  deviceStatus: () => currentAdsMode() === 'production' ? 'production-device-check-not-required' : testDevice.getStatus(),
   resetDevice: () => testDevice.reset(),
   diagnostic: value => {
-    if (!value.rolloutAccount || import.meta.env.VITE_MEDIAN_ADMOB_DIAGNOSTICS !== 'true') return;
+    if (currentAdsMode() !== 'test' || !value.rolloutAccount || import.meta.env.VITE_MEDIAN_ADMOB_DIAGNOSTICS !== 'true') return;
     const current = JSON.stringify(value);
     if (current !== lastDiagnostic) console.debug('[OnlyFast AdMob]', value);
     lastDiagnostic = current;
