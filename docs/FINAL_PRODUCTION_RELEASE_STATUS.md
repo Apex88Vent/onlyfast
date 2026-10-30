@@ -1,6 +1,64 @@
 # OnlyFast production release checkpoint — October 30, 2026 (Pacific)
 
-## Current authoritative update
+## Current production launch — final authorization executed
+
+The owner explicitly authorized public release and deployment on October 30, superseding
+the general hold below. **Vercel DEPLOYED**: [onlyfast.app](https://onlyfast.app), code
+commit `f83e685f7421de07d3127a27dde61dbd00553dac`, deployment
+`dpl_8US34EM21Xyg7WhT9bJQSQDJngZW` (READY). The canonical alias was independently
+read back to this deployment and its served bundle inspected.
+
+- Android stock purchase/restore flow enabled in production; Google native release
+  **1.0.2 (61)** still requires manual Play upload/declarations/submission. A concise
+  upload request was sent to the owner; no upload or rollout is claimed.
+- RevenueCat **ACTIVE**, based on the owner's independently verified current offering
+  `onlyfast_monthly_v1`; no offering write or repeated configuration audit was performed.
+- iOS public purchase gate remains off pending Apple submission/reviewer readiness.
+  Build **1.0.2 (59)** and draft are prepared; real screenshot, reviewer access,
+  agreement/tax status, build association and joint app/product submission remain.
+  Do not submit the production-URL app while the reviewer is still gated from its paywall.
+- AdMob master **false** until mandatory consent/privacy readiness. Rookie house
+  promotions remain enabled independently; Pro/Teams remain ad-free. iOS's last
+  confirmed AdMob state is limited/requires verification, not resolved.
+- Existing Stripe, server verification/sandbox policy, memberships and customer purchases
+  were not changed. No store transaction, native rebuild, Chrome automation or new QA
+  infrastructure was performed. The existing isolated QA entry remains origin/account/
+  backend/action gated and excluded from production, independently of the public rollout.
+
+Production flags read back: `VITE_REVENUECAT_ENABLED=true`,
+`VITE_REVENUECAT_ANDROID_ENABLED=true`, `VITE_REVENUECAT_IOS_ENABLED=false`,
+`VITE_MEDIAN_ADMOB_ENABLED=false`, diagnostics still false. Existing SDK key assignments
+were retained. Live bundle gates match. Homepage, Privacy, Terms and app-ads.txt HTTP 200;
+no forbidden QA endpoints/identities in the served bundle. SHA-256 main JS:
+`736cd05663da6e447ff6d8d532656c56901c44ae8f7914911df74eee25b6d517`.
+Verification evidence: `tmp/final-production-release/live-f83e685f/verification.json`.
+
+Targeted activation checks: **39 unit/contract + 9 mounted subscription-control tests
+passed**, TypeScript/scoped ESLint passed, local production-output validation passed
+(64 files), Vercel build READY. The mounted-test runtime was restored in its existing
+external temporary dependency directory after it had been cleaned; no application
+dependency or lockfile changed. Earlier accepted purchase/picker results were reused.
+
+## Earlier preparation records — superseded by the launch update above
+
+**Android artifact update — October 30:** newest download `app-bundle (3).aab`
+is **1.0.2 (61)**, package `app.onlyfast`. Existing validator passed bundletool,
+signature and non-debuggable checks. Certificate matches the prior candidate;
+production URL, stock Median RevenueCat and production AdMob configuration passed
+archive inspection; no QA/ngrok/localhost application URLs found. Preserved at
+`tmp/final-production-release/native/OnlyFast-android-1.0.2-61.aab`, SHA-256
+`B9B9105E110163591D63AB55506D31E582D85775158FB7512D82BA60B2A02D41`.
+This supersedes the Android 58 / 1.0.0 build-preparation blocker below. Comparison
+against **the highest version code uploaded across all Play tracks** remains
+unverified; that integer must be below 61. No upload, rebuild or public activation
+occurred. **Photo picker: PREVIOUSLY VALIDATED — NO RETEST REQUIRED.** The owner
+confirms repeated successful physical-device testing on previous production builds.
+Compared with the October 26 working APK, all six native code entries are byte-for-byte
+identical; Android permissions, SDK levels and picker-related configuration are unchanged.
+The web picker inputs/handlers are unchanged; its containing section only gains a
+banner-safety attribute. The earlier emulator crash was not established as an OnlyFast
+defect and is not a release blocker. Evidence: `native/photo-picker-comparison.json`
+under `tmp/final-production-release/`. No new physical test is claimed or required.
 
 **Release held; no deployment, public purchasing activation, broad live advertising,
 public store release, new purchase or customer membership edit.** No push was made.
@@ -47,8 +105,9 @@ generated or marked validated. Public activation holds remain unchanged.
   not established by archive inspection. Median's lingering OUTDATED label was not
   treated as a reason for repeated builds. No new upload or submission was made.
 - Artifact paths/hashes and evidence are in the submission packet and
-  `tmp/final-production-release/native/`. Physical Android picker and remaining
-  iPhone acceptance are **unverified**. No successful Pro purchase was repeated.
+  `tmp/final-production-release/native/`. Android picker acceptance is carried forward
+  as previously validated, with no retest required. Remaining iPhone acceptance is
+  **unverified**. No successful Pro purchase was repeated.
 
 ### Advertising and privacy
 

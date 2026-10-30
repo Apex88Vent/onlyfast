@@ -1,7 +1,12 @@
 # OnlyFast native submission packet — October 30, 2026 (Pacific)
 
-Preparation only. No public release, production deployment, broad advertising, new
-purchase, customer membership edit or production database change is authorized here.
+**Launch update:** the owner authorized public release October 30. The prepared web
+candidate plus Android stock billing activation is now deployed at onlyfast.app
+(code `f83e685f`, deployment `dpl_8US34EM21Xyg7WhT9bJQSQDJngZW`). iOS public billing
+and third-party AdMob remain gated for unresolved Apple/privacy readiness; house
+promotions remain available. No store submission, customer membership edit, new
+purchase or production database change occurred. The earlier hold/approval wording
+below is historical and does not require renewed approval of authorized release work.
 Use the original licensed [Median project](https://median.co/app/dcxfmcnr5b5jv3fh0zcj3cqj5c).
 Keep stock RevenueCat and the existing advertising controller. Historical native
 bridges and development backups remain untouched.
@@ -108,19 +113,18 @@ bundletool validation and JAR signature, then saves a SHA-256 evidence record.
 PowerShell syntax validation passed. It has **not** passed a new final AAB: that
 artifact still needs the manual Median build. It cannot upload or publish.
 
-### Android physical photo-picker checklist
+### Android photo picker — PREVIOUSLY VALIDATED — NO RETEST REQUIRED
 
-Use the release candidate on a real Android phone and a designated test account.
-Do not change a production customer's records.
+The owner confirms repeated successful physical-device testing on previous production
+builds. Acceptance is carried forward to 1.0.2 (61): all six native code entries match
+the October 26 working APK byte-for-byte, and Android permissions, min/target SDK levels
+and picker-related native configuration are unchanged. The web picker inputs, accepted
+image types, camera capture settings and event handlers are unchanged; only the containing
+section's banner-safety attribute changed. The earlier emulator crash was not confirmed
+as an OnlyFast application defect. It does not create a new acceptance requirement.
 
-1. Open a timing upload; select one existing image with the system photo picker.
-   Confirm return to OnlyFast and the expected preview/upload result.
-2. Reopen the picker and cancel. Confirm no unwanted upload, crash or stuck overlay.
-3. Repeat after backgrounding/reopening the app. Confirm navigation and controls work.
-4. If camera capture is offered, verify it separately using the normal device prompt.
-5. Report device/Android version, installed version code, and pass/fail for each step.
-
-No physical photo-picker pass has been recorded. Manifest inspection alone is not a pass.
+Photo picker is removed from outstanding release blockers. No new physical test was
+performed or claimed. Evidence: `tmp/final-production-release/native/photo-picker-comparison.json`.
 
 ## AdMob verification and identifiers
 
