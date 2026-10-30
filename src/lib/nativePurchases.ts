@@ -6,9 +6,14 @@ import { watchMembershipLifecycle } from './membershipLifecycle';
 import { clearTrustedMembership, getMembershipExpiration, notifyMembershipExpiration } from './trustedMembership';
 import { syncMembershipFromSubscription } from './subscription';
 
-// A build flag alone must not release purchases. See the reviewed activation
-// procedure in docs/MEDIAN_PAYWALL_RELEASE_PLAN.md before changing the hold.
-export const nativePurchasesEnabled = NATIVE_PURCHASES_READY && hideExternalPayments && import.meta.env.VITE_REVENUECAT_ENABLED === 'true';
+// Store approval and readiness can differ. Require an explicit platform rollout
+// as well as the authorized source and master gates; unknown platforms stay off.
+const purchasePlatform = nativePlatform(navigator.userAgent, navigator.maxTouchPoints);
+const platformPurchasesEnabled = purchasePlatform === 'android'
+  ? import.meta.env.VITE_REVENUECAT_ANDROID_ENABLED === 'true'
+  : purchasePlatform === 'ios' && import.meta.env.VITE_REVENUECAT_IOS_ENABLED === 'true';
+export const nativePurchasesEnabled = NATIVE_PURCHASES_READY && hideExternalPayments &&
+  import.meta.env.VITE_REVENUECAT_ENABLED === 'true' && platformPurchasesEnabled;
 
 async function getBridge(): Promise<RevenueCatBridge> {
   const deadline = Date.now() + 8000;

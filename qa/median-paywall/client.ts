@@ -1,11 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
-import { NATIVE_PURCHASES_READY, NativePurchaseController, NativePurchaseError, type RevenueCatBridge } from '../../src/lib/nativePurchaseController';
+import { NativePurchaseController, NativePurchaseError, type RevenueCatBridge } from '../../src/lib/nativePurchaseController';
 import { allowedOrigin, type QASettings } from './policy';
 import { nativePlatform } from '../../src/lib/nativeEnvironment';
 
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const settings: QASettings = JSON.parse(element('qa-settings').textContent || '{}');
-if (NATIVE_PURCHASES_READY || !allowedOrigin(location.origin, settings)) throw Error('QA origin/public hold check failed.');
+// Public launch does not widen QA access: origin, local backend, exact tester and
+// separately approved store actions remain enforced by the existing QA policy.
+if (!allowedOrigin(location.origin, settings)) throw Error('QA origin check failed.');
 const supabase = createClient(new URL('/local-supabase', location.origin).href, settings.anonKey,
   { auth: { persistSession: false, detectSessionInUrl: false, storageKey: 'onlyfast-stock-paywall-qa' } });
 let verified = false;

@@ -1,7 +1,7 @@
 // API verified against Median's official revenueCat plugin/types and demo.
-// Public hold is independent of environment flags. Release requires the approved
-// current offering and published paywall; RevenueCatUI owns products and prices.
-export const NATIVE_PURCHASES_READY = false;
+// Public activation authorized October 30, 2026. The master and per-platform
+// environment gates still control rollout; RevenueCatUI owns products and prices.
+export const NATIVE_PURCHASES_READY = true;
 export type NativeResult = { success: boolean; error?: { code?: string | number; message?: string } };
 export interface RevenueCatBridge {
   configure(params: { apiKey: string; appUserID: string }): Promise<NativeResult>;

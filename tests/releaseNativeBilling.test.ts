@@ -4,7 +4,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { ReleaseNativePurchaseController, validateStoreCatalog, ONLYFAST_OFFERING, type BillingRequest, type BillingReply, type StoreCatalog } from '../src/lib/releaseNativeBilling.ts';
 import { createAndroidBillingTransport } from '../src/lib/releaseNativeTransport.ts';
-import { NativePurchaseError, NATIVE_PURCHASES_READY } from '../src/lib/nativePurchaseController.ts';
+import { NativePurchaseError } from '../src/lib/nativePurchaseController.ts';
 const a='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',b='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 function catalog(platform: 'android'|'ios'='android'): StoreCatalog {
   return {offeringIdentifier:ONLYFAST_OFFERING,catalogToken:'synthetic-catalog',expiresAt:Date.now()+60000,packages:(['pro','teams'] as const).map(plan=>({
@@ -34,7 +34,6 @@ function harness(enabled=true){
  return{f,controller};
 }
 test('public hold blocks identity, catalog, purchases and restore without touching a bridge',async()=>{
- assert.equal(NATIVE_PURCHASES_READY,false);
  const{f,controller}=harness(false);await controller.setUser(a);
  await assert.rejects(controller.getCatalog(a),/coming soon/);
  await assert.rejects(controller.run(a,'purchase','pro',catalog()),/coming soon/);

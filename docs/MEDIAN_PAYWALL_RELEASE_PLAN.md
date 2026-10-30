@@ -1,5 +1,15 @@
 # OnlyFast: stock Median RevenueCat paywall release plan
 
+**October 30 public-launch authorization:** the owner explicitly authorized production
+activation/deployment. Source readiness is now true, with the master
+`VITE_REVENUECAT_ENABLED` and independent `VITE_REVENUECAT_ANDROID_ENABLED` /
+`VITE_REVENUECAT_IOS_ENABLED` build gates. Android is enabled; iOS remains gated until
+its Apple submission/reviewer readiness is resolved. The owner already made
+`onlyfast_monthly_v1` current; do not switch it again. Third-party AdMob remains off
+until mandatory consent/privacy requirements pass; Rookie house promotions remain.
+No customer purchase, membership row, Stripe path or backend authorization was changed.
+Earlier preparation/hold observations below are historical, not a renewed approval requirement.
+
 Prepared locally on `codex/median-paywall-simplification`, from production main `9ae29d685bc68c265ef2c363e0943acb49573c3e`. No native source was copied from either earlier development branch. No remote configuration, deployment, purchase, restore or store submission occurred.
 
 **Preparation update (October 18):** the Terms page is now implemented locally using the unchanged shared agreement. A separate stock-controller QA entry and offline local sync preparer are ready with store actions disabled. [The current sandbox procedure](../qa/median-paywall/README.md) uses a **per-customer offering override**, keeping the global `default` unchanged. It supersedes the earlier global-switch testing sequence and missing-QA-entry observations retained below. The public Terms URL still requires approved deployment, and no paywall link/override/publication was changed.

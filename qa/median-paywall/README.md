@@ -1,8 +1,14 @@
 # Stock Median paywall acceptance — preparation only
 
+**October 30 launch update:** public activation is now authorized and controlled per
+platform. The isolated QA entry does not depend on the production source hold staying
+false. It still requires its existing approved QA origin, fixed local backend, exact
+server-authorized synthetic account and explicit QA store-action approval. It remains
+excluded from production outputs. No new test transaction is authorized by this note.
+
 **Completed acceptance checkpoint (October 18):** Android stock sandbox purchase/restore passed previously. The existing stock iOS simulator subsequently passed paywall presentation, both plan selections, displayed prices/trial copy, Terms/Privacy and dismissal without a purchase/restore. See [the current acceptance status](../../docs/MEDIAN_PAYWALL_ACCEPTANCE_STATUS.md). A permitted temporary HTTPS session used `ONLYFAST_QA_PRESENTATION_ONLY=true`: restore controls and server subscription-sync requests were blocked. Runtime files now have an explicit allowlist; private source, editor, admin and diagnostic routes are denied. The tunnel and temporary QA services are stopped. The preparation-only observations below are historical; real Apple purchase/restore still needs separately approved device/TestFlight acceptance.
 
-This is a separate **serve-only QA web entry**, not a production route, native bridge, catalog diagnostic or second billing implementation. It imports the exact release `NativePurchaseController`. It never imports the production Supabase client/fallback endpoint. Production `NATIVE_PURCHASES_READY=false` stays unchanged. No account, override, paywall publication, purchase, restore, deployment, tunnel, native build or store upload was performed by this preparation.
+This is a separate **serve-only QA web entry**, not a production route, native bridge, catalog diagnostic or second billing implementation. It imports the exact release `NativePurchaseController`. It never imports the production Supabase client/fallback endpoint. QA authorization is independent of the production rollout flags. No account, override, paywall publication, purchase, restore, deployment, tunnel, native build or store upload was performed by this preparation.
 
 ## Tester-specific current offering
 
