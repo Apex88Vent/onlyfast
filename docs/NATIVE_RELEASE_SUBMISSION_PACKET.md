@@ -7,6 +7,11 @@ and third-party AdMob remain gated for unresolved Apple/privacy readiness; house
 promotions remain available. No store submission, customer membership edit, new
 purchase or production database change occurred. The earlier hold/approval wording
 below is historical and does not require renewed approval of authorized release work.
+
+**Android upload update:** the owner confirms **1.0.2 (61) is already uploaded to
+Google Play**. Do not rebuild or request another upload. Inspect the existing
+release's bundle status and errors/requirements, then its review/rollout status.
+The older upload instructions in this packet are superseded by this update.
 Use the original licensed [Median project](https://median.co/app/dcxfmcnr5b5jv3fh0zcj3cqj5c).
 Keep stock RevenueCat and the existing advertising controller. Historical native
 bridges and development backups remain untouched.
@@ -81,6 +86,7 @@ custom purchase bridge is selected by their inspected configuration.
 
 | Artifact under `tmp/final-production-release/native/` | Result |
 | --- | --- |
+| `OnlyFast-android-1.0.2-61.aab` | Final Android candidate: versionCode 61, versionName 1.0.2; local validation passed; owner confirms already uploaded to Google Play. Google acceptance/release status still needs the existing Console result. Do not rebuild or upload again. |
 | `OnlyFast-android-candidate.aab` | versionCode 58, versionName 1.0.0; bundletool validation passed; signed bundle. **Not the final version-name candidate.** |
 | `OnlyFast-ios-1.0.2-59.ipa` | bundle version 59, short version 1.0.2; signature files and provisioning profile present; production configuration inspected. Apple signature/processing acceptance is not established by Windows archive inspection. |
 
@@ -89,29 +95,25 @@ SHA-256 iOS: `9C6CAFAC2D66A8D1B359EAD3E96F026606A99C90D579D09AFFE2BE15A8DC6282`.
 Inspection evidence: `android-manifest.xml`, `android-bundle-validation.log`,
 `ios-artifact-inspection.json` in the same ignored directory.
 
-Android next version: **1.0.2**, per the owner's established release target. Play
-production was observed as code 34 (1.0.2). The final code must exceed the highest
-uploaded code across Play tracks, not only production. Median/Play UI access stopped
-before that maximum could be checked and before changing the Median version name.
-Do not patch the already signed AAB to change its version.
+Android **1.0.2 (61)** is downloaded, locally validated and **already uploaded**, per
+the owner. Its SHA-256 is
+`B9B9105E110163591D63AB55506D31E582D85775158FB7512D82BA60B2A02D41`.
+Do not rebuild, request another upload, or ask for the previous maximum code again.
+Google's existing upload/release validation is now the relevant acceptance evidence.
 
-Minimum manual step: original Median project → Android Version Name `1.0.2` → save
-and build Android only. Compare its new version code with Play's highest uploaded
-code, then validate the new AAB. Do not publish a Play production release.
+Manual status check: Play Console → OnlyFast → Test and release → Latest releases
+and bundles → **61**: inspect bundle status and assigned track. In the release that
+contains 61, open Review release and report its Errors and submission/review state.
+If no Production draft contains it, reuse the uploaded bundle through Production →
+Create new release → **Add from library** → 61. Do not transfer the file again.
+Google acceptance, declaration completeness and approval are not inferred from the
+owner's confirmation of upload. Connected plugin discovery found no suitable direct
+Play release/AdMob message editing integration; no release-specific acceptance notice
+was found in the connected mailbox. Chrome automation was not retried.
 
-Browser-free handoff: Play Console → OnlyFast → Test and release → Latest releases
-and bundles → record the highest uploaded version code across tracks. In Median,
-Build & Download → App Identifiers → Android Version Name `1.0.2` → Save, then the
-Android build card → Rebuild → download AAB. Keep package `app.onlyfast`, original
-signing and production startup URL unchanged.
-
-Local automatic validation is prepared in
-`tmp/final-production-release/Validate-Android-1.0.2.ps1`. Codex runs it with the
-new AAB path and the owner's confirmed highest uploaded Play code. It checks package,
-version name, strictly greater version code, non-debuggable manifest, official
-bundletool validation and JAR signature, then saves a SHA-256 evidence record.
-PowerShell syntax validation passed. It has **not** passed a new final AAB: that
-artifact still needs the manual Median build. It cannot upload or publish.
+The existing validator's passed local result is
+`tmp/final-production-release/android-1.0.2-61-validation.json`; earlier builds remain
+preserved. Store status is separate from local signing/package/configuration checks.
 
 ### Android photo picker — PREVIOUSLY VALIDATED — NO RETEST REQUIRED
 
@@ -183,6 +185,24 @@ guaranteed privacy-options presenter. Re-requesting consent from Settings is not
 proof of reopening saved choices. Native plugin behavior remains unverified; do
 not invent an SDK authorization field or rewrite the ad architecture to hide this.
 
+**Build-61 privacy-options finding:** targeted inspection of the actual stock native
+bytecode confirms the AdMob `/request/consent` route invokes `h7.g.j`, which requests
+UMP consent information. In `h7.a.onConsentInfoUpdateSuccess`, `canRequestAds()==true`
+immediately calls `h7.c.a(null)`. That callback reports success and returns without
+showing a form. The AdMob command handler has no separate privacy-options route.
+Consequently the existing Settings re-request cannot reopen stored choices once this
+eligibility branch is taken. This is a confirmed limitation of the exposed stock
+flow, not a request to repeat completed purchase or photo-picker tests.
+
+Manual Median request: original project → Support: ask for the **stock supported
+privacy-options reopening command** for the plugin embedded in build 61, and confirm
+UMP gating before every native ad preload/load. Publishing dashboard messages alone
+does not repair the missing reopening path. No custom bridge, native modification,
+rebuild or live-ad activation was performed. Native loading paths exist in the plugin;
+their complete lifecycle consent gating has not been certified by this inspection.
+Evidence: `tmp/final-production-release/native/consent-inspection/summary.json` and
+the extracted `class-Lh7_a_.txt`, `class-Lh7_c_.txt`, `class-Lh7_g_.txt`.
+
 | Data practice | Store worksheet selection to review | Evidence / remaining decision |
 | --- | --- | --- |
 | Account email and authenticated UUID | Contact information/email; user identifiers; app functionality/account management; linked to account | Auth/application code |
@@ -197,7 +217,8 @@ do not just mark advertising IDs while omitting the app's own data. Sharing,
 required/optional, retention, linkage and tracking questions must follow actual
 processing and store definitions. Do not blindly copy every SDK manifest flag into
 an assertion about every user. Apple App Privacy / Google Data Safety have not been
-updated in this task. The local Privacy Policy revision is prepared but undeployed.
+updated in this task. The revised Privacy Policy is deployed with production commit
+`f83e685f`; this does not publish the separate store declarations or AdMob messages.
 
 Sources:
 - https://developers.google.com/admob/android/privacy/play-data-disclosure

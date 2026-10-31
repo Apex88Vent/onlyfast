@@ -8,9 +8,10 @@ commit `f83e685f7421de07d3127a27dde61dbd00553dac`, deployment
 `dpl_8US34EM21Xyg7WhT9bJQSQDJngZW` (READY). The canonical alias was independently
 read back to this deployment and its served bundle inspected.
 
-- Android stock purchase/restore flow enabled in production; Google native release
-  **1.0.2 (61)** still requires manual Play upload/declarations/submission. A concise
-  upload request was sent to the owner; no upload or rollout is claimed.
+- Android stock purchase/restore flow enabled in production. The owner confirms
+  **1.0.2 (61) has already been uploaded to Google Play**. Do not request another
+  upload or rebuild. Bundle acceptance, the release error/requirement list and
+  review/rollout status remain unverified; upload is not a submission/approval claim.
 - RevenueCat **ACTIVE**, based on the owner's independently verified current offering
   `onlyfast_monthly_v1`; no offering write or repeated configuration audit was performed.
 - iOS public purchase gate remains off pending Apple submission/reviewer readiness.
@@ -20,6 +21,15 @@ read back to this deployment and its served bundle inspected.
 - AdMob master **false** until mandatory consent/privacy readiness. Rookie house
   promotions remain enabled independently; Pro/Teams remain ad-free. iOS's last
   confirmed AdMob state is limited/requires verification, not resolved.
+- Consent follow-up: build 61's stock consent route was inspected directly. Once
+  UMP `canRequestAds` is true, it returns success without reopening choices, and
+  the AdMob command handler exposes no separate privacy-options route. Median must
+  identify a supported reopening path; native preload/load gating also still needs
+  confirmation. Dashboard European/US messages and accurate store disclosures remain
+  outstanding/unconfirmed. No ad flags or production configuration were changed.
+- Apple store-state follow-up: both products are still `READY_TO_SUBMIT`, not approved;
+  saved review notes are present and the same 13,815-byte placeholder screenshot
+  remains on each. No purchase/restore testing or store-state write was repeated.
 - Existing Stripe, server verification/sandbox policy, memberships and customer purchases
   were not changed. No store transaction, native rebuild, Chrome automation or new QA
   infrastructure was performed. The existing isolated QA entry remains origin/account/
