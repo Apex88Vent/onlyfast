@@ -8,7 +8,7 @@ test('RevenueCat HTTP handlers authenticate, reject forged state and retry faile
   const other = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
   const env = new Map(Object.entries({
     REVENUECAT_WEBHOOK_AUTHORIZATION: 'Bearer webhook-secret', REVENUECAT_SECRET_API_KEY: 'secret-test',
-    REVENUECAT_APP_IDS: 'app_ios,app_android', SUPABASE_URL: 'https://example.invalid', SUPABASE_SERVICE_ROLE_KEY: 'service-test',
+    REVENUECAT_APP_IDS: 'app_ios,app_android,app82192c9834', SUPABASE_URL: 'https://example.invalid', SUPABASE_SERVICE_ROLE_KEY: 'service-test',
   }));
   const rpcCalls: Record<string, unknown>[] = [];
   const fetched: string[] = [];
@@ -37,8 +37,10 @@ test('RevenueCat HTTP handlers authenticate, reject forged state and retry faile
     },
   };
   host.Deno = { env: { get: (key: string) => env.get(key) }, serve(callback: typeof handler) { handler = callback; } };
-  globalThis.fetch = async input => {
+  globalThis.fetch = async (input, init) => {
     fetched.push(String(input));
+    assert.ok(String(input).startsWith('https://api.revenuecat.com/v1/subscribers/'));
+    assert.equal(new Headers(init?.headers).get('Authorization'), 'Bearer secret-test');
     return fetchFailure ? new Response('', { status: 503 }) :
       Response.json({ request_date_ms: Date.now(), subscriber: responseSubscriber });
   };
@@ -54,6 +56,12 @@ test('RevenueCat HTTP handlers authenticate, reject forged state and retry faile
   const request = (body: unknown, authorization = 'Bearer webhook-secret') => new Request('https://example.invalid', {
     method: 'POST', headers: { Authorization: authorization }, body: JSON.stringify(body),
   });
+  const appleSubscriber = (plan: 'pro' | 'teams') => {
+    const product = `app.onlyfast.${plan}.monthly`;
+    const future = new Date(Date.now() + 600_000).toISOString();
+    return { entitlements: { [plan === 'pro' ? 'OnlyFast Pro' : 'OnlyFast Teams']: { product_identifier: product, expires_date: future } },
+      subscriptions: { [product]: { store: 'app_store', is_sandbox: true, store_transaction_id: '1000000123456789', expires_date: future } } };
+  };
   try {
     await load('revenuecat-webhook');
     assert.equal((await handler!(request({ api_version: '1.0', event }, 'wrong'))).status, 401);
@@ -94,6 +102,22 @@ test('RevenueCat HTTP handlers authenticate, reject forged state and retry faile
         assert.equal((rpcCalls.at(-1)?.p_snapshot as { plan: string }).plan, plan);
       }
     }
+    for (const plan of ['pro', 'teams'] as const) {
+      responseSubscriber = appleSubscriber(plan);
+      const apple = { ...event, app_id: 'app82192c9834', store: 'APP_STORE', environment: 'SANDBOX' };
+      const beforeApple = rpcCalls.length;
+      assert.equal((await handler!(request({ api_version: '1.0', event: apple }, 'wrong'))).status, 401);
+      assert.equal(rpcCalls.length, beforeApple);
+      assert.equal((await handler!(request({ api_version: '1.0', event: { ...apple, app_id: 'app_android', store: 'PLAY_STORE' } }))).status, 200);
+      assert.equal(rpcCalls.length, beforeApple, 'Android sandbox remains ignored');
+      for (const type of ['INITIAL_PURCHASE', 'RENEWAL', 'CANCELLATION', 'PRODUCT_CHANGE']) {
+        assert.equal((await handler!(request({ api_version: '1.0', event: { ...apple, type } }))).status, 200);
+        assert.equal((rpcCalls.at(-1)?.p_snapshot as { plan: string }).plan, plan);
+      }
+      responseSubscriber = { entitlements: {}, subscriptions: {} };
+      assert.equal((await handler!(request({ api_version: '1.0', event: { ...apple, type: 'EXPIRATION' } }))).status, 200);
+      assert.equal((rpcCalls.at(-1)?.p_snapshot as { plan: string }).plan, 'free');
+    }
     responseSubscriber = { entitlements: {}, subscriptions: {} };
     assert.equal((await handler!(request({ api_version: '1.0', event: { ...event, type: 'EXPIRATION' } }))).status, 200);
     assert.equal((rpcCalls.at(-1)?.p_snapshot as { plan: string }).plan, 'free');
@@ -110,6 +134,15 @@ test('RevenueCat HTTP handlers authenticate, reject forged state and retry faile
     assert.equal(rpcCalls.at(-1)?.p_user_id, uid, 'caller cannot sync another account');
     assert.equal((rpcCalls.at(-1)?.p_snapshot as { plan: string }).plan, 'free', 'body never grants an entitlement');
     assert.equal((await response.json()).subscription.subscription_source, 'stripe', 'returns the effective database subscription');
+    for (const plan of ['pro', 'teams'] as const) {
+      responseSubscriber = appleSubscriber(plan);
+      assert.equal((await handler!(request({ action: 'restore', user_id: other, plan: 'forged' }, 'Bearer valid-user-token'))).status, 200);
+      assert.equal(rpcCalls.at(-1)?.p_user_id, uid);
+      assert.equal((rpcCalls.at(-1)?.p_snapshot as { plan: string }).plan, plan, 'restore sync uses only RevenueCat verified state');
+      responseSubscriber = { entitlements: {}, subscriptions: {} };
+      assert.equal((await handler!(request({ is_sandbox: true, store: 'app_store', plan }, 'Bearer valid-user-token'))).status, 200);
+      assert.equal((rpcCalls.at(-1)?.p_snapshot as { plan: string }).plan, 'free', 'sandbox claims in the request cannot grant access');
+    }
     rpcFailure = true;
     assert.equal((await handler!(request({}, 'Bearer valid-user-token'))).status, 502);
   } finally {

@@ -46,6 +46,60 @@ test('sandbox and non-native stores are excluded from production access', () => 
   assert.equal(mapRevenueCatSnapshot(subscriber('pro', { is_sandbox: true }), { ...config, allowSandbox: true }, now).plan, 'pro');
   assert.equal(mapRevenueCatSnapshot(subscriber('pro', { store: 'stripe' }), config, now).plan, 'free');
 });
+test('App Review accepts only provider-backed Apple sandbox Pro and Teams products', () => {
+  const review = revenueCatConfig(key => key === 'REVENUECAT_SECRET_API_KEY' ? 'server-test-key' : undefined);
+  assert.equal(review.allowSandbox, false, 'broad sandbox access remains off');
+  for (const [plan, entitlement, product] of [
+    ['pro', 'OnlyFast Pro', 'app.onlyfast.pro.monthly'],
+    ['teams', 'OnlyFast Teams', 'app.onlyfast.teams.monthly'],
+  ]) {
+    const body = { request_date_ms: now, subscriber: {
+      entitlements: { [entitlement]: { product_identifier: product, expires_date: '2026-10-24T12:00:00Z' } },
+      subscriptions: { [product]: { store: 'app_store', is_sandbox: true, store_transaction_id: '1000000123456789', expires_date: '2026-10-24T12:00:00Z' } },
+    } };
+    assert.equal(mapRevenueCatSnapshot(body, review, now).plan, plan);
+    assert.equal(mapRevenueCatSnapshot(body, review, now + 40 * 86400000).plan, 'free');
+    for (const invalid of [{ store: 'play_store' }, { store: 'test_store' }, { store: 'promotional' },
+      { store_transaction_id: null }, { store_transaction_id: '' }, { refunded_at: '2026-09-24' }]) {
+      const rejected = structuredClone(body);
+      Object.assign(rejected.subscriber.subscriptions[product], invalid);
+      assert.equal(mapRevenueCatSnapshot(rejected, review, now).plan, 'free');
+    }
+    const unknown = structuredClone(body);
+    unknown.subscriber.entitlements[entitlement].product_identifier = 'unapproved.product';
+    unknown.subscriber.subscriptions['unapproved.product'] = unknown.subscriber.subscriptions[product];
+    assert.equal(mapRevenueCatSnapshot(unknown, review, now).plan, 'free');
+    const missing = structuredClone(body);
+    Object.assign(missing.subscriber.subscriptions[product], { is_sandbox: undefined });
+    assert.throws(() => mapRevenueCatSnapshot(missing, review, now), /environment/);
+    const malformed = structuredClone(body);
+    malformed.subscriber.entitlements[entitlement].expires_date = 'not-a-date';
+    assert.throws(() => mapRevenueCatSnapshot(malformed, review, now), /expiration/);
+  }
+});
+
+test('Apple sandbox Teams retains both entitlements but cannot override a live production plan', () => {
+  const review = { ...config, allowAppleSandbox: true };
+  const product = 'app.onlyfast.teams.monthly';
+  const body = subscriber('team');
+  body.subscriber.entitlements.team.product_identifier = product;
+  body.subscriber.subscriptions[product] = { store: 'app_store', is_sandbox: true,
+    store_transaction_id: 1000000123456789, expires_date: '2026-10-24T12:00:00Z' };
+  body.subscriber.entitlements.pro = { ...body.subscriber.entitlements.team };
+  assert.equal(mapRevenueCatSnapshot(body, review, now).plan, 'teams');
+  assert.deepEqual(mapRevenueCatSnapshot(body, review, now).entitlement_ids, ['team', 'pro']);
+  const live = subscriber('pro', { store: 'play_store' });
+  Object.assign(body.subscriber.entitlements, live.subscriber.entitlements);
+  Object.assign(body.subscriber.subscriptions, live.subscriber.subscriptions);
+  const result = mapRevenueCatSnapshot(body, review, now);
+  assert.equal(result.plan, 'pro'); assert.equal(result.store, 'play_store');
+  assert.deepEqual(result.entitlement_ids, ['pro']);
+  const wrong = subscriber('team', { is_sandbox: true, store_transaction_id: '1000000123456789' });
+  wrong.subscriber.entitlements.team.product_identifier = 'app.onlyfast.pro.monthly';
+  wrong.subscriber.subscriptions['app.onlyfast.pro.monthly'] = wrong.subscriber.subscriptions.team_monthly;
+  assert.equal(mapRevenueCatSnapshot(wrong, review, now).plan, 'free', 'Pro cannot grant Teams');
+});
+
 test('malformed responses fail without producing a downgrade snapshot', () => {
   assert.throws(() => mapRevenueCatSnapshot({} as SubscriberResponse, config, now));
   for (const field of ['entitlements', 'subscriptions']) {

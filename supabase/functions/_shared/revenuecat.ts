@@ -4,12 +4,14 @@ export type RevenueCatConfig = {
   proEntitlement: string;
   teamEntitlement: string;
   allowSandbox: boolean;
+  allowAppleSandbox?: boolean;
 };
 
 type Entitlement = { product_identifier: string; expires_date: string | null; grace_period_expires_date?: string | null };
 type StoreSubscription = {
   store: string; is_sandbox: boolean; refunded_at?: string | null;
   expires_date: string | null; grace_period_expires_date?: string | null;
+  store_transaction_id?: string | number | null;
 };
 export type SubscriberResponse = {
   request_date_ms: number;
@@ -18,6 +20,18 @@ export type SubscriberResponse = {
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
+
+const appleProducts: Record<string, string> = {
+  pro: 'app.onlyfast.pro.monthly', teams: 'app.onlyfast.teams.monthly',
+};
+
+function isVerifiedAppleSandboxProduct(product: string, plan: string, subscription: StoreSubscription): boolean {
+  const transaction = subscription.store_transaction_id;
+  const matchesPlan = appleProducts[plan] === product || (plan === 'pro' && product === appleProducts.teams);
+  return subscription.store === 'app_store' && subscription.is_sandbox === true && matchesPlan &&
+    ((typeof transaction === 'string' && transaction.trim().length > 0) ||
+     (typeof transaction === 'number' && Number.isSafeInteger(transaction) && transaction > 0));
+}
 
 export function mapRevenueCatSnapshot(body: SubscriberResponse, config: RevenueCatConfig, now = Date.now()) {
   if (!isRecord(body?.subscriber?.entitlements) || !isRecord(body.subscriber.subscriptions) ||
@@ -28,8 +42,7 @@ export function mapRevenueCatSnapshot(body: SubscriberResponse, config: RevenueC
     { id: config.teamEntitlement, plan: 'teams' },
     { id: config.proEntitlement, plan: 'pro' },
   ];
-  const activeEntitlementIds: string[] = [];
-  let selected: { plan: string; status: string; product_id: string; store: string; expires_at: string; observed_at: string } | null = null;
+  const active: Array<{ id: string; sandbox: boolean; plan: string; status: string; product_id: string; store: string; expires_at: string; observed_at: string }> = [];
   for (const candidate of candidates) {
     const entitlement = body.subscriber.entitlements[candidate.id];
     if (entitlement === undefined) continue;
@@ -38,7 +51,9 @@ export function mapRevenueCatSnapshot(body: SubscriberResponse, config: RevenueC
     }
     const subscription = body.subscriber.subscriptions[entitlement.product_identifier];
     if (!subscription || !['app_store', 'play_store'].includes(subscription.store)) continue;
-    if (subscription.is_sandbox !== false && !config.allowSandbox) continue;
+    if (typeof subscription.is_sandbox !== 'boolean') throw new Error('Invalid RevenueCat store environment');
+    if (subscription.is_sandbox && !config.allowSandbox &&
+        !(config.allowAppleSandbox && isVerifiedAppleSandboxProduct(entitlement.product_identifier, candidate.plan, subscription))) continue;
     if (subscription.refunded_at) continue;
     // Only recurring store subscriptions are supported. Missing/null expiration
     // never becomes a lifetime grant. Grace keeps access until its actual end.
@@ -49,15 +64,22 @@ export function mapRevenueCatSnapshot(body: SubscriberResponse, config: RevenueC
     }
     const expires = Math.max(...dates.map(Date.parse));
     if (expires <= now) continue;
-    activeEntitlementIds.push(candidate.id);
-    selected ??= {
+    active.push({
+      id: candidate.id, sandbox: subscription.is_sandbox,
       plan: candidate.plan, status: 'active', product_id: entitlement.product_identifier,
       store: subscription.store,
       expires_at: new Date(expires).toISOString(),
       observed_at: new Date(body.request_date_ms).toISOString(),
-    };
+    });
   }
-  if (selected) return { ...selected, entitlement_ids: activeEntitlementIds };
+  // An existing live subscription always takes precedence over sandbox access.
+  // Within either environment, Teams retains its existing precedence over Pro.
+  const production = active.filter(item => !item.sandbox);
+  const grants = production.length ? production : active;
+  if (grants.length) {
+    const { id: _id, sandbox: _sandbox, ...selected } = grants[0];
+    return { ...selected, entitlement_ids: grants.map(item => item.id) };
+  }
   return { plan: 'free', status: 'expired', product_id: null, entitlement_ids: [],
     store: null, expires_at: null, observed_at: new Date(body.request_date_ms).toISOString() };
 }
@@ -67,7 +89,10 @@ export function revenueCatConfig(env: (key: string) => string | undefined): Reve
   const proEntitlement = env('REVENUECAT_PRO_ENTITLEMENT_ID') || 'OnlyFast Pro';
   const teamEntitlement = env('REVENUECAT_TEAM_ENTITLEMENT_ID') || 'OnlyFast Teams';
   if (!apiKey || proEntitlement === teamEntitlement) throw new Error('RevenueCat configuration missing or invalid');
-  return { apiKey, proEntitlement, teamEntitlement, allowSandbox: env('REVENUECAT_ALLOW_SANDBOX') === 'true' };
+  // App Review uses genuine Apple sandbox purchases. Only the exact products
+  // above, fetched with the server secret from RevenueCat, qualify for this path.
+  // The broad sandbox switch remains separate; Google Play behavior is unchanged.
+  return { apiKey, proEntitlement, teamEntitlement, allowSandbox: env('REVENUECAT_ALLOW_SANDBOX') === 'true', allowAppleSandbox: true };
 }
 
 export async function fetchRevenueCatSnapshot(userId: string, config: RevenueCatConfig) {

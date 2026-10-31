@@ -30,7 +30,9 @@ Deno.serve(async (req: Request) => {
     // still filter store and sandbox eligibility before any access is granted.
     const transfer = event.type === 'TRANSFER';
     if (!(transfer && !event.app_id) && !appIds.includes(String(event.app_id))) return json({ received: true, ignored: 'app' });
-    if (!(transfer && !event.environment) && event.environment !== 'PRODUCTION' && !(config.allowSandbox && event.environment === 'SANDBOX')) {
+    const appleSandbox = config.allowAppleSandbox && event.app_id === 'app82192c9834' && event.store === 'APP_STORE';
+    if (!(transfer && !event.environment) && event.environment !== 'PRODUCTION' &&
+        !(event.environment === 'SANDBOX' && (config.allowSandbox || appleSandbox))) {
       return json({ received: true, ignored: 'environment' });
     }
     const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
