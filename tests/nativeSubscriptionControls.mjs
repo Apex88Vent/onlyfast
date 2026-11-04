@@ -13,12 +13,17 @@ const free = () => ({ label: 'Free', plan: 'free', isPaid: false, isAdmin: false
 function setup(status, enabled = false) {
   const f = { status, enabled, storeCalls: [], syncCalls: 0, identity: 'tester', error: null, verified: 0 };
   globalThis.window = new EventTarget();
-  const code = ts.transpileModule(readFileSync(new URL('../src/components/NativeSubscriptionControls.tsx', import.meta.url), 'utf8'), {
-    compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2021, esModuleInterop: true },
-  }).outputText;
-  const mod = { exports: {} };
-  new Function('require', 'module', 'exports', code)(name => {
+  function compile(file) {
+    const code = ts.transpileModule(readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8'), {
+      compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2021, esModuleInterop: true },
+    }).outputText;
+    const mod = { exports: {} };
+    new Function('require', 'module', 'exports', code)(resolve, mod, mod.exports);
+    return mod.exports;
+  }
+  function resolve(name) {
     if (name === 'react' || name.startsWith('react/')) return require(name);
+    if (name === '@/hooks/useNativeSubscription') return compile('hooks/useNativeSubscription.ts');
     if (name === '@/lib/supabase') return { supabase: { auth: { getSession: async () => ({ data: { session: { user: { id: f.identity } } } }) } } };
     if (name === '@/lib/subscription') return { syncMembershipFromSubscription: async () => f.status,
       fetchUserSubscription: async () => f.status.row, deriveAccountStatus: () => f.status };
@@ -27,8 +32,8 @@ function setup(status, enabled = false) {
       nativePurchases: { setUser: async id => { f.storeCalls.push(['identify', id]); }, run: async (id, action) => { f.storeCalls.push([action, id]); if (f.error) throw f.error; } },
       syncNativeSubscription: async () => { f.syncCalls++; if (f.syncError) throw f.syncError; if (f.syncStatus) f.status = f.syncStatus; } };
     throw Error('Unexpected dependency ' + name);
-  }, mod, mod.exports);
-  return { f, Component: mod.exports.default };
+  }
+  return { f, Component: compile('components/NativeSubscriptionControls.tsx').default };
 }
 const paid = (store, plan = 'pro') => ({ label: plan === 'teams' ? 'Teams' : 'Pro', plan, isPaid: true, isAdmin: false,
   row: { plan, status: 'active', subscription_source: store === 'stripe' ? 'stripe' : 'revenuecat', revenuecat_store: store,

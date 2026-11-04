@@ -4,6 +4,7 @@ import path from 'path';
 
 // Explicitly selected review build only; vite.config.ts/production are unchanged.
 export default defineConfig({
+  define: { 'import.meta.env.VITE_REVENUECAT_ENABLED': JSON.stringify('false') },
   plugins: [react(), {
     name: 'onlyfast-review-html',
     configureServer(server) {
@@ -15,7 +16,9 @@ export default defineConfig({
     },
   }],
   resolve: { alias: [
+    { find: /^@\/lib\/(nativePurchases|paymentVisibility)$/, replacement: path.resolve(__dirname, 'src/dev/previewNativePurchases.ts') },
     { find: '@/lib/supabase', replacement: path.resolve(__dirname, 'src/dev/previewBackend.ts') },
+    { find: /^\.\/supabase$/, replacement: path.resolve(__dirname, 'src/dev/previewBackend.ts') },
     { find: '@', replacement: path.resolve(__dirname, 'src') },
   ] },
   build: { outDir: 'review-dist', emptyOutDir: true,

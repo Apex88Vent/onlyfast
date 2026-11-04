@@ -292,12 +292,12 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
             <button
               key={action}
               onClick={() => onAction(action)}
-              className="bg-white rounded-xl sm:rounded-2xl border border-[#E5E7EB] shadow-sm hover:shadow-md hover:border-[#00A8E8]/35 active:scale-[0.99] transition-all px-2 py-1 sm:p-6 min-h-[78px] sm:min-h-[200px] text-left grid grid-cols-[48px_minmax(0,1fr)] items-center justify-center gap-2 sm:flex sm:flex-col sm:text-center sm:gap-0 focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
+              className="bg-white rounded-xl sm:rounded-2xl border border-[#E5E7EB] shadow-sm hover:shadow-md hover:border-[#00A8E8]/35 active:scale-[0.99] transition-all px-2 py-1 sm:p-6 min-h-[78px] sm:min-h-[200px] text-left grid grid-cols-[48px_minmax(0,1fr)] items-center justify-center gap-2 max-[379px]:grid-cols-[32px_minmax(0,1fr)] max-[379px]:gap-1.5 sm:flex sm:flex-col sm:text-center sm:gap-0 focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
             >
-              <span className="h-12 w-12 sm:h-16 sm:w-16 flex items-center justify-center text-[#00A8E8]">
-                <Icon className="h-10 w-10 sm:h-16 sm:w-16" strokeWidth={2.2} aria-hidden="true" />
+              <span className="h-12 w-12 max-[379px]:w-8 sm:h-16 sm:w-16 flex items-center justify-center text-[#00A8E8]">
+                <Icon className="h-10 w-10 max-[379px]:h-8 max-[379px]:w-8 sm:h-16 sm:w-16" strokeWidth={2.2} aria-hidden="true" />
               </span>
-              <span className="block text-[18px] sm:text-[34px] font-semibold text-[#1A1B23] sm:mt-5 leading-tight">
+              <span className="block min-w-0 break-words text-[18px] max-[379px]:text-base sm:text-[34px] font-semibold text-[#1A1B23] sm:mt-5 leading-tight">
                 {label}
               </span>
             </button>

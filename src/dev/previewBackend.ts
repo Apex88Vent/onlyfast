@@ -4,6 +4,7 @@ import { EXPANDED_CLASS_CONFIGS } from '../lib/setupLibrary.ts';
 
 type Row = Record<string, any>;
 type Store = Pick<Storage, 'getItem' | 'setItem'>;
+export type PreviewPaidPlan = 'pro' | 'teams';
 const KEY = 'onlyfast_review_backend_v1';
 export const PREVIEW_USER_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 export const supabaseUrl = '/__onlyfast_preview';
@@ -20,6 +21,7 @@ export function createPreviewBackend(storage: Store) {
       onboarding_step: 'tutorial', onboarding_discipline: null, onboarding_race_class: null }] } as Record<string, Row[]>,
   });
   let db = fresh();
+  let pendingStorePlan: PreviewPaidPlan | null | undefined;
   try { db = JSON.parse(storage.getItem(KEY) || 'null') || db; } catch { /* first visit */ }
   const persist = () => storage.setItem(KEY, JSON.stringify(db));
   const listeners = new Set<(event: string, session: Row | null) => void>();
@@ -134,20 +136,49 @@ export function createPreviewBackend(storage: Store) {
       getSession: async () => ok({ session: session() }), getUser: async () => ok({ user: db.signedIn ? db.user : null }),
       refreshSession: async () => ok({ session: session() }), updateUser,
       onAuthStateChange: (listener: (event: string, session: Row | null) => void) => { listeners.add(listener); return { data: { subscription: { unsubscribe: () => listeners.delete(listener) } } }; },
-      signOut: async () => { db.signedIn = false; persist(); emit('SIGNED_OUT'); return ok(null); },
+      signOut: async () => { db.signedIn = false; pendingStorePlan = undefined; persist(); emit('SIGNED_OUT'); return ok(null); },
       signInWithPassword: async () => { db.signedIn = true; persist(); emit('SIGNED_IN'); return ok({ user: db.user, session: session() }); },
       signUp: async () => { db.signedIn = true; persist(); emit('SIGNED_IN'); return ok({ user: db.user, session: session() }); },
       resetPasswordForEmail: async () => fail('Password/email services are unavailable in this preview.'),
       signInWithOAuth: async () => fail('Use the included local test account in this preview.'),
     },
-    functions: { invoke: async () => fail('Live AI, OCR, payments, email, sharing and account services are unavailable in this isolated preview.') },
+    functions: { invoke: async (name?: string, options?: { headers?: Record<string, string> }) => {
+      if (name === 'sync-revenuecat-subscription' && db.signedIn && options?.headers?.Authorization === 'Bearer local-preview-only' && pendingStorePlan !== undefined) {
+        const plan = pendingStorePlan;
+        pendingStorePlan = undefined;
+        if (plan) {
+          Object.assign(subscription(), { plan, status: 'active', subscription_source: 'revenuecat',
+            revenuecat_store: 'play_store', revenuecat_expires_at: new Date(Date.now() + 86400000).toISOString() });
+          persist();
+        }
+        return ok({});
+      }
+      return fail('Live AI, OCR, payments, email, sharing and account services are unavailable in this isolated preview.');
+    } },
     storage: { from: () => ({ upload: async () => fail('Uploads require the live backend.'), getPublicUrl: () => ({ data: { publicUrl: '' } }) }) },
   };
-  return { supabase, reset: () => { db = fresh(); persist(); }, updateUser, rpc,
+  return { supabase, reset: () => { db = fresh(); pendingStorePlan = undefined; persist(); }, updateUser, rpc,
+    stageStoreVerification: (plan: PreviewPaidPlan | null) => { pendingStorePlan = plan; },
     getPlan: () => subscription().plan as 'free' | 'pro' | 'teams',
-    setPlan: (plan: 'free' | 'pro' | 'teams') => { Object.assign(subscription(), { plan, status: plan === 'free' ? 'inactive' : 'active' }); db.user.user_metadata.membership_tier = plan === 'teams' ? 'team' : plan === 'pro' ? 'pro' : 'rookie'; persist(); emit('USER_UPDATED'); } };
+    setPlan: (plan: 'free' | 'pro' | 'teams') => {
+      pendingStorePlan = undefined;
+      Object.assign(subscription(), { plan, status: plan === 'free' ? 'inactive' : 'active', subscription_source: null,
+        revenuecat_store: null, revenuecat_expires_at: null });
+      db.user.user_metadata.membership_tier = plan === 'teams' ? 'team' : plan === 'pro' ? 'pro' : 'rookie';
+      persist(); emit('USER_UPDATED');
+    } };
 }
 
 const memory = new Map<string, string>();
-export const previewBackend = createPreviewBackend(typeof window === 'undefined' ? { getItem: key => memory.get(key) || null, setItem: (key, value) => { memory.set(key, value); } } : window.localStorage);
+const checkoutModeKey = 'onlyfast-review-checkout';
+function isCheckoutPreview() {
+  if (typeof window === 'undefined') return false;
+  const mode = new URLSearchParams(window.location.search).get('checkoutPreview');
+  if (mode === '1' || mode === '0') window.sessionStorage.setItem(checkoutModeKey, mode);
+  return window.sessionStorage.getItem(checkoutModeKey) === '1';
+}
+export const checkoutPreviewEnabled = isCheckoutPreview();
+export const previewBackend = createPreviewBackend(typeof window === 'undefined'
+  ? { getItem: key => memory.get(key) || null, setItem: (key, value) => { memory.set(key, value); } }
+  : checkoutPreviewEnabled ? window.sessionStorage : window.localStorage);
 export const supabase = previewBackend.supabase;

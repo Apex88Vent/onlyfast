@@ -1,17 +1,16 @@
 import { setupClassLabel } from '@/lib/setupLibrary';
 import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowUpRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import SettingsModal from './SettingsModal';
 import AppMenu, { MenuAction } from './AppMenu';
-import { fetchUserSubscription, deriveAccountStatus } from '@/lib/subscription';
+import { getTrustedMembership } from '@/lib/trustedMembership';
 import { resetTestAccountData } from '@/lib/testAccount';
 import { useBetaFeatures } from '@/hooks/useBetaFeatures';
+import { useMembershipRevision } from '@/hooks/useMembershipRevision';
 import { BETA_FEATURES } from '@/lib/betaFeatures';
-
-// Display label for the membership badge shown next to the user's name.
-type PlanLabel = 'Rookie' | 'Pro' | 'Team' | 'Admin';
-
 
 interface HeaderProps {
   user: User | null;
@@ -33,7 +32,8 @@ const getNickname = (user: User | null, override?: string): string => {
 };
 
 const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBackToCarSelect, onOpenHowOnlyFastWorks }) => {
-  const { hasBetaFeature, testerKind } = useBetaFeatures();
+  const navigate = useNavigate();
+  const { hasBetaFeature, loading: betaAccessLoading, testerKind } = useBetaFeatures();
   const hasExperimentalFullAccess =
     testerKind === 'experimental' &&
     hasBetaFeature(BETA_FEATURES.testAccountFullAccess);
@@ -42,37 +42,23 @@ const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBac
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeView, setActiveView] = useState<string>('home');
   const [nicknameOverride, setNicknameOverride] = useState<string>('');
-  const [planLabel, setPlanLabel] = useState<PlanLabel | null>(null);
+  useMembershipRevision();
+  const membership = user ? getTrustedMembership(user.id) : null;
+  const planLabel = !membership ? null
+    : hasExperimentalFullAccess ? 'Team'
+    : membership.has_admin_full_access ? 'Admin'
+    : membership.membership_tier === 'team' ? 'Team'
+    : membership.membership_tier === 'pro' ? 'Pro'
+    : 'Rookie';
   const dropdownRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   // DEV/DEMO: shows "Resetting test account…" while the test account is reset on logout.
   const [resettingTestAccount, setResettingTestAccount] = useState(false);
 
-  // Resolve the membership label (Rookie/Pro/Team/Admin) from user_subscriptions.
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      if (!user) { setPlanLabel(null); return; }
-      try {
-        const row = await fetchUserSubscription(user.id);
-        const status = deriveAccountStatus(row, user.user_metadata || {});
-        const label: PlanLabel =
-          status.label === 'Admin' ? 'Admin'
-          : status.label === 'Teams' ? 'Team'
-          : status.label === 'Pro' ? 'Pro'
-          : 'Rookie';
-        if (!cancelled) setPlanLabel(label);
-      } catch {
-        if (!cancelled) setPlanLabel('Rookie');
-      }
-    };
-    load();
-    const onUpdated = () => load();
-    window.addEventListener('subscription-updated', onUpdated);
-    window.addEventListener('membership-updated', onUpdated);
-    return () => { cancelled = true; window.removeEventListener('subscription-updated', onUpdated); window.removeEventListener('membership-updated', onUpdated); };
-  }, [hasExperimentalFullAccess, user]);
-
+  const handleUpgrade = () => {
+    setShowDropdown(false);
+    navigate('/pricing');
+  };
 
   const handleSignOut = async () => {
     setShowDropdown(false);
@@ -256,7 +242,23 @@ const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBac
                             <p className="text-xs text-[#9CA3AF]">Signed in as</p>
                             <p className="text-sm font-medium text-[#1A1B23] truncate">{nickname}</p>
                             <p className="text-[10px] text-[#9CA3AF] truncate">{user.email}</p>
+                            {planLabel && planLabel !== 'Rookie' && (
+                              <p className="mt-1 text-xs font-semibold text-[#4B5563]">Current plan · {planLabel}</p>
+                            )}
                           </div>
+                          {planLabel === 'Rookie' && !betaAccessLoading && (
+                            <div className="m-1" role="none">
+                              <button
+                                type="button"
+                                onClick={handleUpgrade}
+                                role="menuitem"
+                                className="flex w-full items-center gap-2 rounded-md bg-[#EAF7FC] px-3 py-2.5 text-left text-sm font-semibold text-[#00658B] hover:bg-[#D7EEF8] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#00A8E8]"
+                              >
+                                <ArrowUpRight size={16} aria-hidden="true" />
+                                Upgrade to Pro
+                              </button>
+                            </div>
+                          )}
                           <button
                             onClick={() => { setShowDropdown(false); setSettingsOpen(true); }}
                             role="menuitem"

@@ -1,5 +1,45 @@
 # OnlyFast production release checkpoint — October 30, 2026 (Pacific)
 
+## October 31 — Apple review sandbox server fix deployed
+
+Commit `66c46fd29a889ce1a51e612c055f88507cde0d74` is pushed to main. Both existing
+Supabase billing functions are ACTIVE at version 7 with source readback matching
+the tested files. Genuine RevenueCat Apple sandbox subscriptions for the exact
+OnlyFast Pro/Teams products now qualify with a store transaction ID, valid active
+expiry/grace and no refund. Authentication and server-secret RevenueCat fetching
+are unchanged; request bodies cannot grant access. Live production grants take
+precedence; Android rules and Stripe provider projection are preserved.
+
+The existing RevenueCat webhook's environment filter changed from production-only
+to both environments; server app/store/product filtering remains enforced. No
+historical events were replayed, customer records manually edited, or transactions
+performed. Forty focused unit/handler/UI/Postgres checks, scoped ESLint and TypeScript
+passed. Live forged/missing-auth requests returned 401, and the database grant RPC
+remains service-role-only. Purchase and Restore both use the corrected verifier;
+actual iPhone purchase/restore and Apple review are not marked passed. No native
+rebuild, web change or Vercel deployment was required. This resolves the blanket
+Apple sandbox exclusion recorded below; store submission materials remain separate.
+
+## October 31 — public iOS purchase flow activated
+
+Owner explicitly authorized iOS purchasing for all eligible users. Changed only
+production `VITE_REVENUECAT_IOS_ENABLED` from false to true and deployed existing
+commit `494abb981be6ab5808467f526832fea8690b1f9a`; no application source/native change.
+Deployment `dpl_GLzaxvX6vWkDsgDxJLnt459RbTLH` is READY and assigned to onlyfast.app.
+Canonical served bundle confirms Android + iOS purchase gates on and AdMob mode off.
+Existing Stripe, SDK keys, server verification and memberships are unchanged.
+
+Published paywall revision 12 contains both selectable store-bound monthly packages;
+live Apple store state via RevenueCat confirms US Pro USD 5 and Teams USD 8, both
+`READY_TO_SUBMIT`. These are not production-approved products. Restore is enabled
+through the stock bridge; physical iPhone restore remains unverified. The existing
+verifier excludes sandbox entitlements by default, so App Review sandbox benefit
+activation still needs resolution; no reviewer exception or sandbox policy change
+was introduced. Both review screenshots remain the recorded placeholder; build 62
+association, reviewer credentials, privacy and agreements are not certified here.
+Evidence: `tmp/final-production-release/live-ios-activation-20261031/verification.json`.
+This update supersedes the iOS-off/deployment statements below.
+
 ## Current production launch — final authorization executed
 
 The owner explicitly authorized public release and deployment on October 30, superseding
@@ -10,8 +50,12 @@ read back to this deployment and its served bundle inspected.
 
 - Android stock purchase/restore flow enabled in production. The owner confirms
   **1.0.2 (61) has already been uploaded to Google Play**. Do not request another
-  upload or rebuild. Bundle acceptance, the release error/requirement list and
-  review/rollout status remain unverified; upload is not a submission/approval claim.
+  upload or rebuild. The owner has reached Review release and reports **one blocking
+  issue: Incomplete advertising ID declaration**. No bundle/version/signature error
+  was reported on that screen. The app has not yet been sent for review; completing
+  the declaration is the current concrete Play submission blocker.
+  Required answer: Yes (bundled AdMob SDK and AD_ID permission); SDK purposes include
+  advertising/marketing, analytics, and fraud prevention/security/compliance.
 - RevenueCat **ACTIVE**, based on the owner's independently verified current offering
   `onlyfast_monthly_v1`; no offering write or repeated configuration audit was performed.
 - iOS public purchase gate remains off pending Apple submission/reviewer readiness.
@@ -25,8 +69,13 @@ read back to this deployment and its served bundle inspected.
   UMP `canRequestAds` is true, it returns success without reopening choices, and
   the AdMob command handler exposes no separate privacy-options route. Median must
   identify a supported reopening path; native preload/load gating also still needs
-  confirmation. Dashboard European/US messages and accurate store disclosures remain
-  outstanding/unconfirmed. No ad flags or production configuration were changed.
+  confirmation. Applicable US-state messages and accurate store disclosures remain
+  outstanding/unconfirmed. The owner has **deferred European advertising**: do not
+  request European-message setup as a current launch task. European ad display remains
+  disabled by the existing global AdMob-off setting. No US-only regional serving
+  restriction has been implemented or verified; broad activation must not implicitly
+  enable EEA/UK/Swiss traffic. US privacy-options readiness remains separate from Europe.
+  No ad flags or production configuration were changed.
 - Apple store-state follow-up: both products are still `READY_TO_SUBMIT`, not approved;
   saved review notes are present and the same 13,815-byte placeholder screenshot
   remains on each. No purchase/restore testing or store-state write was repeated.

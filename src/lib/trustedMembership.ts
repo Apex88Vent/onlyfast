@@ -48,7 +48,8 @@ export function setTrustedAuthorization(userId: string, row: Subscription | null
   advertisingVerifiedAt = Date.now();
   changed();
 }
-export function getTrustedMembership(): MembershipState | null {
+export function getTrustedMembership(userId: string | null = activeUser): MembershipState | null {
+  if (userId !== activeUser) return null;
   return authorization ? resolveAuthorizedMembership(authorization.row, authorization.grants) : null;
 }
 

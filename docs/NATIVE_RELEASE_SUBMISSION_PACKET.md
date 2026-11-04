@@ -1,5 +1,21 @@
 # OnlyFast native submission packet — October 30, 2026 (Pacific)
 
+**Apple sandbox fix deployed October 31:** both existing Supabase billing functions
+are version 7 (commit `66c46fd2`). Verified active Apple sandbox Pro/Teams purchases
+and restore sync now qualify; client claims, wrong stores/products, refunds and
+expired entitlements do not. RevenueCat delivers both production and sandbox events;
+the server still filters them. No native/web rebuild or customer-data test writes.
+This resolves the sandbox-exclusion blocker below; real iPhone acceptance is unverified.
+
+**October 31 iOS activation:** owner authorized the stock purchase/restore flow for
+all eligible iOS users. Production iOS flag is true; existing source deployed at
+onlyfast.app (`dpl_GLzaxvX6vWkDsgDxJLnt459RbTLH`, READY). Android stays on; AdMob stays
+off. No native rebuild or application code change. Both Apple subscriptions remain
+`READY_TO_SUBMIT` (US USD 5 / USD 8 monthly); approval is separate from the enabled
+app gate. Physical restore and App Review sandbox benefit activation remain
+unverified/unresolved; the server's sandbox-exclusion default was not changed.
+This supersedes the iOS billing hold in earlier records below.
+
 **Launch update:** the owner authorized public release October 30. The prepared web
 candidate plus Android stock billing activation is now deployed at onlyfast.app
 (code `f83e685f`, deployment `dpl_8US34EM21Xyg7WhT9bJQSQDJngZW`). iOS public billing
@@ -12,6 +28,21 @@ below is historical and does not require renewed approval of authorized release 
 Google Play**. Do not rebuild or request another upload. Inspect the existing
 release's bundle status and errors/requirements, then its review/rollout status.
 The older upload instructions in this packet are superseded by this update.
+
+**Current Play error supplied by owner:** Review release shows one issue preventing
+submission: **Incomplete advertising ID declaration**. Complete OnlyFast → Policy
+and programs → App content → Advertising ID → Start/Manage. Answer **Yes**, including
+SDK use, and select the AdMob SDK purposes: **Advertising or marketing**, **Analytics**,
+and **Fraud prevention, security and compliance**. Save and return to Review release
+to confirm this issue clears. Build 61 already declares AD_ID; no new binary is needed.
+Submission/approval is not claimed until the Console confirms the new status.
+
+**European advertising deferred by owner:** keep EEA/UK/Swiss ad display disabled;
+European-message creation is not a current action request. Existing AdMob-off state
+does disable all third-party ad display, including Europe. Before any US-only live
+activation, a supported reliable regional exclusion is needed; targeting a US-only
+mediation group alone does not prevent AdMob's default group from filling other
+countries. US-state privacy choices and the native privacy-options blocker remain.
 Use the original licensed [Median project](https://median.co/app/dcxfmcnr5b5jv3fh0zcj3cqj5c).
 Keep stock RevenueCat and the existing advertising controller. Historical native
 bridges and development backups remain untouched.

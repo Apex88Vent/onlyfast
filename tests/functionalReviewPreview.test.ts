@@ -69,3 +69,28 @@ test('local plan simulation preserves vehicle cooldowns; reset restores slide on
   assert.equal(backend.getPlan(), 'free');
   assert.ok((await db.functions.invoke()).error);
 });
+
+test('review checkout changes only the local subscription after the authenticated sync handoff', async () => {
+  const { backend } = fixture();
+  const sync = (token: string) => backend.supabase.functions.invoke('sync-revenuecat-subscription', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  assert.ok((await sync('local-preview-only')).error);
+  for (const plan of ['pro', 'teams'] as const) {
+    backend.reset();
+    backend.stageStoreVerification(plan);
+    assert.equal(backend.getPlan(), 'free');
+    assert.ok((await sync('wrong-token')).error);
+    assert.equal(backend.getPlan(), 'free');
+    assert.equal((await sync('local-preview-only')).error, null);
+    assert.equal(backend.getPlan(), plan);
+    const { data } = await backend.supabase.from('user_subscriptions').select().maybeSingle();
+    assert.equal(data.subscription_source, 'revenuecat');
+    assert.ok(Date.parse(data.revenuecat_expires_at) > Date.now());
+    assert.ok((await sync('local-preview-only')).error);
+  }
+  backend.setPlan('free');
+  backend.stageStoreVerification(null);
+  assert.equal((await sync('local-preview-only')).error, null);
+  assert.equal(backend.getPlan(), 'free');
+});
