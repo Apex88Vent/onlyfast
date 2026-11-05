@@ -272,74 +272,23 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
     telemetryStatusRefresh,
   ]);
 
-  const activeTelemetrySessionId =
-    onlyLapsTelemetryEnabled && onlyfastSessionId
-      ? onlyfastSessionId
-      : undefined;
-
-  // ------------------------------------------------------------------
-  // SETUP-ASSIST USAGE LIMIT (centralized via checkSetupAssistPermission)
-  // ------------------------------------------------------------------
-  // The effective tier resolves experimental full-access / admin / promo to 'team' and
-  // Pro to 'pro' — both are 'unlimited', so they bypass every check here.
-  // Only Rookie (limit = 1 per race weekend) is ever gated.
-
-  const effectiveTier = () => getEffectiveTier(readMembership(user?.user_metadata || {}));
-
-  const scopeKey = () => (raceWeekendKey || '').trim();
-
-  // Read how many assists this race weekend has already consumed for this user.
-  const fetchAssistUsage = async (key: string): Promise<number> => {
-    if (!user) return 0;
-    try {
-      const { data } = await supabase
-        .from('setup_assist_usage')
-        .select('used_count')
-        .eq('user_id', user.id)
-        .eq('race_weekend_key', key)
-        .maybeSingle();
-      return data?.used_count ?? 0;
-    } catch {
-      // If the lookup fails we DO NOT fabricate usage; default to 0 so a
-      // transient error never wrongly blocks a paid feature.
-      return 0;
-    }
+  const pendingRequestIds = useRef(new Map<string, string>());
+  const requestIdentity = (payload: Record<string, unknown>) => {
+    const key = JSON.stringify({ userId: user?.id, ...payload });
+    let id = pendingRequestIds.current.get(key);
+    if (!id) { id = crypto.randomUUID(); pendingRequestIds.current.set(key, id); }
+    return { request_id: id, request_key: key };
   };
 
-  /**
-   * Gate an assist request. Returns { allowed, key } where key is the usage
-   * scope to record against on success. When blocked, sets an inline notice
-   * and returns allowed=false (no AI call, nothing consumed).
-   */
-  const gateAssist = async (): Promise<{ allowed: boolean; key: string }> => {
+  const gateAssist = async () => {
     setAssistNotice('');
-    const tier = effectiveTier();
-
-    // Non-signed-in users can't save race weekends and have no usage scope —
-    // ask them to sign in so their single free assist can be tracked.
-    if (!user) {
-      setAssistNotice('Sign in to use your free OnlyFast Setup Assist.');
-      return { allowed: false, key: '' };
-    }
-
-    // Setup Assist needs a saved race weekend so the server can enforce usage safely.
-    const key = scopeKey();
-    if (!key) {
+    if (!user || !onlyfastSessionId) {
       setAssistNotice('Save your race weekend first to use your free Setup Assist for it.');
       return { allowed: false, key: '' };
     }
-
-    if (checkSetupAssistPermission(tier, 0).allowed && tier !== 'rookie') {
-      return { allowed: true, key };
-    }
-
-    const used = await fetchAssistUsage(key);
-    const perm = checkSetupAssistPermission(tier, used);
-    if (!perm.allowed) {
-      setAssistNotice(perm.upgradeText);
-      return { allowed: false, key };
-    }
-    return { allowed: true, key };
+    // The server resolves ownership, immutable weekend identity and quota.
+    // A retry must reach it even when a previous response was lost.
+    return { allowed: true, key: onlyfastSessionId };
   };
 
   // Try to extract a useful, user-visible error message from a
@@ -435,6 +384,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
         setLoading(false);
         return;
       }
+      const identity = requestIdentity({ session: onlyfastSessionId, setupData, entryHandling, midHandling, exitHandling, question: '' });
       const { data, error } = await supabase.functions.invoke('get-suggestions', {
         headers: { Authorization: `Bearer ${accessToken}` },
         body: {
@@ -444,11 +394,12 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
           currentSetup: setupData,
           raceClass,
           discipline,
-          race_weekend_key: gate.key,
-          onlyfast_session_id: activeTelemetrySessionId,
+          request_id: identity.request_id,
+          onlyfast_session_id: onlyfastSessionId,
         }
       });
       if (data?.suggestion) {
+        pendingRequestIds.current.delete(identity.request_key);
         setSuggestions(data.suggestion);
         setSuggestionsReady(true);
         if (!error && typeof data.suggestion === 'string' && data.suggestion.trim() && adScope === assistAdScope.current) {
@@ -502,6 +453,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
         setWhatIfLoading(false);
         return;
       }
+      const identity = requestIdentity({ session: onlyfastSessionId, setupData, entryHandling, midHandling, exitHandling, question: whatIfQuestion.trim() });
       const { data, error } = await supabase.functions.invoke('get-suggestions', {
         headers: { Authorization: `Bearer ${accessToken}` },
         body: {
@@ -512,11 +464,12 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
           raceClass,
           discipline,
           whatIfQuestion: whatIfQuestion.trim(),
-          race_weekend_key: gate.key,
-          onlyfast_session_id: activeTelemetrySessionId,
+          request_id: identity.request_id,
+          onlyfast_session_id: onlyfastSessionId,
         }
       });
       if (data?.suggestion) {
+        pendingRequestIds.current.delete(identity.request_key);
         setWhatIfResponse(data.suggestion);
         setWhatIfReady(true);
         if (!error && typeof data.suggestion === 'string' && data.suggestion.trim() && adScope === assistAdScope.current) {
@@ -565,7 +518,8 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
   };
 
   return (
-    <section className="bg-white rounded-2xl border border-[#E5E7EB] p-6 shadow-sm" aria-labelledby="setup-assist-heading">
+    <section className="bg-white rounded-2xl border border-[#E5E7EB] p-6 shadow-sm" aria-labelledby="setup-assist-heading"
+      data-house-interstitial-unsafe={suggestionsReady || (whatIfMode && whatIfReady) ? '' : undefined}>
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h3 id="setup-assist-heading" className="text-lg font-bold text-[#1A1B23] flex items-center gap-2">

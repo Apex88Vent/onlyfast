@@ -275,6 +275,7 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
       race_date: group.raceDate || null,
       race_class: group.raceClass || 'Open',
       race_schedule_id: group.setups.find(s => norm(s.race_schedule_id))?.race_schedule_id || null,
+      ...(group.setups.find(s => s.race_weekend_id)?.race_weekend_id ? { race_weekend_id: group.setups.find(s => s.race_weekend_id).race_weekend_id } : {}),
     };
     const { data, error } = await supabase
       .from('race_setups')

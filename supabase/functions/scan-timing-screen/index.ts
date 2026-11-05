@@ -1,4 +1,6 @@
 // Required secrets:
+// Phase 1 requires the reviewed SQL and bundling ../_shared alongside this
+// function directory. Pasting index.ts alone cannot install the quota protocol.
 // - OPENAI_API_KEY
 // - SUPABASE_URL
 // - SUPABASE_ANON_KEY
@@ -64,6 +66,7 @@
 // @ts-ignore - Deno-style import, valid inside the Supabase edge runtime
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { resolveServerMembership, reserveUsage, finishUsage, releaseUsage, type UsageReservation } from '../_shared/usage-authorization.ts';
 import { hasBetaFeatureForUser } from '../_shared/beta-features.ts';
 
 const FUNCTION_VERSION = 'scan-v3-testmode';
@@ -129,142 +132,8 @@ function isResponse(value: AuthContext | Response): value is Response {
   return value instanceof Response;
 }
 
-function normalizePlan(plan: unknown): MembershipTier | 'free' {
-  const value = String(plan || '').trim().toLowerCase();
-  if (value === 'team' || value === 'teams') return 'team';
-  if (value === 'pro') return 'pro';
-  return 'free';
-}
-
 async function resolveEffectiveTier(admin: any, user: any): Promise<MembershipTier> {
-  const email = String(user?.email || '').trim().toLowerCase();
-  const adminEmails = String(Deno.env.get('ONLYFAST_ADMIN_EMAILS') || '')
-    .split(',')
-    .map((v) => v.trim().toLowerCase())
-    .filter(Boolean);
-
-  if (
-    await hasBetaFeatureForUser(
-      admin,
-      user.id,
-      'test_account_full_access',
-      'experimental',
-    )
-  ) {
-    return 'team';
-  }
-  if (email && adminEmails.includes(email)) return 'team';
-  if (user?.app_metadata?.has_admin_full_access === true) return 'team';
-  // User-editable metadata must never authorize paid access.
-  const grant = user?.app_metadata || {};
-  const grantActive = !grant.promo_access_expires_at || Date.parse(grant.promo_access_expires_at) > Date.now();
-  const grantLevel = grantActive ? String(grant.promo_access_level || '').toLowerCase() : '';
-  if (['team', 'teams', 'admin', 'admin_full_access'].includes(grantLevel)) return 'team';
-
-  const { data, error } = await admin
-    .from('user_subscriptions')
-    .select('plan, status, subscription_source, revenuecat_expires_at')
-    .eq('user_id', user.id)
-    .maybeSingle();
-
-  if (error) throw error;
-  if (!data) return grantLevel === 'pro' ? 'pro' : 'rookie';
-
-  const nativeExpired = data.subscription_source === 'revenuecat' && !(Date.parse(data.revenuecat_expires_at) > Date.now());
-  if (nativeExpired) return grantLevel === 'pro' ? 'pro' : 'rookie';
-  const status = String(data.status || '').trim().toLowerCase();
-  if (status !== 'active' && status !== 'trialing') return grantLevel === 'pro' ? 'pro' : 'rookie';
-
-  const plan = normalizePlan(data.plan);
-  if (plan === 'team') return 'team';
-  if (plan === 'pro' || grantLevel === 'pro') return 'pro';
-  return 'rookie';
-}
-
-function usageMonthKey(now = new Date()): string {
-  const year = now.getUTCFullYear();
-  const month = String(now.getUTCMonth() + 1).padStart(2, '0');
-  return `${year}-${month}`;
-}
-
-async function enforceTimingScanUsage(
-  admin: any,
-  userId: string,
-  tier: MembershipTier,
-  monthKey: string,
-): Promise<Response | null> {
-  if (tier !== 'rookie') return null;
-
-  const { data, error } = await admin
-    .from('timing_scan_usage')
-    .select('used_count')
-    .eq('user_id', userId)
-    .eq('usage_month', monthKey)
-    .maybeSingle();
-
-  if (error) {
-    return json({
-      success: false,
-      stage: 'timing-limit',
-      error: 'Could not verify your timing scan limit. Please try again.',
-    }, 503);
-  }
-
-  const used = Number(data?.used_count || 0);
-  if (used >= ROOKIE_TIMING_SCANS_PER_MONTH) {
-    return json({
-      success: false,
-      stage: 'timing-limit',
-      error: `Rookie accounts include ${ROOKIE_TIMING_SCANS_PER_MONTH} timing scans per month. Upgrade to Pro for unlimited timing scans.`,
-      code: 'timing_scan_limit',
-    }, 429);
-  }
-  return null;
-}
-
-async function recordTimingScanUsage(
-  admin: any,
-  userId: string,
-  tier: MembershipTier,
-  monthKey: string,
-): Promise<Response | null> {
-  if (tier !== 'rookie') return null;
-
-  const { data, error: readError } = await admin
-    .from('timing_scan_usage')
-    .select('used_count')
-    .eq('user_id', userId)
-    .eq('usage_month', monthKey)
-    .maybeSingle();
-  if (readError) {
-    return json({
-      success: false,
-      stage: 'timing-limit',
-      error: 'Could not update your timing scan usage. Please try again.',
-    }, 503);
-  }
-
-  const used = Number(data?.used_count || 0);
-  const { error: writeError } = await admin
-    .from('timing_scan_usage')
-    .upsert(
-      {
-        user_id: userId,
-        usage_month: monthKey,
-        used_count: used + 1,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'user_id,usage_month' },
-    );
-
-  if (writeError) {
-    return json({
-      success: false,
-      stage: 'timing-limit',
-      error: 'Could not update your timing scan usage. Please try again.',
-    }, 503);
-  }
-  return null;
+  return resolveServerMembership(admin, user);
 }
 
 // Hardcoded test-mode payload. Returned verbatim when body.testMode === true.
@@ -353,10 +222,16 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   // ── Config ──────────────────────────────────────────────────────────────
-  const tier = await resolveEffectiveTier(auth.admin, auth.user);
-  const monthKey = usageMonthKey();
-  const usageError = await enforceTimingScanUsage(auth.admin, auth.user.id, tier, monthKey);
-  if (usageError) return usageError;
+  let reservation: UsageReservation | null = null;
+  try {
+  await resolveEffectiveTier(auth.admin, auth.user);
+  const usage = await reserveUsage(auth.admin, auth.user, 'timing', body);
+  if (usage.status === 'complete') return json(usage.response, 200);
+  if (usage.status === 'limit') return json({
+    success: false, stage: 'timing-limit', error: 'Rookie accounts include 2 timing scans per month. Upgrade to Pro for unlimited timing scans.', code: 'timing_scan_limit',
+  }, 429);
+  if (!usage.reservation) return json({ success: false, stage: 'timing-limit', error: 'This request is already processing or its ID belongs to a different request. Please retry shortly.' }, 409);
+  reservation = usage.reservation;
 
   // @ts-ignore - Deno global
   const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
@@ -545,19 +420,15 @@ If a field is not visible, return null (or [] / "" for arrays/strings) and list 
       parsed.starting_position - parsed.finish_position;
   }
 
-  const recordError = await recordTimingScanUsage(auth.admin, auth.user.id, tier, monthKey);
-  if (recordError) return recordError;
-
-  return json(
-    {
-      success: true,
-      stage: 'ok',
-      parsed_data: parsed,
-      // mirror common keys at the top level for older frontend code
-      ...parsed,
-      model_used: 'gpt-4o-mini',
-      provider: 'openai',
-    },
-    200,
-  );
+  const result = {
+    success: true, stage: 'ok', parsed_data: parsed, ...parsed,
+    model_used: 'gpt-4o-mini', provider: 'openai',
+  };
+  await finishUsage(reservation, result);
+  return json(result, 200);
+  } catch {
+    return json({ success: false, stage: 'authorization', error: 'Could not complete the timing request. Please retry.' }, 503);
+  } finally {
+    await releaseUsage(reservation);
+  }
 });

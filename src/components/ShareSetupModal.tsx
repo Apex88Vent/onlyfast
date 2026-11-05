@@ -55,13 +55,15 @@ const ShareSetupModal: React.FC<ShareSetupModalProps> = ({ isOpen, onClose, setu
       // Check if already shared
       const { data: existing } = await supabase
         .from('shared_setups')
-        .select('share_code')
+        .select('share_code,expires_at,revoked_at,is_public')
         .eq('setup_id', setup.id)
         .eq('shared_by', user.id)
         .limit(1);
 
-      if (existing && existing.length > 0) {
-        setShareCode(existing[0].share_code);
+      const validShare = existing?.find(share => share.is_public && !share.revoked_at &&
+        (!share.expires_at || Date.parse(share.expires_at) > Date.now()));
+      if (validShare) {
+        setShareCode(validShare.share_code);
         setLoading(false);
         return;
       }
@@ -73,7 +75,6 @@ const ShareSetupModal: React.FC<ShareSetupModalProps> = ({ isOpen, onClose, setu
         .insert({
           setup_id: setup.id,
           shared_by: user.id,
-          shared_by_email: user.email,
           share_code: code,
           is_public: true,
         });
@@ -90,7 +91,7 @@ const ShareSetupModal: React.FC<ShareSetupModalProps> = ({ isOpen, onClose, setu
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
     let code = '';
     for (let i = 0; i < 8; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
+      code += chars.charAt(crypto.getRandomValues(new Uint32Array(1))[0] % chars.length);
     }
     return code;
   };

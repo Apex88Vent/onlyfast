@@ -14,6 +14,7 @@ test('production artifact check rejects reachable custom bridges, QA controls an
   for (const code of ['http://127.0.0.1:54321', 'https://synthesis-small-pastime.ngrok-free.dev', 'ONLYFAST_QA_IOS_KEY']) {
     assert.throws(() => verifyReleaseOutput([chunk('src/App.tsx', code)]), /QA endpoint or identity/);
   }
+  assert.throws(() => verifyReleaseOutput([chunk('src/lib/nativeAds.ts', 'onlyfast-admob-v1-android-release')]), /Experimental AdMob bridge/);
   assert.equal(verifyReleaseOutput([chunk('C:/onlyfast/src/lib/nativePurchaseController.ts')])[0].sha256.length, 64);
 });
 

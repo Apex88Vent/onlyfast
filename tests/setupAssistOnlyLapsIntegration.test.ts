@@ -510,7 +510,7 @@ test('Setup Assist preserves usage behavior, one OpenAI call, server loading, an
     /hasBetaFeatureForUser\([\s\S]*test_account_full_access[\s\S]*experimental/,
   );
   assert.ok(
-    edge.indexOf('enforceSetupAssistUsage') <
+    edge.indexOf('reserveUsage') <
       edge.lastIndexOf('loadSetupAssistOnlyLapsPromptContext'),
   );
   assert.ok(
@@ -521,7 +521,7 @@ test('Setup Assist preserves usage behavior, one OpenAI call, server loading, an
     edge.match(/fetch\('https:\/\/api\.openai\.com/g)?.length,
     1,
   );
-  assert.match(edge, /recordSetupAssistUsage/);
+  assert.match(edge, /finishUsage/);
   assert.match(
     edge,
     /appendOnlyLapsTelemetryToSetupAssistPrompt\([\s\S]*basePrompt[\s\S]*telemetry\.promptContext/,
@@ -536,7 +536,7 @@ test('Setup Assist preserves usage behavior, one OpenAI call, server loading, an
   );
 });
 
-test('beta-only UI status and request ID use the same active-session gate', () => {
+test('OnlyLaps status stays beta-gated while quota requests carry the saved-session ID', () => {
   const dashboard = readFileSync(
     new URL('../src/components/SetupDashboard.tsx', import.meta.url),
     'utf8',
@@ -559,7 +559,7 @@ test('beta-only UI status and request ID use the same active-session gate', () =
   );
   assert.match(
     assist,
-    /onlyLapsTelemetryEnabled && onlyfastSessionId[\s\S]*onlyfast_session_id: activeTelemetrySessionId/,
+    /onlyfast_session_id: onlyfastSessionId/,
   );
   assert.doesNotMatch(assist, /OnlyLaps telemetry included/);
   assert.match(assist, /OnlyLaps telemetry available/);

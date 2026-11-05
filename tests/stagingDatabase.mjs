@@ -52,7 +52,8 @@ test('offline staging workspace is deterministic, complete, immutable and refuse
     const output = path.join(root, 'fresh');
     const manifest = await prepareStagingDatabase(output);
     assert.equal(manifest.entries.length, 16);
-    assert.equal(Object.keys(manifest.excluded).length, 2);
+    assert.equal(Object.keys(manifest.excluded).filter(name => !name.includes('_phase1_')).length, 2);
+    assert.equal(Object.keys(manifest.excluded).filter(name => name.includes('_phase1_')).length, 3);
     const files = await readdir(path.join(output, 'supabase', 'migrations'));
     assert.deepEqual(files.sort(), manifest.entries.map(e => e.file).sort());
     for (const e of manifest.entries) {
@@ -109,7 +110,7 @@ test('all staged migrations rebuild 23 application tables from empty Auth and pr
       assert.equal((await db.query(`select count(*)::int as n from public.${name}`)).rows[0].n, 0, 'no customer/account data seeded');
     }
     // Verify account-specific migrations really are unsuitable for an empty Auth database.
-    for (const name of Object.keys(sequence.excluded)) {
+    for (const name of Object.keys(sequence.excluded).filter(name => !name.includes('_phase1_'))) {
       await assert.rejects(db.exec(await read('supabase/migrations/' + name)), /was not found|does not exist/);
       await db.exec('rollback');
     }

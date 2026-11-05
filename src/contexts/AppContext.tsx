@@ -35,7 +35,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return () => data.subscription.unsubscribe();
       },
     }, window, document);
-    const stopBannerSafety = watchNativeBannerSafety(nativeAds, window, document);
+    const stopBannerSafety = watchNativeBannerSafety(nativeAds, window, document, true);
     return () => { stopBannerSafety(); stopAds(); };
   }, []);
   useEffect(() => watchNativePurchases(), []);

@@ -285,24 +285,16 @@ create policy race_setups_delete_own
   on public.race_setups for delete
   using (auth.uid() = user_id);
 
--- ── race_setups: ALSO allow public read of any row referenced by a public
---    share_code. This is what lets "?share=ABCD1234" links work for anyone. ─
+-- Public sharing is installed by the reviewed Phase 1 redemption RPC migration.
+-- This bootstrap keeps direct setup and share-table reads owner-only.
 drop policy if exists race_setups_select_via_share on public.race_setups;
-create policy race_setups_select_via_share
-  on public.race_setups for select
-  using (
-    exists (
-      select 1 from public.shared_setups s
-      where s.setup_id = race_setups.id
-        and s.is_public = true
-    )
-  );
+-- Public redemption uses the reviewed Phase 1 RPC migration.
 
--- ── shared_setups: owners manage their own shares; anyone can read public ──
+-- ── shared_setups: owners manage and inspect their own shares ──
 drop policy if exists shared_setups_select_public on public.shared_setups;
 create policy shared_setups_select_public
   on public.shared_setups for select
-  using (is_public = true or auth.uid() = shared_by);
+  using (auth.uid() = shared_by);
 
 drop policy if exists shared_setups_insert_own on public.shared_setups;
 create policy shared_setups_insert_own

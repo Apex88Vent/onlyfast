@@ -25,6 +25,7 @@
 import { DIRT_HANDLING_TERMINOLOGY, SETUP_ASSIST_FORMAT_INSTRUCTIONS, ROAD_HANDLING_INSTRUCTIONS, SETUP_ASSIST_RESPONSE_FORMAT, formatSetupAssistResponse, setupAssistDiscipline, roadHandlingPrompt } from '../_shared/setup-assist-response.ts';
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { resolveServerMembership, reserveUsage, finishUsage, releaseUsage, type UsageReservation } from '../_shared/usage-authorization.ts';
 import { hasBetaFeatureForUser } from '../_shared/beta-features.ts';
 import { createOnlyLapsSetupContextStore } from '../_shared/onlylaps-setup-context-store.ts';
 import {
@@ -141,119 +142,8 @@ function isResponse(value: AuthContext | Response): value is Response {
   return value instanceof Response;
 }
 
-function normalizePlan(plan: unknown): MembershipTier | 'free' {
-  const value = String(plan || '').trim().toLowerCase();
-  if (value === 'team' || value === 'teams') return 'team';
-  if (value === 'pro') return 'pro';
-  return 'free';
-}
-
-async function resolveEffectiveTier(
-  admin: any,
-  user: any,
-  hasExperimentalFullAccess: boolean,
-): Promise<MembershipTier> {
-  const email = String(user?.email || '').trim().toLowerCase();
-  const adminEmails = String(Deno.env.get('ONLYFAST_ADMIN_EMAILS') || '')
-    .split(',')
-    .map((v) => v.trim().toLowerCase())
-    .filter(Boolean);
-
-  if (hasExperimentalFullAccess) return 'team';
-  if (email && adminEmails.includes(email)) return 'team';
-  if (user?.app_metadata?.has_admin_full_access === true) return 'team';
-  // User-editable metadata must never authorize paid access.
-  const grant = user?.app_metadata || {};
-  const grantActive = !grant.promo_access_expires_at || Date.parse(grant.promo_access_expires_at) > Date.now();
-  const grantLevel = grantActive ? String(grant.promo_access_level || '').toLowerCase() : '';
-  if (['team', 'teams', 'admin', 'admin_full_access'].includes(grantLevel)) return 'team';
-
-  const { data, error } = await admin
-    .from('user_subscriptions')
-    .select('plan, status, subscription_source, revenuecat_expires_at')
-    .eq('user_id', user.id)
-    .maybeSingle();
-
-  if (error) throw error;
-  if (!data) return grantLevel === 'pro' ? 'pro' : 'rookie';
-
-  const nativeExpired = data.subscription_source === 'revenuecat' && !(Date.parse(data.revenuecat_expires_at) > Date.now());
-  if (nativeExpired) return grantLevel === 'pro' ? 'pro' : 'rookie';
-  const status = String(data.status || '').trim().toLowerCase();
-  if (status !== 'active' && status !== 'trialing') return grantLevel === 'pro' ? 'pro' : 'rookie';
-
-  const plan = normalizePlan(data.plan);
-  if (plan === 'team') return 'team';
-  if (plan === 'pro' || grantLevel === 'pro') return 'pro';
-  return 'rookie';
-}
-
-async function enforceSetupAssistUsage(
-  admin: any,
-  userId: string,
-  tier: MembershipTier,
-  raceWeekendKey: string,
-): Promise<Response | null> {
-  if (tier !== 'rookie') return null;
-
-  const { data, error } = await admin
-    .from('setup_assist_usage')
-    .select('used_count')
-    .eq('user_id', userId)
-    .eq('race_weekend_key', raceWeekendKey)
-    .maybeSingle();
-
-  if (error) {
-    return json({ error: 'Could not verify your Setup Assist usage. Please try again.' }, 503);
-  }
-
-  const used = Number(data?.used_count || 0);
-  if (used >= 1) {
-    return json(
-      {
-        error: 'Rookie accounts include 1 Setup Assist per race weekend. Upgrade to Pro for unlimited Setup Assist.',
-        code: 'setup_assist_limit',
-      },
-      429,
-    );
-  }
-  return null;
-}
-
-async function recordSetupAssistUsage(
-  admin: any,
-  userId: string,
-  tier: MembershipTier,
-  raceWeekendKey: string,
-): Promise<Response | null> {
-  if (tier !== 'rookie') return null;
-
-  const { data, error: readError } = await admin
-    .from('setup_assist_usage')
-    .select('used_count')
-    .eq('user_id', userId)
-    .eq('race_weekend_key', raceWeekendKey)
-    .maybeSingle();
-  if (readError) {
-    return json({ error: 'Could not update your Setup Assist usage. Please try again.' }, 503);
-  }
-
-  const used = Number(data?.used_count || 0);
-  const { error: writeError } = await admin
-    .from('setup_assist_usage')
-    .upsert(
-      {
-        user_id: userId,
-        race_weekend_key: raceWeekendKey,
-        used_count: used + 1,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'user_id,race_weekend_key' },
-    );
-  if (writeError) {
-    return json({ error: 'Could not update your Setup Assist usage. Please try again.' }, 503);
-  }
-  return null;
+async function resolveEffectiveTier(admin: any, user: any): Promise<MembershipTier> {
+  return resolveServerMembership(admin, user);
 }
 
 Deno.serve(async (req) => {
@@ -261,6 +151,7 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  let reservation: UsageReservation | null = null;
   try {
     const auth = await requireUser(req);
     if (isResponse(auth)) return auth;
@@ -286,8 +177,15 @@ Deno.serve(async (req) => {
       onlyfastSessionId,
     } = body || {};
 
-    const raceWeekendScope = String(race_weekend_key || raceWeekendKey || '').trim();
-    if (!raceWeekendScope) {
+    let exactOnlyFastSessionId = String(onlyfast_session_id || onlyfastSessionId || '').trim();
+    if (!exactOnlyFastSessionId && (race_weekend_key || raceWeekendKey)) {
+      const legacy = await auth.admin.rpc('onlyfast_resolve_assist_session', {
+        p_user_id: auth.user.id, p_saved_name: String(race_weekend_key || raceWeekendKey).trim(),
+      });
+      if (legacy.error) throw legacy.error;
+      exactOnlyFastSessionId = typeof legacy.data === 'string' ? legacy.data : '';
+    }
+    if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(exactOnlyFastSessionId)) {
       return json({ error: 'Save your race weekend first to use Setup Assist.' }, 400);
     }
 
@@ -297,17 +195,12 @@ Deno.serve(async (req) => {
       'test_account_full_access',
       'experimental',
     );
-    const tier = await resolveEffectiveTier(
-      auth.admin,
-      auth.user,
-      hasTelemetryBetaAccess,
-    );
-    const usageError = await enforceSetupAssistUsage(auth.admin, auth.user.id, tier, raceWeekendScope);
-    if (usageError) return usageError;
-
-    const exactOnlyFastSessionId = String(
-      onlyfast_session_id || onlyfastSessionId || '',
-    ).trim();
+    await resolveEffectiveTier(auth.admin, auth.user);
+    const usage = await reserveUsage(auth.admin, auth.user, 'assist', { ...body, onlyfast_session_id: exactOnlyFastSessionId });
+    if (usage.status === 'complete') return json(usage.response);
+    if (usage.status === 'limit') return json({ error: 'Rookie accounts include 1 Setup Assist per race weekend. Upgrade to Pro for unlimited Setup Assist.', code: 'setup_assist_limit' }, 429);
+    if (!usage.reservation) return json({ error: 'This request is already processing or its ID belongs to a different request. Please retry shortly.' }, 409);
+    reservation = usage.reservation;
     const telemetry = await loadSetupAssistOnlyLapsPromptContext({
       betaEnabled: hasTelemetryBetaAccess,
       onlyfastSessionId: exactOnlyFastSessionId,
@@ -372,6 +265,7 @@ Keep suggestions practical and specific to ${racingDiscipline}${classNote}. Use 
 
     const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
+      signal: AbortSignal.timeout(60_000),
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${openaiKey}`,
@@ -428,16 +322,13 @@ Keep suggestions practical and specific to ${racingDiscipline}${classNote}. Use 
       fallback_reason: telemetry.debug.fallback_reason,
     });
 
-    const recordError = await recordSetupAssistUsage(auth.admin, auth.user.id, tier, raceWeekendScope);
-    if (recordError) return recordError;
-
-    return json(
-      telemetryDebug
-        ? { suggestion, telemetry_debug: telemetryDebug }
-        : { suggestion },
-    );
+    const result = telemetryDebug ? { suggestion, telemetry_debug: telemetryDebug } : { suggestion };
+    await finishUsage(reservation, result);
+    return json(result);
   } catch (error) {
     console.error('get-suggestions failed', error);
-    return json({ error: 'Setup Assist could not generate suggestions right now. Please try again.' }, 500);
+    return json({ error: 'Setup Assist could not generate suggestions right now. Please try again.' }, 503);
+  } finally {
+    await releaseUsage(reservation);
   }
 });

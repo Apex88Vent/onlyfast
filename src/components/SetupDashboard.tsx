@@ -56,6 +56,7 @@ import { BETA_FEATURES } from '@/lib/betaFeatures';
 import {
   enqueue as enqueuePending,
   readQueue as readPendingQueue,
+  drainOwnedQueue,
   removeFromQueue as removePending,
   isNetworkError,
   PendingSave,
@@ -67,9 +68,7 @@ import {
   checkSavePermission,
   isRaceWeekendEditLocked,
 } from '@/lib/membership';
-import RookieAdSlot from './RookieAdSlot';
 import RookieHouseAdPage from './RookieHouseAdPage';
-import { shouldShowAds } from '@/lib/ads';
 import { nativeAds } from '@/lib/nativeAds';
 import {
   createNewRaceWeekendSessions,
@@ -253,6 +252,7 @@ interface UnifiedSavedMeta {
   name?: string;
   ids: Partial<Record<SetupType, string>>;
   raceScheduleId?: string;
+  raceWeekendId?: string;
 }
 
 type WeekendSessionStatus = 'complete' | 'in-progress' | 'not-started';
@@ -411,8 +411,9 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     setActiveView('home');
     setResumeAttempted(true);
   }, [landingRequest]);
+  const stateStorageKey = STATE_STORAGE_KEY + ':' + (user?.id || 'guest');
   const [pendingCount, setPendingCount] = useState<number>(() => {
-    try { return readPendingQueue().length; } catch { return 0; }
+    try { return readPendingQueue(user?.id).length; } catch { return 0; }
   });
   const [draining, setDraining] = useState(false);
 
@@ -444,11 +445,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   const [addSessionValue, setAddSessionValue] = useState('');
   const [addSessionError, setAddSessionError] = useState<string | null>(null);
 
-  // Post-save full-page ad (rookie users only). Shown AFTER a successful save.
-  const [showPostSaveAd, setShowPostSaveAd] = useState(false);
   const [classLockNoticeOpen, setClassLockNoticeOpen] = useState(false);
-  // Whether ads should be shown to this user at all (rookie + logged in only).
-  const adsEnabled = shouldShowAds(user);
   const saveAdContext = useRef({ userId: user?.id, activeView, saveModalOpen });
   const pendingSaveAd = useRef<{
     ticket: ReturnType<typeof nativeAds.beginManualSave>;
@@ -466,11 +463,10 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     // The save dialog is now absent from the committed UI. Consume this pause
     // immediately; never queue a retry after navigation, editing or cooldown.
     const context = saveAdContext.current;
-    const adResult = nativeAds.completeManualSave(pending.ticket, {
+    nativeAds.completeManualSave(pending.ticket, {
       ...pending.outcome,
       editing: pending.outcome.editing || context.activeView !== 'setup' || context.userId !== pending.userId,
     });
-    if (adResult === 'house') setShowPostSaveAd(true);
   }, [saveModalOpen]);
 
 
@@ -549,10 +545,13 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     setSetups(prev => ({ ...prev, base: { ...prev.base, [CUSTOM_SHEET_KEY]: JSON.stringify(snapshotCustomSheet(initialSheet)) } }));
   }, [stateLoaded, initialSheet]);
 
+  // Capture mount-time sheet compatibility. Account changes remount this workspace.
+  const initialDraftScope = useRef({ stateStorageKey, selectedCar, classLocksEnabled });
   // Load persisted state on mount
   useEffect(() => {
+    const { stateStorageKey, selectedCar, classLocksEnabled } = initialDraftScope.current;
     try {
-      const raw = localStorage.getItem(STATE_STORAGE_KEY);
+      const raw = localStorage.getItem(stateStorageKey);
       if (raw) {
         const parsed = JSON.parse(raw);
         const draftClass = parsed.setups?.base?.raceClass;
@@ -599,14 +598,14 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   useEffect(() => {
     if (!stateLoaded) return;
     try {
-      localStorage.setItem(STATE_STORAGE_KEY, JSON.stringify({
+      localStorage.setItem(stateStorageKey, JSON.stringify({
         setups, savedMeta, customFields, activeTab,
         // Persist extra-session metadata so they survive reloads.
         sessionLabels, sessionOrders, deletedSessionSlots, addedSessionSlots,
         timestamp: Date.now(),
       }));
     } catch {}
-  }, [setups, savedMeta, customFields, activeTab, sessionLabels, sessionOrders, deletedSessionSlots, addedSessionSlots, stateLoaded]);
+  }, [setups, savedMeta, customFields, activeTab, sessionLabels, sessionOrders, deletedSessionSlots, addedSessionSlots, stateLoaded, stateStorageKey]);
 
   useEffect(() => {
     if (!stateLoaded) return;
@@ -1042,6 +1041,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       session_label: sessionLabels[tabKey] || (isDefaultRaceSessionType(tabKey) ? TAB_LABELS[tabKey].short : null),
       session_order: sessionOrders[tabKey] ?? DEFAULT_ORDER[tabKey],
       race_schedule_id: savedMeta.raceScheduleId || null,
+      ...(savedMeta.raceWeekendId ? { race_weekend_id: savedMeta.raceWeekendId } : {}),
 
       track_name: s.trackName || '',
       race_date: s.raceDate || new Date().toISOString().split('T')[0],
@@ -1108,11 +1108,29 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   };
 
   // Resilient DB write (handles missing columns gracefully)
-  const dbInsert = async (payload: any) => {
+  const dbInsert = useCallback(async (payload: any) => {
+    const ownerId = payload.user_id;
+    const { data: auth } = await supabase.auth.getSession();
+    if (!ownerId || auth.session?.user.id !== ownerId) throw new Error('Save account changed. Sign in as the original owner.');
     let p = cleanPayload(payload);
     for (let i = 0; i < 6; i++) {
       const { data, error } = await supabase.from('race_setups').insert(p).select().single();
       if (!error) return data;
+      if (payload.id && (error.code === '23505' ||
+          (error.code === '42501' && error.message === 'ROOKIE_SETUP_EDIT_LOCKED'))) {
+        const existing = await supabase.from('race_setups').select('*').eq('id', payload.id).eq('user_id', ownerId).maybeSingle();
+        if (existing.error) throw existing.error;
+        if (existing.data) {
+          // A response may have been lost before the driver made a newer edit.
+          // The insert trigger can report a lock before the duplicate key.
+          // The guarded update still rejects mechanical changes after 48 hours.
+          const { id: _id, user_id: _owner, ...changes } = p;
+          const updated = await supabase.from('race_setups').update(changes)
+            .eq('id', payload.id).eq('user_id', ownerId).select().single();
+          if (updated.error) throw updated.error;
+          return updated.data;
+        }
+      }
       const match = error.message?.match(/column\s+"?(\w+)"?/i);
       if (match && match[1] && p[match[1]] !== undefined) {
         if (match[1] === 'custom_fields' && (payload.race_class === CUSTOM_CAR || isDevelopmentClass(payload.race_class))) throw error;
@@ -1123,13 +1141,16 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       throw error;
     }
     throw new Error('Unable to save (schema mismatch).');
-  };
+  }, []);
 
-  const dbUpdate = async (id: string, payload: any) => {
+  const dbUpdate = useCallback(async (id: string, payload: any) => {
+    const ownerId = payload.user_id || user?.id;
+    const { data: auth } = await supabase.auth.getSession();
+    if (!ownerId || auth.session?.user.id !== ownerId) throw new Error('Save account changed. Sign in as the original owner.');
     let p = cleanPayload(payload);
     delete p.user_id;
     for (let i = 0; i < 6; i++) {
-      const { data, error } = await supabase.from('race_setups').update(p).eq('id', id).select().single();
+      const { data, error } = await supabase.from('race_setups').update(p).eq('id', id).eq('user_id', ownerId).select().single();
       if (!error) return data;
       const match = error.message?.match(/column\s+"?(\w+)"?/i);
       if (match && match[1] && p[match[1]] !== undefined) {
@@ -1141,7 +1162,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       throw error;
     }
     throw new Error('Unable to update (schema mismatch).');
-  };
+  }, [user?.id]);
 
   // Does a given tab's setup state have enough data to be worth saving?
   // Null-safe: extra session slots may be undefined until the user adds them.
@@ -1186,55 +1207,38 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   };
 
 
-  // Drain the offline queue — POSTs each pending save in order
+  // Reconnect only replays operations recorded by this authenticated owner.
   const drainQueue = useCallback(async (): Promise<void> => {
     if (!user) return;
-    const queue = readPendingQueue();
-    if (queue.length === 0) { setPendingCount(0); return; }
+    const ownerId = user.id;
     setDraining(true);
     try {
-      for (const item of queue) {
-        try {
-          // Always force user_id to current user (in case it was queued before re-auth)
-          const payload = { ...item.payload, user_id: user.id };
-          let result: any;
-          if (item.op === 'update' && item.rowId) {
-            result = await dbUpdate(item.rowId, payload);
-          } else {
-            result = await dbInsert(payload);
-          }
-          // On success, update savedMeta id for that tab if it matches current name
-          if (result?.id && item.setupName && item.setupName === savedMeta.name) {
-            setSavedMeta(prev => ({
-              name: prev.name,
-              ids: { ...prev.ids, [item.setupType]: result.id },
-              raceScheduleId: prev.raceScheduleId,
-            }));
-          }
-          removePending(item.id);
-          setPendingCount(readPendingQueue().length);
-        } catch (err: any) {
-          if (isNetworkError(err)) {
-            // Still offline — stop and leave the rest queued
-            break;
-          }
-          // Non-network error (e.g. schema) — drop this item so it doesn't block others
-          removePending(item.id);
-          setPendingCount(readPendingQueue().length);
-        }
-      }
+      await drainOwnedQueue(ownerId, {
+        currentUser: async () => (await supabase.auth.getSession()).data.session?.user.id ?? null,
+        save: item => item.op === 'update' && item.rowId
+          ? dbUpdate(item.rowId, item.payload)
+          : dbInsert(item.payload),
+        changed: () => {
+          setPendingCount(readPendingQueue(ownerId).length);
+          setRefreshTrigger(value => value + 1);
+        },
+      });
     } finally {
       setDraining(false);
     }
-  }, [user, savedMeta.name]);
+  }, [user, dbInsert, dbUpdate]);
 
-  // Listen for network reconnection and try to drain
   useEffect(() => {
-    const handleOnline = () => { if (user) drainQueue(); };
+    setPendingCount(readPendingQueue(user?.id).length);
+    const handleOnline = () => { if (user) void drainQueue(); };
+    const handleStorage = () => setPendingCount(readPendingQueue(user?.id).length);
     window.addEventListener('online', handleOnline);
-    // On mount/user change, try once if there's already a queue
-    if (user && readPendingQueue().length > 0) drainQueue();
-    return () => window.removeEventListener('online', handleOnline);
+    window.addEventListener('storage', handleStorage);
+    if (user && readPendingQueue(user.id).length > 0) void drainQueue();
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('storage', handleStorage);
+    };
   }, [user, drainQueue]);
 
   // Save ALL three tabs as one "setup file" under a single name.
@@ -1260,7 +1264,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
         if (summaryError) {
           const { data } = await supabase
             .from('race_setups')
-            .select('setup_name, setup_type, race_class, created_at')
+            .select('id, setup_name, setup_type, race_class, created_at, race_schedule_id, race_weekend_id, track_name, race_date')
             .eq('user_id', user.id)
             .limit(300);
           existingRows = data || [];
@@ -1290,8 +1294,19 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
         ) as string[];
 
 
-        // A "new" race weekend = a file name we haven't stored before.
-        const fileExists = Boolean(Object.values(savedMeta.ids).find(Boolean)) || raceWeekendNames.has(name.trim());
+        const savedIds = new Set(Object.values(savedMeta.ids).filter(Boolean));
+        const fileRows = rows.filter((row: any) => {
+          if (savedMeta.raceWeekendId) return row.race_weekend_id === savedMeta.raceWeekendId;
+          if (savedIds.has(row.id)) return true;
+          if (savedMeta.raceScheduleId) return row.race_schedule_id === savedMeta.raceScheduleId;
+          if (currentSetup.trackName && currentSetup.raceDate) {
+            return String(row.track_name || '').trim().toLowerCase() === currentSetup.trackName.trim().toLowerCase() &&
+              row.race_date === currentSetup.raceDate;
+          }
+          return String(row.setup_name || '').trim() === name.trim();
+        });
+        const weekendIds = new Set(rows.map((row: any) => row.race_weekend_id || row.setup_name).filter(Boolean));
+        const fileExists = fileRows.length > 0 || savedIds.size > 0;
         const newCarType = currentSetup.raceClass || selectedCar || '';
 
         const perm = checkSavePermission({
@@ -1299,7 +1314,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
           tier,
           kind: 'race_weekend',
           isExistingSave: fileExists,
-          existingRaceWeekendCount: raceWeekendNames.size,
+          existingRaceWeekendCount: Math.max(raceWeekendNames.size, weekendIds.size),
           existingBaseSetupCount: 0,
           existingCarTypes,
           newCarType,
@@ -1320,9 +1335,6 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
         // 48-HOUR EDIT LOCK (Rookie): existing saves older than the lock window
         // can no longer be EDITED. They remain viewable + deletable elsewhere.
         if (fileExists) {
-          const fileRows = rows.filter(
-            (r: any) => (r.setup_name || '').trim() === name.trim()
-          );
           const earliest = fileRows
             .map((r: any) => r.created_at)
             .filter(Boolean)
@@ -1355,6 +1367,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       const newIds: Partial<Record<SetupType, string>> = {};
       let queuedAny = false;
       let persistedAny = false;
+      let raceWeekendId = savedMeta.raceWeekendId;
 
       const saveTabs = ALL_SLOTS.filter(tabKey => {
         if (deletedSessionSlots[tabKey]) return false;
@@ -1365,38 +1378,43 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       for (const tabKey of saveTabs) {
         const setup = setups[tabKey];
         const existingId = savedMeta.ids[tabKey];
+        const stableRowId = existingId || crypto.randomUUID();
+        const pendingInsert = readPendingQueue(user.id).some(item => item.op === 'insert' && item.payload.id === stableRowId);
+        const isInsert = !existingId || pendingInsert;
         if (!tabHasData(setup) && !existingId && !isRealSession(tabKey)) continue;
 
-        const payload = buildPayload(setup, tabKey, name);
+        const payload = { ...buildPayload(setup, tabKey, name), ...(raceWeekendId ? { race_weekend_id: raceWeekendId } : {}), ...(isInsert ? { id: stableRowId } : {}) };
+        const pending = enqueuePending({
+          ownerId: user.id, op: isInsert ? 'insert' : 'update',
+          rowId: isInsert ? undefined : existingId,
+          setupType: tabKey, setupName: name, payload,
+        });
+        setSavedMeta(prev => ({ ...prev, ids: { ...prev.ids, [tabKey]: stableRowId } }));
         try {
           let result: any;
-          if (existingId) {
+          if (!isInsert) {
             result = await dbUpdate(existingId, payload);
           } else {
             result = await dbInsert(payload);
           }
+          removePending(pending.id, user.id);
           newIds[tabKey] = result.id;
           persistedAny = true;
+          raceWeekendId = result.race_weekend_id || raceWeekendId;
+          setSavedMeta(prev => ({ ...prev, ids: { ...prev.ids, [tabKey]: result.id }, raceWeekendId }));
         } catch (err: any) {
           if (isNetworkError(err)) {
-            // Queue it for later
-            enqueuePending({
-              op: existingId ? 'update' : 'insert',
-              rowId: existingId || undefined,
-              setupType: tabKey,
-              setupName: name,
-              payload,
-            });
+            // The write-ahead queue already preserves this operation.
             queuedAny = true;
             // Preserve existing id if any so UI still shows linkage
-            if (existingId) newIds[tabKey] = existingId;
+            newIds[tabKey] = stableRowId;
           } else {
             throw err;
           }
         }
       }
 
-      setSavedMeta({ name, ids: { ...savedMeta.ids, ...newIds }, raceScheduleId: savedMeta.raceScheduleId });
+      setSavedMeta({ name, ids: { ...savedMeta.ids, ...newIds }, raceScheduleId: savedMeta.raceScheduleId, raceWeekendId });
       const rememberedId = newIds[activeTab] || savedMeta.ids[activeTab] || Object.values(newIds)[0] || Object.values(savedMeta.ids)[0];
       if (rememberedId) {
         try { localStorage.setItem(lastOpenedSetupKey(user.id), String(rememberedId)); } catch {}
@@ -1408,7 +1426,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       });
 
       setRefreshTrigger(prev => prev + 1);
-      setPendingCount(readPendingQueue().length);
+      setPendingCount(readPendingQueue(user?.id).length);
       if (!silent) {
         if (queuedAny) {
           setSaveMessage(`Offline — "${name}" will sync when you reconnect`);
@@ -1700,7 +1718,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     }
 
     setSetups(newSetups);
-    setSavedMeta({ name, ids: newIds, raceScheduleId });
+    setSavedMeta({ name, ids: newIds, raceScheduleId, raceWeekendId: setup.race_weekend_id || undefined });
     setTimingDataBySessionId({});
     setSessionLabels(newLabels);
     setSessionOrders(newOrders);
@@ -2013,7 +2031,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     setSavedMeta(prev => {
       const ids = { ...prev.ids };
       delete ids[tab];
-      return { name: prev.name, ids, raceScheduleId: prev.raceScheduleId };
+      return { name: prev.name, ids, raceScheduleId: prev.raceScheduleId, raceWeekendId: prev.raceWeekendId };
     });
     setSessionLabels(prev => {
       const next = { ...prev };
@@ -3363,7 +3381,9 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       </div>
 
       {activeView === 'setup' && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#E5E7EB] shadow-lg z-50" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }} role="region" aria-label="Save setup">
+        <div className="fixed left-0 right-0 bg-white border-t border-[#E5E7EB] shadow-lg z-50"
+          style={{ bottom: 'var(--house-banner-space, 0px)', paddingBottom: 'max(0px, calc(env(safe-area-inset-bottom) - var(--house-banner-space, 0px)))' }}
+          role="region" aria-label="Save setup">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3 flex-wrap" aria-live="polite">
               {saveMessage && (
@@ -3602,18 +3622,6 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
               </button>
             </div>
           </div>
-        </div>
-      )}
-
-
-      {/* POST-SAVE UPGRADE INTERSTITIAL (rookie users only) - shown after a successful save. */}
-      {showPostSaveAd && adsEnabled && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label="OnlyFast Pro upgrade">
-          <RookieAdSlot
-            placement="after_save_interstitial"
-            user={user}
-            onContinue={() => setShowPostSaveAd(false)}
-          />
         </div>
       )}
 

@@ -545,16 +545,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
                     try {
                       const status = await nativeAds.requestConsent();
                       setAdPrivacyMessage(status === 'unverified'
-                        ? 'Your native privacy request completed. Advertising permission remains unverified.'
-                        : 'Advertising privacy controls are unavailable right now.');
+                        ? 'The consent check completed. Advertising permission remains unverified.'
+                        : 'The advertising consent check is unavailable right now.');
                     } catch {
-                      setAdPrivacyMessage('Advertising privacy controls are unavailable right now.');
+                      setAdPrivacyMessage('The advertising consent check is unavailable right now.');
                     } finally { setRequestingAdPrivacy(false); }
                   }}
                   className="text-sm font-semibold text-[#00A8E8] underline-offset-2 hover:underline disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
                 >
-                  {requestingAdPrivacy ? 'Requesting privacy choices…' : 'Request advertising privacy choices'}
+                  {requestingAdPrivacy ? 'Checking advertising consent…' : 'Check advertising consent'}
                 </button>
+                <p className="text-xs text-[#9CA3AF] mt-2">This app version cannot reopen saved advertising choices.</p>
                 {adPrivacyMessage && <p role="status" className="text-xs text-[#9CA3AF] mt-2">{adPrivacyMessage}</p>}
               </div>
             )}

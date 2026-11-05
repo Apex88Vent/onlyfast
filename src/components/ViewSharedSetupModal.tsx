@@ -95,38 +95,10 @@ const ViewSharedSetupModal: React.FC<ViewSharedSetupModalProps> = ({ isOpen, onC
     setSetup(null);
     setClassLocked(false);
     try {
-      const { data: share } = await supabase
-        .from('shared_setups')
-        .select('setup_id, is_public, share_code')
-        .eq('share_code', trimmed)
-        .eq('is_public', true)
-        .limit(1)
-        .maybeSingle();
-
-      if (!share || !share.setup_id) {
+      const { data: row, error: shareError } = await supabase.rpc('redeem_setup_share', { p_code: trimmed });
+      if (shareError) throw shareError;
+      if (!row || typeof row !== 'object' || Array.isArray(row)) {
         setError('Setup not found. Check the code and try again.');
-        setLoading(false);
-        return;
-      }
-
-      const { data: row } = await supabase
-        .from('race_setups')
-        .select('*')
-        .eq('id', share.setup_id)
-        .limit(1)
-        .maybeSingle();
-
-      if (!row) {
-        if (user) {
-          const { data: lockState } = await supabase.rpc('get_setup_class_lock_state', { p_setup_id: share.setup_id });
-          if ((lockState as any)?.locked) {
-            setClassLocked(true);
-            setError('This setup belongs to another class and is locked on your current plan.');
-            setLoading(false);
-            return;
-          }
-        }
-        setError('This shared setup is no longer available.');
         setLoading(false);
         return;
       }

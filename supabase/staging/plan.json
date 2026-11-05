@@ -19,6 +19,9 @@
   ],
   "excluded": {
     "202607280005_enable_cmar_test_account_full_access.sql": "Account-specific data grant; requires a named existing Auth user. No schema is defined. Staging starts with empty Auth and grants no real-user access.",
-    "20261001_verify_designated_test_account.sql": "Account-specific verification/grant; raises when the named Auth user does not exist. No schema is defined. Seed synthetic test identities explicitly after schema creation instead."
+    "20261001_verify_designated_test_account.sql": "Account-specific verification/grant; raises when the named Auth user does not exist. No schema is defined. Seed synthetic test identities explicitly after schema creation instead.",
+    "20261105090932_phase1_membership_and_sharing.sql": "Prepared Phase 1 rollout step. Apply explicitly in review order after the compatible frontend and Edge acceptance. Never auto-apply with the legacy staging baseline.",
+    "20261105090937_phase1_setup_and_usage_authorization.sql": "Prepared Phase 1 rollout step. Apply explicitly in review order after the compatible frontend and Edge acceptance. Never auto-apply with the legacy staging baseline.",
+    "20261105091108_phase1_restrict_legacy_access.sql": "Prepared Phase 1 rollout step. Apply explicitly in review order after the compatible frontend and Edge acceptance. Never auto-apply with the legacy staging baseline."
   }
 }

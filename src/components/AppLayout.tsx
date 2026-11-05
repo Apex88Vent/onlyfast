@@ -1,6 +1,6 @@
 import { useMembershipRevision } from '@/hooks/useMembershipRevision';
 import { CustomCarGate } from './CustomCarSheet';
-import React, { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useSyncExternalStore } from 'react';
 import { nativeAds } from '@/lib/nativeAds';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -11,6 +11,9 @@ import OnboardingFlow from './OnboardingFlow';
 import HowOnlyFastWorks from './HowOnlyFastWorks';
 import Header from './Header';
 import SetupDashboard from './SetupDashboard';
+import { HouseBottomBanner, HouseInterstitialDialog } from './HouseAdPlacement';
+import RookieAdSlot from './RookieAdSlot';
+import { shouldShowAds } from '@/lib/ads';
 import AuthModal from './AuthModal';
 import CookieConsent from './CookieConsent';
 import Footer from './Footer';
@@ -25,6 +28,28 @@ import { BETA_FEATURES } from '@/lib/betaFeatures';
 import { isOnlyFastFilePickerOpen } from '@/lib/filePickerState';
 import { resolveAuthUiTransition } from '@/lib/authUiTransition';
 import { canAccessSetupClass } from '@/lib/setupLibraryAccess';
+
+function DashboardWithHouseAds({ user, children }: { user: User | null; children: React.ReactNode }) {
+  const ads = useSyncExternalStore(nativeAds.subscribeHouseAds, nativeAds.getHouseAds);
+  useMembershipRevision();
+  const eligible = shouldShowAds(user);
+  const banner = eligible && ads.bannerUser === user?.id;
+  const interstitial = eligible && ads.interstitialUser === user?.id;
+  const bannerSpace = banner ? 'calc(3rem + env(safe-area-inset-bottom))' : '0px';
+
+  return (
+    <div className="min-h-screen bg-[#F5F5F7] flex flex-col"
+      style={{ '--house-banner-space': bannerSpace, paddingBottom: bannerSpace } as React.CSSProperties}>
+      {children}
+      {banner && <HouseBottomBanner />}
+      {interstitial && (
+        <HouseInterstitialDialog title="OnlyFast Pro upgrade" onClose={nativeAds.closeHouseInterstitial}>
+          <RookieAdSlot placement="after_save_interstitial" user={user} onContinue={nativeAds.closeHouseInterstitial} />
+        </HouseInterstitialDialog>
+      )}
+    </div>
+  );
+}
 
 // Intro navigation only: a confirmation link may open a second tab. Neither
 // marker authorizes access or completes discipline, class or plan selection.
@@ -492,7 +517,7 @@ const AppLayout: React.FC = () => {
 
   return (
     <AnnouncerProvider>
-      <div className="min-h-screen bg-[#F5F5F7] flex flex-col">
+      <DashboardWithHouseAds user={user}>
         <SkipLink />
         <Header
           user={user}
@@ -505,6 +530,7 @@ const AppLayout: React.FC = () => {
           <h1 className="sr-only">OnlyFast Setup Assist - Dirt Track Racing Setup Tracker</h1>
           <CustomCarGate user={user} selectedCar={selectedCar}>
           <SetupDashboard
+            key={user?.id || 'guest'}
             user={user}
             selectedCar={selectedCar}
             landingRequest={landingRequest}
@@ -538,7 +564,7 @@ const AppLayout: React.FC = () => {
           onUpgrade={openTeamsUpgrade}
         />
         <CookieConsent />
-      </div>
+      </DashboardWithHouseAds>
     </AnnouncerProvider>
   );
 };

@@ -121,6 +121,7 @@ type BatchImageStatus = 'selected' | 'uploading' | 'processing' | 'success' | 'f
 
 interface BatchImageItem {
   id: string;
+  requestId: string;
   signature: string;
   sessionId: string;
   file: File;
@@ -558,6 +559,7 @@ const ScanTimingScreen: React.FC<Props> = ({
         imageBase64: compressed.base64,
         mimeType: compressed.mimeType,
         sessionId: item.sessionId,
+        request_id: item.requestId,
       });
       const mapped = await handleInvokeResult(result, { applyToReview: false });
       const sessionResult: ScanResult = {
@@ -616,6 +618,7 @@ const ScanTimingScreen: React.FC<Props> = ({
       .filter(file => !existingSignatures.has(fileSignature(file)))
       .map((file, index): BatchImageItem => ({
         id: `${Date.now()}-${index}-${Math.random().toString(36).slice(2)}`,
+        requestId: crypto.randomUUID(),
         signature: fileSignature(file),
         sessionId: currentSetupId,
         file,

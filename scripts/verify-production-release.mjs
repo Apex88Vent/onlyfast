@@ -9,6 +9,7 @@ import { build, loadEnv } from 'vite';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const forbiddenModules = /\/(?:qa|native)\/|\/src\/(?:lib\/(?:releaseNativeBilling|releaseNativeTransport|nativeCatalogDiagnostic)|pages\/(?:NativeSubscriptionTest|OnboardingPreview|RookieAdSlotPreview))\.[cm]?[jt]sx?$/;
 const qaContent = /(?:127\.0\.0\.1|localhost):(?:54321|54322|8086)|ngrok-free\.dev|trycloudflare\.com|ONLYFAST_QA_|5ea2a2af-876a-42bb-84cc-4e4319a90a7e|998ee471-0dab-412c-b196-4731c0c46278/;
+const experimentalAdBridge = /onlyfastAdmob|onlyfastAdOpportunity|onlyfast-admob-v1-android-release/;
 
 export function verifyReleaseOutput(output) {
   const files = [];
@@ -21,6 +22,7 @@ export function verifyReleaseOutput(output) {
     const bytes = entry.type === 'chunk' ? entry.code : entry.source;
     const text = typeof bytes === 'string' ? bytes : Buffer.from(bytes).toString('utf8');
     assert.ok(!qaContent.test(text), `QA endpoint or identity in ${entry.fileName}`);
+    assert.ok(!experimentalAdBridge.test(text), `Experimental AdMob bridge in ${entry.fileName}`);
     assert.ok(!entry.fileName.endsWith('.map'), 'Do not publish release source maps');
     files.push({ file: entry.fileName, sha256: createHash('sha256').update(bytes).digest('hex') });
   }
@@ -51,7 +53,11 @@ async function inspectStaticFiles(directory, base = directory) {
     const file = path.relative(base, target).replaceAll('\\', '/');
     assert.ok(!/preview|\.map$|\.env|\.(?:p8|p12|pem|key)$/i.test(file), `Non-release file: ${file}`);
     const bytes = await readFile(target);
-    if (/\.(?:js|html|json|txt)$/i.test(file)) assert.ok(!qaContent.test(bytes.toString('utf8')), `QA content in ${file}`);
+    if (/\.(?:js|html|json|txt)$/i.test(file)) {
+      const text = bytes.toString('utf8');
+      assert.ok(!qaContent.test(text), `QA content in ${file}`);
+      assert.ok(!experimentalAdBridge.test(text), `Experimental AdMob bridge in ${file}`);
+    }
     files.push({ file, sha256: createHash('sha256').update(bytes).digest('hex') });
   }
   return files;

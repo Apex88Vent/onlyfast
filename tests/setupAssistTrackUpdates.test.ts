@@ -97,6 +97,11 @@ function edgeHandler() {
   const code = ts.transpileModule(file, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2021 } });
   const modules = {
     '../_shared/setup-assist-response.ts': response,
+    '../_shared/usage-authorization.ts': {
+      resolveServerMembership: async () => 'team',
+      reserveUsage: async () => ({ status: 'reserved', reservation: {} }),
+      finishUsage: async () => {}, releaseUsage: async () => {},
+    },
     'https://esm.sh/@supabase/supabase-js@2': { createClient: () => ({ auth: { getUser: async () => ({ data: { user: { id: 'test', app_metadata: { has_admin_full_access: true } } } }) } }) },
     '../_shared/beta-features.ts': { hasBetaFeatureForUser: async () => false },
     '../_shared/onlylaps-setup-context-store.ts': { createOnlyLapsSetupContextStore: () => ({}) },
@@ -109,7 +114,7 @@ function edgeHandler() {
 test('suggestions and What If use correct dirt meanings, strict formatting and unchanged model/auth scope', async () => {
   for (const whatIfQuestion of [undefined, 'What if I soften the front spring?']) {
     const edge = edgeHandler();
-    const result = await edge.call({ raceClass: 'Dwarf Cars', entry_handling: 'tight', exit_handling: 'loose', whatIfQuestion, race_weekend_key: 'Weekend' });
+    const result = await edge.call({ raceClass: 'Dwarf Cars', entry_handling: 'tight', exit_handling: 'loose', whatIfQuestion, race_weekend_key: 'Weekend', onlyfast_session_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' });
     assert.equal(result.status, 200);
     const body = edge.body();
     assert.equal(body.model, 'gpt-4o-mini');
@@ -118,17 +123,17 @@ test('suggestions and What If use correct dirt meanings, strict formatting and u
     assert.match(body.messages[0].content, /Loose means the rear steps out.*oversteers/);
     assert.match(body.messages[1].content, /Corner Entry: tight/);
     assert.equal((await result.json()).suggestion, response.formatSetupAssistResponse(JSON.stringify(answer)));
-    assert.equal((await edge.call({ race_weekend_key: 'Weekend' }, false)).status, 401);
+    assert.equal((await edge.call({ race_weekend_key: 'Weekend', onlyfast_session_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }, false)).status, 401);
     assert.equal((await edge.call({})).status, 400);
     edge.setContent(null);
-    assert.equal((await edge.call({ race_weekend_key: 'Weekend' })).status, 502);
+    assert.equal((await edge.call({ race_weekend_key: 'Weekend', onlyfast_session_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' })).status, 502);
   }
 });
 
 test('road/pavement requests use their discipline and supplied fields instead of dirt-only adjustments', async () => {
   for (const discipline of ['road_course', 'pavement_oval']) {
     const edge = edgeHandler();
-    const result = await edge.call({ discipline, raceClass: 'road_gt3', currentSetup: { road_low_speed_entry: 'understeer', road_straightaway: 'over_geared', rf_spring_rate: '140' }, race_weekend_key: 'Weekend' });
+    const result = await edge.call({ discipline, raceClass: 'road_gt3', currentSetup: { road_low_speed_entry: 'understeer', road_straightaway: 'over_geared', rf_spring_rate: '140' }, race_weekend_key: 'Weekend', onlyfast_session_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' });
     assert.equal(result.status, 200);
     const prompt = edge.body().messages[1].content;
     assert.match(prompt, discipline === 'road_course' ? /expert road course racing/ : /expert pavement oval racing/);
@@ -146,7 +151,7 @@ test('Setup Assist and What If keep speed and phase feedback separate and requir
   };
   for (const whatIfQuestion of [undefined, 'What if I adjust the front sway bar?']) {
     const edge = edgeHandler();
-    const result = await edge.call({ discipline: 'road_course', raceClass: 'road_gt3', currentSetup: values, whatIfQuestion, race_weekend_key: 'Weekend' });
+    const result = await edge.call({ discipline: 'road_course', raceClass: 'road_gt3', currentSetup: values, whatIfQuestion, race_weekend_key: 'Weekend', onlyfast_session_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' });
     assert.equal(result.status, 200);
     const [system, user] = edge.body().messages;
     for (const line of [
@@ -160,6 +165,6 @@ test('Setup Assist and What If keep speed and phase feedback separate and requir
     assert.match(system.content, /not specified as unknown/);
   }
   const dirt = edgeHandler();
-  await dirt.call({ discipline: 'dirt_oval', race_weekend_key: 'Weekend' });
+  await dirt.call({ discipline: 'dirt_oval', race_weekend_key: 'Weekend', onlyfast_session_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' });
   assert.ok(!dirt.body().messages[0].content.includes(response.ROAD_HANDLING_INSTRUCTIONS), 'road instructions do not change dirt assistance');
 });

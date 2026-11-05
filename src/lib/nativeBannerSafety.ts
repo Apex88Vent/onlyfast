@@ -14,10 +14,17 @@ function visibleBlocker(host: Window, element: Element) {
   return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0' && style.pointerEvents !== 'none';
 }
 
+const overlaySelectors = '[role="dialog"], .fixed.inset-0, [data-native-banner-unsafe="true"]';
+
+export function houseInterstitialIsSafe(host: Window, page: Document): boolean {
+  return !Array.from(page.querySelectorAll(`${overlaySelectors}, [data-house-interstitial-unsafe]`))
+    .some(element => visibleBlocker(host, element));
+}
+
 /** Median places the native banner BELOW the WebView, not over HTML content. */
 export function nativeBannerIsSafe(host: Window, page: Document): boolean {
   if (!page.querySelector('[data-native-banner-layout]')) return false;
-  const blockers = page.querySelectorAll('[role="dialog"], .fixed.inset-0, [data-native-banner-unsafe="true"]');
+  const blockers = page.querySelectorAll(overlaySelectors);
   if (Array.from(blockers).some(element => visibleBlocker(host, element))) return false;
   const active = page.activeElement as HTMLElement | null;
   const viewport = host.visualViewport;
@@ -34,13 +41,14 @@ export function nativeBannerIsSafe(host: Window, page: Document): boolean {
   const editing = active?.matches('input:not([type="button"]):not([type="submit"]):not([type="checkbox"]):not([type="radio"]), textarea, select') || active?.isContentEditable;
   // Without an installed monitor/usable geometry, fail conservatively. Focus
   // itself is not a permanent keyboard-visible signal on supported packages.
-  if (editing && !keyboard) return false;
+  if (editing) return false;
   return true;
 }
 
 /** Banner-only refreshes; never suspend, re-ticket, or dispatch interstitials. */
-export function watchNativeBannerSafety(controller: { refresh(): void }, host: Window, page: Document): () => void {
-  if (!isMedianUserAgent(host.navigator.userAgent)) return () => {};
+export function watchNativeBannerSafety(controller: { refresh(): void }, host: Window, page: Document, includeWeb = false): () => void {
+  const isMedian = isMedianUserAgent(host.navigator.userAgent);
+  if (!isMedian && !includeWeb) return () => {};
   let frame: number | null = null;
   let active = true;
   let subscribed: KeyboardBridge | undefined;
@@ -54,6 +62,7 @@ export function watchNativeBannerSafety(controller: { refresh(): void }, host: W
     refresh();
   };
   const prepareKeyboard = () => {
+    if (!isMedian) return;
     const bridge = (host as BannerWindow).median?.keyboard;
     if (!bridge || bridge === subscribed || typeof bridge.listen !== 'function') return;
     try {

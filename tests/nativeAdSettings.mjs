@@ -34,6 +34,51 @@ const native = compile('lib/nativeAds.ts', {
   './nativeAdsMode': adsMode,
 });
 
+test('the Rookie account menu opens the existing pricing route and paid accounts have no upgrade entry', async () => {
+  let tier = 'rookie';
+  const routes = [];
+  const Header = compile('components/Header.tsx', {
+    '@/lib/setupLibrary': { setupClassLabel: value => value },
+    'react-router-dom': { useNavigate: () => path => routes.push(path) },
+    'lucide-react': { ArrowUpRight: () => null },
+    '@/lib/supabase': { supabase: {} },
+    './SettingsModal': { __esModule: true, default: () => null },
+    './AppMenu': { __esModule: true, default: () => null },
+    '@/lib/trustedMembership': { getTrustedMembership: () => ({ membership_tier: tier }) },
+    '@/lib/testAccount': {},
+    '@/hooks/useBetaFeatures': { useBetaFeatures: () => ({ hasBetaFeature: () => false, loading: false }) },
+    '@/hooks/useMembershipRevision': { useMembershipRevision() {} },
+    '@/lib/betaFeatures': { BETA_FEATURES: {} },
+  }).default;
+  const props = { user: { id: 'racer', email: 'racer@example.com', user_metadata: {} }, selectedCar: '' };
+  const globals = ['window', 'document'].map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]);
+  for (const [name] of globals) Object.defineProperty(globalThis, name, { configurable: true, value: new EventTarget() });
+  let view;
+  try {
+    const openMenu = async () => act(async () => view.root.findByProps({ 'aria-label': 'Account menu for racer' }).props.onClick());
+    const upgrade = () => view.root.findAllByProps({ role: 'menuitem' }).find(item => text(item).trim() === 'Upgrade to Pro');
+    await act(async () => { view = create(React.createElement(Header, props)); });
+    await openMenu();
+    assert.ok(upgrade());
+    await act(async () => upgrade().props.onClick());
+    assert.deepEqual(routes, ['/pricing']);
+    assert.equal(view.root.findAllByProps({ 'aria-label': 'Account options' }).length, 0);
+    for (const plan of ['pro', 'team']) {
+      tier = plan;
+      await act(async () => view.update(React.createElement(Header, props)));
+      await openMenu();
+      assert.equal(upgrade(), undefined);
+      await openMenu();
+    }
+  } finally {
+    if (view) await act(async () => view.unmount());
+    for (const [name, previous] of globals) {
+      if (previous) Object.defineProperty(globalThis, name, previous);
+      else Reflect.deleteProperty(globalThis, name);
+    }
+  }
+});
+
 test('shared measured house owner keeps one scrolling ad across every view, content growth and paid/logout transitions', async () => {
   const names = ['window', 'MutationObserver', 'ResizeObserver', 'requestAnimationFrame', 'cancelAnimationFrame'];
   const previous = names.map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]);
@@ -105,9 +150,11 @@ test('actual Settings status stays live, reveals no IDs, remains suspended, and 
   const bridge = {
     banner: { enable: () => calls.push('enable'), disable: () => calls.push('disable') },
     showInterstitialIfReady: () => calls.push('interstitial'),
-    request: { consent: async () => ({ result: true }) },
+    request: { consent: async () => { calls.push('consent'); return { result: true }; } },
   };
   const controller = new native.NativeAdsController({
+    nativeAdPermission: () => 'allowed',
+    adRegion: () => 'US',
     enabled: uid => uid === id, eligible: uid => uid === currentId && eligible,
     userAgent: () => 'MedianAndroid/1.0', bridge: () => bridge,
     storage: () => ({ getItem: key => cooldownStorage.get(key) ?? null, setItem: (key, value) => cooldownStorage.set(key, value) }), now: () => now,
@@ -157,6 +204,12 @@ test('actual Settings status stays live, reveals no IDs, remains suspended, and 
     assert.equal(value('Interstitial request sent'), 'Yes');
     assert.equal(value('Interstitial suppression'), 'None');
     assert.equal(value('Shared cooldown remaining'), '600 seconds');
+    const consent = view.root.findAllByType('button').find(button => text(button) === 'Check advertising consent');
+    assert.ok(consent);
+    const checks = calls.filter(call => call === 'consent').length;
+    await act(async () => { await consent.props.onClick(); });
+    assert.equal(calls.filter(call => call === 'consent').length, checks + 1);
+    assert.equal(value('Shared cooldown remaining'), '600 seconds');
     await act(async () => { now += 1000; controller.refresh(); });
     assert.equal(value('Shared cooldown remaining'), '599 seconds');
     assert.match(text(status()[0]), /Google ad display is not confirmed/);
@@ -184,6 +237,8 @@ test('mounted inline house ads remain independent of native banner availability 
   const bridge = { banner: { enable() {}, disable() {} }, request: { consent: async () => ({ result: true }) } };
   let availableBridge = bridge;
   const controller = new native.NativeAdsController({
+    nativeAdPermission: () => 'allowed',
+    adRegion: () => 'US',
     enabled: uid => enabled && uid === id, eligible: () => eligible,
     userAgent: () => 'MedianAndroid/1.0', bridge: () => availableBridge,
     storage: () => ({ getItem: () => null, setItem() {} }), now: Date.now,
@@ -252,6 +307,8 @@ test('real Assist answers remain readable before dismissal; generation, failures
     },
   };
   const controller = new native.NativeAdsController({
+    nativeAdPermission: () => 'allowed',
+    adRegion: () => 'US',
     enabled: uid => uid === id, eligible: uid => uid === id,
     userAgent: () => 'MedianAndroid/1.0', bridge: () => bridge,
     storage: () => ({ getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) }), now: () => 1_000_000,

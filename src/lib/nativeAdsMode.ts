@@ -6,7 +6,8 @@ export function resolveNativeAdsMode(config: {
 }): NativeAdsMode {
   if (config.enabled !== 'true') return 'off';
   if (config.mode === 'production') {
-    return config.productionBuild && config.deployment === 'production' && config.origin === 'https://onlyfast.app'
+    return config.productionBuild &&
+      config.deployment === 'production' && config.origin === 'https://onlyfast.app'
       ? 'production' : 'off';
   }
   // Preserve the existing registered-device rollout until explicitly activated.

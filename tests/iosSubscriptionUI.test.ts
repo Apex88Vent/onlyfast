@@ -86,8 +86,9 @@ for (const environment of environments) {
     assert.match(settings, /href="\/support"[^>]*>Contact Support/);
     assert.match(settings, /Delete Account/);
     if (isMedianUserAgent(environment.ua) && nativePlatform(environment.ua, environment.touch) !== null) {
-      assert.match(settings, /Request advertising privacy choices/);
-    } else assert.doesNotMatch(settings, /Request advertising privacy choices/);
+      assert.match(settings, /Check advertising consent/);
+      assert.match(settings, /cannot reopen saved advertising choices/);
+    } else assert.doesNotMatch(settings, /Check advertising consent/);
     assert.match(settings, /Type DELETE to confirm/);
     assert.match(support, /Technical issue/);
     assert.match(support, /Privacy or data request/);
