@@ -1,155 +1,90 @@
-// Required secrets:
-// - TEST_ACCOUNT_RESET_ENABLED=true to enable
-// - SUPABASE_URL
-// - SUPABASE_SERVICE_ROLE_KEY
-//
-// Recommended Supabase setting:
-// - Verify JWT: ON. This function also verifies the bearer token server-side
-//   and checks the caller's account-level reset feature.
-//
-// =============================================================================
-// reset-test-account  (Supabase Edge Function)  — DEV/DEMO ONLY
-// -----------------------------------------------------------------------------
-// Securely resets APP DATA for the authorized experimental account. It NEVER
-// deletes the Supabase Auth user, so the account remains reusable.
-//
-// SAFETY MODEL (all enforced server-side — the frontend flag is NOT a boundary):
-//   1) SERVER-SIDE ENABLE FLAG
-//      Refuses to run unless the env secret TEST_ACCOUNT_RESET_ENABLED === "true".
-//      Set this to anything else (or unset it) before production to hard-disable.
-//   2) JWT VERIFICATION
-//      Manually verifies the caller's bearer token via auth.getUser(token).
-//      (Also deploy with "Verify JWT" = ON for defense-in-depth.)
-//   3) ACCOUNT-SPECIFIC FEATURE CHECK
-//      Only proceeds when the verified Auth user ID belongs to an experimental
-//      beta tester with test_account_reset explicitly enabled.
-//   4) NO CLIENT-SUPPLIED IDS
-//      user_id is derived from the verified token, never from the request body.
-//   5) NO BILLING SIDE-EFFECTS
-//      Only the LOCAL public.user_subscriptions row is cleared. No Stripe / Apple
-//      / Google APIs are ever called, so no real billing record can be affected.
-//      (the disposable experimental account should never hold real billing.)
-//
-// DEPLOY (dashboard):
-//   - Function name: reset-test-account
-//   - Verify JWT: ON
-//   - Secrets (Project Settings → Edge Functions → Secrets):
-//       TEST_ACCOUNT_RESET_ENABLED = true        ← set to "false" to disable
-//       SUPABASE_URL               = (auto-provided)
-//       SUPABASE_SERVICE_ROLE_KEY  = (auto-provided)  ← stays server-side only
-//
-// DEPLOY (CLI):
-//   mkdir -p supabase/functions/reset-test-account
-//   cp docs/edge-functions/reset-test-account.ts supabase/functions/reset-test-account/index.ts
-//   supabase secrets set TEST_ACCOUNT_RESET_ENABLED=true
-//   supabase functions deploy reset-test-account
-//
-// To disable, turn off test_account_reset for the experimental account or set
-// TEST_ACCOUNT_RESET_ENABLED=false on the server.
-// =============================================================================
-
+// PREPARED ONLY: explicit fixture reset; never a login/logout hook.
+// Keep TEST_ACCOUNT_RESET_ENABLED=false until separately reviewed deployment.
+// Supabase Auth/feature checks are reused; no customer subscription/metadata reset.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { hasBetaFeatureForUser } from '../_shared/beta-features.ts';
+import { QA_EMAIL, QA_PRODUCTION_REF, QA_PRODUCTION_USER, QA_RESET_CONFIRMATION, QA_CLEANUP_CONFIRMATION, QA_MARKER,
+  QA_TABLE_OWNERS, isUUID, qaFixtureId, assertQARecordOwnership, validateQARecords, validateQARunRecords } from '../_shared/qa-fixtures.ts';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  });
-}
-
-// deno-lint-ignore no-explicit-any
-declare const Deno: any;
+const headers = { 'Access-Control-Allow-Origin':'*', 'Access-Control-Allow-Headers':'authorization, x-client-info, apikey, content-type', 'Access-Control-Allow-Methods':'POST, OPTIONS', 'Content-Type':'application/json' };
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),{status,headers});
 
 Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
-
+  if(req.method==='OPTIONS')return new Response('ok',{headers});
+  if(req.method!=='POST')return json({error:'METHOD_NOT_ALLOWED'},405);
+  if(Deno.env.get('TEST_ACCOUNT_RESET_ENABLED')!=='true')return json({error:'QA_RESET_DISABLED'},403);
   try {
-    // (1) SERVER-SIDE ENABLE FLAG -------------------------------------------
-    const enabled = (Deno.env.get('TEST_ACCOUNT_RESET_ENABLED') ?? '').toLowerCase() === 'true';
-    if (!enabled) {
-      return json({ error: 'Test account reset is disabled on the server.' }, 403);
+    const body=await req.json();
+    const cleanup=body?.action==='cleanup_qa_run', probe=body?.action==='verify_qa_cleanup';
+    if(!probe && !(cleanup?body.confirmation===QA_CLEANUP_CONFIRMATION:body?.action==='reset_qa_fixtures' && body.confirmation===QA_RESET_CONFIRMATION))return json({error:'QA_EXPLICIT_RESET_REQUIRED'},400);
+    const url=Deno.env.get('SUPABASE_URL') || '', key=Deno.env.get('SUPABASE_ANON_KEY') || '';
+    const project=new URL(url).hostname.split('.')[0];
+    const expected=project===QA_PRODUCTION_REF?QA_PRODUCTION_USER:Deno.env.get('ONLYFAST_QA_USER_ID');
+    if(!isUUID(expected) || !key)return json({error:'QA_SERVER_CONFIGURATION_REQUIRED'},503);
+    // A production reset is a separately authorized operator action.
+    if(project===QA_PRODUCTION_REF && Deno.env.get('ONLYFAST_QA_PRODUCTION_RESET_APPROVED')!=='true')return json({error:'QA_PRODUCTION_RESET_NOT_APPROVED'},403);
+    const token=(req.headers.get('Authorization') || '').replace(/^Bearer\s+/i,'').trim();
+    if(!token)return json({error:'AUTHENTICATION_REQUIRED'},401);
+    const client=createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false},global:{headers:{Authorization:'Bearer '+token}}});
+    const {data,error}=await client.auth.getUser(token);
+    if(error || data?.user?.id!==expected || data.user.email?.toLowerCase()!==QA_EMAIL)return json({error:'QA_IDENTITY_REQUIRED'},403);
+    if(!await hasBetaFeatureForUser(client,expected,'test_account_reset','experimental'))return json({error:'QA_RESET_PERMISSION_REQUIRED'},403);
+    const records=probe?[]:cleanup?validateQARunRecords(body.records,body.runId):await validateQARecords(body.records,project=== 'localhost'||project==='127'?'local':project,expected);
+    // The original reset already required this server-only credential. Here it
+    // is used solely to detect cross-owner/cascade dependencies hidden by RLS.
+    // Ordinary QA reads/writes never use it; all reset deletes below use the JWT.
+    const service=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if(!service)return json({error:'QA_DEPENDENCY_CHECK_UNAVAILABLE'},503);
+    const observer=createClient(url,service,{auth:{persistSession:false,autoRefreshToken:false}});
+    if(probe) {
+      for(const table of ['shared_setups','onlyfast_onlylaps_session_links']) {
+        const result=await observer.from(table).select('id').eq('id','00000000-0000-0000-0000-000000000000').limit(1);
+        if(result.error)throw Error('QA_DEPENDENCY_CHECK_UNAVAILABLE');
+      }
+      return json({ok:true,protocol:'onlyfast-qa-v1',cleanupReady:true});
     }
-
-    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-    const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-
-    // (2) JWT VERIFICATION ---------------------------------------------------
-    const authHeader = req.headers.get('Authorization') ?? '';
-    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-    if (!token) return json({ error: 'Missing bearer token.' }, 401);
-
-    // Admin client (service role) — never exposed to the browser.
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-
-    const { data: userData, error: userErr } = await admin.auth.getUser(token);
-    if (userErr || !userData?.user) {
-      return json({ error: 'Invalid or expired token.' }, 401);
+    const allowedShares=new Set(records.filter(r=>r.table==='shared_setups').map(r=>r.id));
+    const allowedSetups=new Set(records.filter(r=>r.table==='race_setups').map(r=>r.id));
+    for(const record of records) {
+      const owner=QA_TABLE_OWNERS[record.table];
+      const found=await client.from(record.table).select('*').eq('id',record.id).eq(owner,expected).maybeSingle();
+      if(found.error)throw Error('QA_RECORD_READ_FAILED');
+      if(!found.data)continue;
+      assertQARecordOwnership(found.data,record,expected);
+      if(cleanup) {
+        const marker=found.data.custom_fields?.[QA_MARKER];
+        if(marker?.persistent!==false || marker.runId!==body.runId)throw Error('QA_RUN_MARKER_REQUIRED');
+      }
+      if(record.table==='shared_setups') {
+        const parentId=await qaFixtureId(project==='localhost'||project==='127'?'local':project,expected,'setup:dirt:hotlaps');
+        if(found.data.setup_id!==parentId)throw Error('QA_PARENT_REQUIRED');
+        const parent=await client.from('race_setups').select('*').eq('id',parentId).eq('user_id',expected).single();
+        if(parent.error)throw Error('QA_PARENT_REQUIRED');
+        assertQARecordOwnership(parent.data,{table:'race_setups',id:parentId,key:'setup:dirt:hotlaps'},expected);
+      }
+      if(record.table==='race_setups') {
+        const shares=await observer.from('shared_setups').select('id,shared_by').eq('setup_id',record.id);
+        const links=await observer.from('onlyfast_onlylaps_session_links').select('id').eq('onlyfast_session_id',record.id).limit(1);
+        if(shares.error || links.error || links.data?.length || shares.data?.some((s: {id:string;shared_by:string})=>!allowedShares.has(s.id)||s.shared_by!==expected))throw Error('QA_EXTERNAL_REFERENCE');
+      }
+      if(record.table==='race_schedule') {
+        const children=await observer.from('race_setups').select('id,user_id').eq('race_schedule_id',record.id);
+        if(children.error || children.data?.some((s: {id:string;user_id:string})=>!allowedSetups.has(s.id)||s.user_id!==expected))throw Error('QA_EXTERNAL_REFERENCE');
+      }
     }
-    const verifiedUser = userData.user;
-
-    // (3) ACCOUNT FLAG — derived from the verified Auth user ID --------------
-    const canReset = await hasBetaFeatureForUser(
-      admin,
-      verifiedUser.id,
-      'test_account_reset',
-      'experimental',
-    );
-    if (!canReset) {
-      return json({ error: 'Forbidden: this endpoint only resets the test account.' }, 403);
+    let deleted=0;
+    // Explicit child-first order, bounded exact IDs. No subscription/Auth/usage
+    // deletes, no broad owner deletes, no OnlyLaps telemetry deletion.
+    for(const table of ['shared_setups','race_setups','race_schedule'] as const)for(const record of records.filter(r=>r.table===table)) {
+      const fresh=await client.auth.getUser(token);
+      if(fresh.error || fresh.data?.user?.id!==expected)throw Error('QA_IDENTITY_CHANGED');
+      const removed=await client.from(table).delete().eq('id',record.id).eq(QA_TABLE_OWNERS[table],expected).select('id');
+      if(removed.error)throw Error('QA_RESET_INCOMPLETE');
+      deleted+=removed.data?.length || 0;
     }
-
-    // (4) user_id comes ONLY from the verified token, never from the body ----
-    const userId = verifiedUser.id;
-
-    // ----------------------------------------------------------------------
-    // Targeted deletes of this user's app data. Adjust the table list here if
-    // your schema differs — use the ACTUAL current table names, by user_id.
-    // NOTE: No Stripe/Apple/Google API calls are made anywhere below, so no
-    // real billing record can be affected (point 6).
-    // ----------------------------------------------------------------------
-    const byUserId = [
-      'race_setups',
-      'race_sessions',
-      'race_schedule',
-      'parts_reference',      // user-specific (has user_id) — safe to clear by user_id
-    ];
-
-    const results: Record<string, string> = {};
-
-    for (const table of byUserId) {
-      const { error } = await admin.from(table).delete().eq('user_id', userId);
-      results[table] = error ? `skip/err: ${error.message}` : 'cleared';
-    }
-
-    // Shared/owned setups created by this user (column may differ in your schema).
-    {
-      const { error } = await admin.from('shared_setups').delete().eq('shared_by', userId);
-      results['shared_setups'] = error ? `skip/err: ${error.message}` : 'cleared';
-    }
-
-    // Subscription/promo state — LOCAL row only, NO Stripe API call.
-    {
-      const { error } = await admin.from('user_subscriptions').delete().eq('user_id', userId);
-      results['user_subscriptions'] = error ? `skip/err: ${error.message}` : 'cleared';
-    }
-
-    // Reset onboarding/profile/demo metadata back to a brand-new state.
-    // (Does NOT delete the auth user — point 6/requirement 6.)
-    await admin.auth.admin.updateUserById(userId, {
-      user_metadata: {},
-    });
-
-    return json({ ok: true, userId, results });
-  } catch (err) {
-    return json({ error: String((err as Error)?.message ?? err) }, 500);
+    return json({ok:true,deleted});
+  } catch {
+    // Never serialize SDK errors, tokens, private records or subscription data.
+    return json({error:'QA_RESET_REFUSED_OR_INCOMPLETE'},400);
   }
 });

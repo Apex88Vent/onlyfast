@@ -7,6 +7,8 @@
 //   supabase/functions/_shared/beta-features.ts
 //
 // The prior standalone example authorized by email and must not be redeployed.
-// The canonical function verifies the caller's JWT-derived Auth user ID,
-// experimental tester kind, and test_account_reset assignment server-side.
+// The prepared canonical function additionally requires an explicit fixture
+// allowlist and confirmation, pins the dedicated identity and refuses external
+// references. It preserves subscriptions, Auth metadata and legacy QA data.
+// Ordinary login/logout calls are inert locally. Nothing is deployed here.
 export {};

@@ -1,0 +1,146 @@
+[
+  {
+    "tablename": "race_setups",
+    "policyname": "phase1_setup_owner_read",
+    "permissive": "RESTRICTIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "(user_id = ( SELECT auth.uid() AS uid))",
+    "with_check": null
+  },
+  {
+    "tablename": "race_setups",
+    "policyname": "phase1_setup_owner_write",
+    "permissive": "RESTRICTIVE",
+    "roles": "{authenticated}",
+    "cmd": "ALL",
+    "qual": "(user_id = ( SELECT auth.uid() AS uid))",
+    "with_check": "(user_id = ( SELECT auth.uid() AS uid))"
+  },
+  {
+    "tablename": "race_setups",
+    "policyname": "race_setups_delete_own",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "DELETE",
+    "qual": "((auth.uid() = user_id) AND onlyfast_can_access_setup_class(user_id, race_class))",
+    "with_check": null
+  },
+  {
+    "tablename": "race_setups",
+    "policyname": "race_setups_development_library_gate",
+    "permissive": "RESTRICTIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "(((NOT onlyfast_is_development_setup_class(race_class)) AND (NOT COALESCE((custom_fields ? 'onlyfast_setup_library_v1'::text), false))) OR onlyfast_can_use_setup_library())",
+    "with_check": "(((NOT onlyfast_is_development_setup_class(race_class)) AND (NOT COALESCE((custom_fields ? 'onlyfast_setup_library_v1'::text), false))) OR onlyfast_can_use_setup_library())"
+  },
+  {
+    "tablename": "race_setups",
+    "policyname": "race_setups_insert_own",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "((auth.uid() = user_id) AND onlyfast_can_save_setup_class(user_id, race_class))"
+  },
+  {
+    "tablename": "race_setups",
+    "policyname": "race_setups_select_own",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "((auth.uid() = user_id) AND onlyfast_can_access_setup_class(user_id, race_class))",
+    "with_check": null
+  },
+  {
+    "tablename": "race_setups",
+    "policyname": "race_setups_select_via_share",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "(((auth.uid() IS NULL) OR (auth.uid() <> user_id)) AND (EXISTS ( SELECT 1\n   FROM shared_setups s\n  WHERE ((s.setup_id = race_setups.id) AND (s.is_public = true)))))",
+    "with_check": null
+  },
+  {
+    "tablename": "race_setups",
+    "policyname": "race_setups_select_via_unexpired_public_share",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "(EXISTS ( SELECT 1\n   FROM shared_setups s\n  WHERE ((s.setup_id = race_setups.id) AND (s.is_public = true) AND (s.expires_at > now()))))",
+    "with_check": null
+  },
+  {
+    "tablename": "race_setups",
+    "policyname": "race_setups_update_own",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "UPDATE",
+    "qual": "((auth.uid() = user_id) AND onlyfast_can_access_setup_class(user_id, race_class))",
+    "with_check": "((auth.uid() = user_id) AND onlyfast_can_save_setup_class(user_id, race_class))"
+  },
+  {
+    "tablename": "shared_setups",
+    "policyname": "phase1_share_owner_read",
+    "permissive": "RESTRICTIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "(shared_by = ( SELECT auth.uid() AS uid))",
+    "with_check": null
+  },
+  {
+    "tablename": "shared_setups",
+    "policyname": "phase1_share_owner_write",
+    "permissive": "RESTRICTIVE",
+    "roles": "{authenticated}",
+    "cmd": "ALL",
+    "qual": "(shared_by = ( SELECT auth.uid() AS uid))",
+    "with_check": "((shared_by = ( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1\n   FROM race_setups r\n  WHERE ((r.id = shared_setups.setup_id) AND (r.user_id = ( SELECT auth.uid() AS uid))))))"
+  },
+  {
+    "tablename": "shared_setups",
+    "policyname": "shared_setups_delete_own",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "DELETE",
+    "qual": "(auth.uid() = shared_by)",
+    "with_check": null
+  },
+  {
+    "tablename": "shared_setups",
+    "policyname": "shared_setups_insert_own",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "((auth.uid() = shared_by) AND (EXISTS ( SELECT 1\n   FROM race_setups r\n  WHERE ((r.id = shared_setups.setup_id) AND (r.user_id = auth.uid())))))"
+  },
+  {
+    "tablename": "shared_setups",
+    "policyname": "shared_setups_select_own",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "(auth.uid() = shared_by)",
+    "with_check": null
+  },
+  {
+    "tablename": "shared_setups",
+    "policyname": "shared_setups_select_unexpired_public",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "((is_public = true) AND (expires_at > now()))",
+    "with_check": null
+  },
+  {
+    "tablename": "shared_setups",
+    "policyname": "shared_setups_update_own",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "UPDATE",
+    "qual": "(auth.uid() = shared_by)",
+    "with_check": "(auth.uid() = shared_by)"
+  }
+]

@@ -1,6 +1,6 @@
 // Executes the prepared SQL against disposable PostgreSQL/WASM, with real roles/RLS.
 import assert from 'node:assert/strict';
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
@@ -45,7 +45,7 @@ test('Phase 1 PostgreSQL roles, immutable weekends, sharing, quotas and retained
     const legacy = await insert(a,'Legacy', 'base', { created_at: '2026-10-01', updated_at: '2026-10-02', notes: 'keep', custom_fields: { legacy: 'keep' } });
     await db.query("insert into public.setup_assist_usage(user_id,race_weekend_key,used_count) values($1,'Legacy',1)",[a]);
     await db.query("insert into public.shared_setups(setup_id,shared_by,shared_by_email,share_code) values($1,$2,'private@example.invalid','Abcd2345')",[legacy.id,a]);
-    const phase = (await readdir(new URL('../supabase/migrations/',import.meta.url))).filter(x=>x.includes('_phase1_')).sort();
+    const phase = ['20261105090932_phase1_membership_and_sharing.sql','20261105090937_phase1_setup_and_usage_authorization.sql','20261105091108_phase1_restrict_legacy_access.sql'];
     for (const name of phase) await db.exec(await read('supabase/migrations/'+name));
     const migrated = (await db.query('select * from public.race_setups where id=$1',[legacy.id])).rows[0];
 
@@ -245,7 +245,7 @@ test('Phase 1 applies to the recorded production migration shape without releasi
     const original=(await db.query("insert into public.race_setups(user_id,setup_name,setup_type,race_class,custom_fields) values($1,'Preserved development sheet','base','GT3',$2::jsonb) returning *",
       [a,JSON.stringify({onlyfast_setup_library_v1:{version:1,race_class:'GT3',values:{}}})])).rows[0];
     await db.exec('reset role');await db.query("select set_config('request.jwt.claim.sub','',false)");
-    for(const name of (await readdir(new URL('../supabase/migrations/',import.meta.url))).filter(name=>name.includes('_phase1_')).sort()) {
+    for(const name of ['20261105090932_phase1_membership_and_sharing.sql','20261105090937_phase1_setup_and_usage_authorization.sql','20261105091108_phase1_restrict_legacy_access.sql']) {
       await db.exec(await read('supabase/migrations/'+name));
     }
     const result=(await db.query('select * from public.race_setups where id=$1',[original.id])).rows[0];

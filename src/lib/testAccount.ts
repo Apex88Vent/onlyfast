@@ -26,19 +26,18 @@ export function canResetCurrentTestAccount(): boolean {
   return hasCachedExperimentalBetaFeature(BETA_FEATURES.testAccountReset);
 }
 
-/**
- * Calls the secure `reset-test-account` Edge Function for the currently
- * signed-in session. Safe to call from logout OR from a reset-on-login
- * fallback (covers the case where logout never ran because the browser was
- * closed or the session expired).
- *
- * The frontend never decides what gets reset. The Edge Function independently
- * verifies the JWT, authenticated user ID, experimental tester kind, and
- * test_account_reset feature flag before deleting any app data.
- *
- * Returns true on success, false on failure (logout should proceed either way).
- */
-export async function resetTestAccountData(): Promise<boolean> {
+export interface ExplicitQAReset {
+  action: 'reset_qa_fixtures';
+  confirmation: 'RESET-ONLYFAST-QA-FIXTURES';
+  records: ReadonlyArray<{ table: string; id: string; key: string }>;
+}
+
+// Legacy no-argument login/logout callers deliberately do nothing. Explicit
+// operator tooling supplies a bounded fixture allowlist, never a whole account.
+// The prepared server implementation independently repeats authorization.
+export async function resetTestAccountData(request?: ExplicitQAReset): Promise<boolean> {
+  if (request?.action !== 'reset_qa_fixtures' || request.confirmation !== 'RESET-ONLYFAST-QA-FIXTURES' ||
+      !Array.isArray(request.records) || !request.records.length || request.records.length > 24) return false;
   try {
     const { data: sessionData } = await supabase.auth.getSession();
     const accessToken = sessionData?.session?.access_token;
@@ -46,16 +45,19 @@ export async function resetTestAccountData(): Promise<boolean> {
       console.warn('[test-account] no active session; skipping reset');
       return false;
     }
+    const { data: verified, error: verificationError } = await supabase.auth.getUser();
+    if (verificationError || verified.user?.id !== sessionData.session?.user.id || !canResetCurrentTestAccount()) return false;
     const { error } = await supabase.functions.invoke('reset-test-account', {
       headers: { Authorization: `Bearer ${accessToken}` },
+      body: request,
     });
     if (error) {
-      console.warn('[test-account] reset-test-account failed:', error.message || error);
+      console.warn('[test-account] explicit fixture reset failed');
       return false;
     }
     return true;
-  } catch (err) {
-    console.warn('[test-account] reset-test-account threw:', err);
+  } catch {
+    console.warn('[test-account] explicit fixture reset unavailable');
     return false;
   }
 }

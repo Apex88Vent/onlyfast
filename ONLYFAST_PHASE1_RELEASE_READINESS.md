@@ -1,5 +1,7 @@
 # OnlyFast Phase 1 release readiness
 
+> Owner revision for the production release: the isolated-restore demonstration requirement below is removed. The owner accepts the confirmed November 5, 2026, 07:55:32 UTC daily physical backup with Restore option as the recovery safeguard and accepts proceeding without a tested restore. Temporary sharing incompatibility for outdated clients is also accepted. These owner instructions supersede the corresponding historical gates in this report; schema/data safety, release scope and compatible recovery checks remain required. See `ONLYFAST_PHASE1_PRODUCTION_RELEASE.md` for actual execution status.
+
 November 5, 2026. Local final verification on `main` at `d4c07efa644c3f28e107932d857c818013976eb7`, primary checkout `C:/Users/c_mar/OneDrive/Desktop/Apex88/OnlyFast/App/racing-setup-dirt (1)/onlyfast`, remote `https://github.com/Apex88Vent/onlyfast.git`.
 
 ## 1. Overall assessment

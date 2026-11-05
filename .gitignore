@@ -32,3 +32,8 @@ dist-ssr
 
 # Local QA files, credentials, screenshots in progress and generated builds.
 /tmp/
+
+# QA secrets belong in the operator/CI secret store, outside this repository.
+qa/automation/.env*
+!qa/automation/.env.example
+qa/automation/*.local.json

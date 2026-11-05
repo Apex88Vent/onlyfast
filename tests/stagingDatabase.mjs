@@ -53,7 +53,7 @@ test('offline staging workspace is deterministic, complete, immutable and refuse
     const manifest = await prepareStagingDatabase(output);
     assert.equal(manifest.entries.length, 16);
     assert.equal(Object.keys(manifest.excluded).filter(name => !name.includes('_phase1_')).length, 2);
-    assert.equal(Object.keys(manifest.excluded).filter(name => name.includes('_phase1_')).length, 3);
+    assert.equal(Object.keys(manifest.excluded).filter(name => name.includes('_phase1_')).length, 4);
     const files = await readdir(path.join(output, 'supabase', 'migrations'));
     assert.deepEqual(files.sort(), manifest.entries.map(e => e.file).sort());
     for (const e of manifest.entries) {
