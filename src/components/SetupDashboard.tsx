@@ -16,7 +16,7 @@ import ChassisSetupForm from './ChassisSetupForm';
 import DirtOvalTrack from './DirtOvalTrack';
 import RoadCourseTrack from './RoadCourseTrack';
 import PavementOvalTrack from './PavementOvalTrack';
-import HandlingFeedback from './HandlingFeedback';
+import { deferredFeature } from './DeferredFeature';
 import CustomFieldManager, { CustomField } from './CustomFieldManager';
 import SavedSetups from './SavedSetups';
 import SetupComparison from './SetupComparison';
@@ -26,7 +26,6 @@ import SaveSetupModal from './SaveSetupModal';
 import CreateBaseSetupView from './CreateBaseSetupView';
 import BaseTemplatePicker from './BaseTemplatePicker';
 import TodoList from './TodoList';
-import ScanTimingScreen from './ScanTimingScreen';
 import TimingDataDisplay from './TimingDataDisplay';
 import ActiveOnlyLapsSessionLinkSlot from './ActiveOnlyLapsSessionLinkSlot';
 import { attachTimingDataToSession, type TimingData } from '@/lib/timingData';
@@ -35,9 +34,12 @@ import {
   buildScheduleFinishSyncDecision,
   isBlankScheduleFinishingPosition,
 } from '@/lib/scheduleFinishingPosition';
+import HomeLanding, { HomeAction } from './HomeLanding';
 import PartsReference from './PartsReference';
 import RaceSchedule from './RaceSchedule';
-import HomeLanding, { HomeAction } from './HomeLanding';
+
+const HandlingFeedback = deferredFeature(() => import('./HandlingFeedback'), 'Setup Assist').Component;
+const ScanTimingScreen = deferredFeature(() => import('./ScanTimingScreen'), 'timing scanner').Component;
 import {
   getRaceRolloverSelection,
   getRaceFinalScheduledDate,
@@ -59,7 +61,6 @@ import {
   drainOwnedQueue,
   removeFromQueue as removePending,
   isNetworkError,
-  PendingSave,
 } from '@/lib/offlineQueue';
 import { getAccountStatus } from '@/lib/subscription';
 import {
@@ -253,18 +254,6 @@ interface UnifiedSavedMeta {
   ids: Partial<Record<SetupType, string>>;
   raceScheduleId?: string;
   raceWeekendId?: string;
-}
-
-type WeekendSessionStatus = 'complete' | 'in-progress' | 'not-started';
-interface WeekendPreview {
-  trackName?: string;
-  date?: string;
-  sessions?: {
-    id?: string;
-    label: string;
-    status: WeekendSessionStatus;
-    result?: string;
-  }[];
 }
 
 interface QueriedWeekendSessions {

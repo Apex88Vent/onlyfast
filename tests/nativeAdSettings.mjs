@@ -295,7 +295,6 @@ test('real Assist answers remain readable before dismissal; generation, failures
   const storage = new Map();
   let view;
   let requests = 0;
-  let used = 0;
   let mode = 'success';
   let resolveResponse;
   let ads = 0;
@@ -316,16 +315,19 @@ test('real Assist answers remain readable before dismissal; generation, failures
   });
   controller.setUser(id); controller.setForeground(true); controller.setRouteSupported(true);
   controller.setPlacement(id, 'setup'); await controller.requestConsent();
-  const query = { select() { return this; }, eq() { return this; }, maybeSingle: async () => ({ data: { used_count: used } }) };
   const Feedback = compile('components/HandlingFeedback.tsx', {
     '@/lib/nativeAds': { nativeAds: controller },
     '@/lib/supabase': { supabase: {
-      from: () => query, auth: { getSession: async () => ({ data: { session: { access_token: 'fixture' } } }) },
-      functions: { invoke: async () => { requests++; return mode === 'delay' ? new Promise(resolve => { resolveResponse = resolve; }) :
+      auth: { getSession: async () => ({ data: { session: { access_token: 'fixture' } } }) },
+      functions: { invoke: async (_name, options) => { requests++;
+        assert.equal(options.body.onlyfast_session_id, 'saved-row');
+        assert.match(options.body.request_id, /^[0-9a-f-]{36}$/);
+        if (mode === 'quota') return { data: null, error: { message: 'Existing usage limit',
+          context: new Response(JSON.stringify({ error: 'Existing usage limit' }), { status: 429 }) } };
+        return mode === 'delay' ? new Promise(resolve => { resolveResponse = resolve; }) :
         mode === 'success' ? { data: { suggestion: 'Useful completed answer' }, error: null } : { data: null, error: null }; } },
     } },
-    '@/lib/membership': { readMembership: () => ({}), getEffectiveTier: () => 'rookie',
-      checkSetupAssistPermission: (_tier, count) => ({ allowed: count < 1, upgradeText: 'Existing usage limit' }) },
+    '@/lib/membership': {},
     '@/hooks/useMembershipRevision': { useMembershipRevision() {} },
     '@/lib/onlylapsSessionScope': { ONLYLAPS_SESSION_LINK_CHANGED_EVENT: 'fixture-link' },
     '@/lib/setupLibrary': { EXPANDED_CLASS_CONFIGS: {} },
@@ -358,10 +360,11 @@ test('real Assist answers remain readable before dismissal; generation, failures
     assert.equal(ads, 1); assert.equal(controller.getDiagnostics().lastInterstitialSuppression, 'cooldown');
     mode = 'empty'; await act(async () => { await suggest().props.onClick(); });
     assert.equal(dismiss(), undefined); assert.equal(ads, 1);
-    const previousRequests = requests; used = 1;
+    const previousRequests = requests; mode = 'quota';
     await act(async () => { await suggest().props.onClick(); });
-    assert.equal(requests, previousRequests); assert.match(text(view.toJSON()), /Existing usage limit/);
-    used = 0; mode = 'delay';
+    assert.equal(requests, previousRequests + 1, 'the authoritative server, not a stale browser count, denies quota');
+    assert.match(text(view.toJSON()), /Existing usage limit/);assert.equal(dismiss(), undefined);assert.equal(ads, 1);
+    mode = 'delay';
     await act(async () => { pending = suggest().props.onClick(); });
     await act(async () => { controller.setUser('other'); props = { ...props, user: { id: 'other' } }; view.update(React.createElement(Feedback, props)); });
     await act(async () => { resolveResponse({ data: { suggestion: 'Late previous-owner answer' }, error: null }); await pending; });

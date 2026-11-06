@@ -351,7 +351,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error, user
             </div>
           </section>
         )}
-        {step === 4 && <PlanSelection userId={userId} onBack={() => advance(3)} onComplete={async () => {
+        {step === 4 && <PlanSelection onboarding userId={userId} onBack={() => advance(3)} onComplete={async () => {
           if (disciplines.find(d => d.name === selectedDiscipline)?.enabled
             && getDisciplineSetupClasses(disciplines.find(d => d.name === selectedDiscipline)?.key as SetupCategory, betaAccess).includes(selectedClass)) return onComplete(selectedClass);
           throw new Error('Choose a supported discipline and class first.');

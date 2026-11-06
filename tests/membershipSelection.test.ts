@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 
 const require = createRequire(import.meta.url);
-function renderPlans(native: boolean, allowWebCheckout = false, enabled = false) {
+function renderPlans(native: boolean, allowWebCheckout = false, enabled = false, onboarding = false) {
   const cache = new Map<string, any>();
   function load(file: string): any {
     if (cache.has(file)) return cache.get(file);
@@ -22,10 +22,9 @@ function renderPlans(native: boolean, allowWebCheckout = false, enabled = false)
       if (name.includes('trustedMembership')) return { getTrustedMembership: () => null };
       if (name.includes('testAccount')) return { isCurrentUserTestAccount: () => false };
       if (name === '@/lib/supabase' || name === '@/lib/subscription') return {};
-      if (name === './NativeSubscriptionControls' || name === './StripeBuyButton') return { default: () => {
-        assert.ok(enabled, 'Disabled native plan must not mount purchase controls');
+      if (name === './NativeSubscriptionControls' || name === './StripeBuyButton') return { default: ({ purchaseLabel, onVerified }: { purchaseLabel?: string; onVerified?: () => void }) => {
         assert.equal(name, './NativeSubscriptionControls', 'Native plans must use the stock paywall');
-        return React.createElement('button', {}, 'View Pro and Teams subscriptions');
+        return React.createElement('button', { disabled: !enabled, onClick: onVerified }, enabled ? purchaseLabel || 'View Pro and Teams subscriptions' : 'Subscription unavailable');
       }, __esModule: true };
       if (name.startsWith('./')) return load('components/' + name.slice(2) + '.tsx');
       return require(name);
@@ -34,7 +33,7 @@ function renderPlans(native: boolean, allowWebCheckout = false, enabled = false)
     return mod.exports;
   }
   const Plan = load('components/PlanSelection.tsx').default;
-  return { html: renderToStaticMarkup(React.createElement(Plan, { userId: 'user', onComplete: () => {}, allowWebCheckout })), limits: load('lib/membership.ts').tierLimits };
+  return { Component: Plan, html: renderToStaticMarkup(React.createElement(Plan, { userId: 'user', onComplete: () => {}, allowWebCheckout, onboarding })), limits: load('lib/membership.ts').tierLimits };
 }
 test('native-disabled membership shows all plans, free continuation, accurate limits, accessible locks', () => {
   const { html, limits } = renderPlans(true);
@@ -43,7 +42,8 @@ test('native-disabled membership shows all plans, free continuation, accurate li
   for (const plan of ['Rookie', 'Pro', 'Teams']) assert.match(html, new RegExp('>' + plan + '<'));
   assert.doesNotMatch(html.match(/<button[^>]*>Continue Free<\/button>/)?.[0] || 'missing', /\sdisabled(?:=|>)/);
   assert.match(html, />Continue Free<\/button>/);
-  assert.equal((html.match(/<button[^>]*disabled[^>]*>Coming Soon<\/button>/g) || []).length, 2);
+  assert.equal((html.match(/<button[^>]*disabled[^>]*>Subscription unavailable<\/button>/g) || []).length, 2);
+  assert.doesNotMatch(html, /Coming Soon/);
   assert.match(html, /Free Forever/); assert.match(html, /Localized store prices, subscription terms and any eligible introductory offer/);
   assert.match(html, /role="table" aria-label="OnlyFast membership features"/);
   assert.match(html, /Locked/); assert.match(html, /Included/);
@@ -67,9 +67,39 @@ test('web membership retains separate Pro and Teams checkout choices', () => {
   assert.doesNotMatch(html, /Coming Soon/);
   assert.match(html, /\$5/); assert.match(html, /\$8/);
 });
-test('web onboarding keeps paid plans held without changing the existing web upgrade checkout', () => {
-  const { html } = renderPlans(false);
-  assert.equal((html.match(/<button[^>]*disabled[^>]*>Coming Soon<\/button>/g) || []).length, 2);
-  assert.doesNotMatch(html, />Choose Pro<|>Choose Teams</);
+test('web onboarding offers plan selection without advertising Coming Soon or loading Stripe', () => {
+  const { html } = renderPlans(false, false, false, true);
+  assert.doesNotMatch(html, /Coming Soon|stripe-buy-button/);
+  assert.match(html, />Choose Pro<|>Choose Teams</);
   assert.match(html, />Continue Free<\/button>/);
+});
+
+test('native onboarding displays reference prices, stock choices, monthly terms and working legal routes', () => {
+  const { html } = renderPlans(true, false, true, true);
+  assert.match(html, /\$5/); assert.match(html, /\$8/);
+  assert.match(html, /Choose Pro/); assert.match(html, /Choose Teams/);
+  assert.match(html, /actual localized price and billing terms/);
+  assert.match(html, /renew monthly/);
+  for (const path of ['/privacy-policy', '/terms-of-service']) assert.match(html, new RegExp(`href="${path}"`));
+  assert.doesNotMatch(html, /Coming Soon/);
+});
+
+test('simultaneous verified paid callbacks share one onboarding completion request', async () => {
+  const { create, act } = require('react-test-renderer');
+  const { Component } = renderPlans(true, false, true, true);
+  let finish!: () => void;
+  const saved = new Promise<void>(resolve => { finish = resolve; });
+  let requests = 0;
+  let view: any;
+  await act(async () => { view = create(React.createElement(Component, { userId: 'user', onboarding: true, onComplete: async () => { requests++; await saved; } })); });
+  try {
+    const paid = view.root.findAllByType('button').filter((b: any) => ['Choose Pro', 'Choose Teams'].includes(b.children.join('')));
+    assert.equal(paid.length, 2);
+    await act(async () => {
+      const first = paid[0].props.onClick();
+      const second = paid[1].props.onClick();
+      assert.equal(requests, 1);
+      finish(); await Promise.all([first, second]);
+    });
+  } finally { await act(async () => view.unmount()); }
 });

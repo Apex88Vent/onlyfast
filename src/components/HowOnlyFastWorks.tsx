@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   BarChart3,
   Camera,
@@ -17,7 +17,6 @@ import {
   Timer,
   Trophy,
   Wrench,
-  X,
 } from 'lucide-react';
 
 interface HowOnlyFastWorksProps {
@@ -26,7 +25,6 @@ interface HowOnlyFastWorksProps {
   onLogin?: () => void;
   isReplay?: boolean;
   pending?: boolean;
-  skipLabel?: string;
 }
 
 const slides = [
@@ -134,23 +132,44 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
   onLogin,
   isReplay = false,
   pending = false,
-  skipLabel = 'Skip to discipline selection',
 }) => {
   const [index, setIndex] = useState(0);
+  const [hasReachedHalfway, setHasReachedHalfway] = useState(false);
   const [dragStartX, setDragStartX] = useState<number | null>(null);
   const [dragStartY, setDragStartY] = useState<number | null>(null);
   const [mouseStartX, setMouseStartX] = useState<number | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const artworkAreaRef = useRef<HTMLDivElement>(null);
+  const artworkRef = useRef<HTMLDivElement>(null);
   const slide = slides[index];
   const Icon = slide.icon;
   const isFinal = index === slides.length - 1;
   // The parent decides the next required step. Skip cannot authenticate a
   // guest or complete the required racing profile.
-  const canSkip = !isFinal;
+  const halfwayIndex = Math.ceil(slides.length / 2) - 1;
+  // Reaching halfway unlocks Skip for the rest of this presentation.
+  const canSkip = hasReachedHalfway || index >= halfwayIndex;
   const canShowLogin = Boolean(onLogin);
 
   useEffect(() => {
     headingRef.current?.focus();
+    if (index >= halfwayIndex) setHasReachedHalfway(true);
+  }, [index, halfwayIndex]);
+
+  useLayoutEffect(() => {
+    const area = artworkAreaRef.current;
+    const artwork = artworkRef.current;
+    if (!area || !artwork || typeof ResizeObserver === 'undefined') return;
+    const fitArtwork = () => {
+      // The illustrations are HTML/SVG: fit them uniformly like object-fit: contain.
+      const scale = Math.min(1, area.clientHeight / artwork.offsetHeight, area.clientWidth / artwork.offsetWidth);
+      artwork.style.setProperty('--onboarding-artwork-scale', String(scale));
+    };
+    const observer = new ResizeObserver(fitArtwork);
+    observer.observe(area);
+    observer.observe(artwork);
+    fitArtwork();
+    return () => observer.disconnect();
   }, [index]);
 
   const finish = () => {
@@ -214,8 +233,49 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
   };
 
   return (
-    <div id="main-content" tabIndex={-1} className="min-h-screen bg-[#F5F5F7] flex items-center justify-center px-4 py-6" role="main">
+    <div id="main-content" tabIndex={-1} className="onlyfast-onboarding min-h-screen bg-[#F5F5F7] flex items-center justify-center px-4 py-6" role="main">
       <style>{`
+        .onlyfast-onboarding {
+          min-height: 0;
+          height: 100vh;
+          height: 100dvh;
+          padding-top: max(24px, env(safe-area-inset-top, 0px));
+          padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
+          padding-left: max(16px, env(safe-area-inset-left, 0px));
+          padding-right: max(16px, env(safe-area-inset-right, 0px));
+        }
+        .onlyfast-onboarding-card {
+          display: flex;
+          flex-direction: column;
+          /* The largest reviewed original card was 939.5px high. */
+          height: min(940px, 100%);
+        }
+        .onlyfast-onboarding-header { flex: 0 0 64px; }
+        .onlyfast-slide-content {
+          flex: 1 1 0;
+          min-height: 0;
+          display: grid;
+          grid-template-rows: 64px minmax(236px, 1fr) 96px;
+          gap: 16px;
+          padding-top: 20px;
+          overflow-y: auto;
+          overflow-x: hidden;
+          scrollbar-gutter: stable;
+        }
+        .onlyfast-slide-visual { min-height: 0; display: flex; flex-direction: column; }
+        .onlyfast-slide-accent { flex: 0 0 36px; }
+        .onlyfast-artwork-area { position: relative; flex: 1 1 0; min-height: 0; }
+        .onlyfast-artwork {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          width: 354px; /* Original illustration width in the full-size card. */
+          transform: translate(-50%, -50%) scale(var(--onboarding-artwork-scale, 1));
+          transform-origin: center;
+        }
+        .onlyfast-slide-description { min-height: 0; overflow-y: auto; margin-top: 0; }
+        .onlyfast-slide-navigation { flex: 0 0 196px; min-height: 196px; padding-top: 20px; }
+        .onlyfast-slide-navigation > [aria-label] { height: 56px; margin-top: 0; }
         @keyframes onlyfastSlideIn {
           from { opacity: 0; transform: translateX(22px); }
           to { opacity: 1; transform: translateX(0); }
@@ -254,45 +314,42 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
       `}</style>
 
       <section
-        key={index}
         aria-labelledby="how-onlyfast-title"
-        className="onlyfast-animated w-full max-w-[430px] rounded-[2rem] border border-[#E5E7EB] bg-white p-5 shadow-2xl shadow-slate-900/10"
-        style={{ animation: 'onlyfastSlideIn 260ms ease-out' }}
+        className="onlyfast-onboarding-card w-full max-w-[430px] rounded-[2rem] border border-[#E5E7EB] bg-white p-5 shadow-2xl shadow-slate-900/10"
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
       >
-        <div className="flex items-center justify-between gap-3">
+        <div className="onlyfast-onboarding-header flex items-center justify-between gap-3">
           <img src="/onlyfast-logo.png" alt="OnlyFast" className="h-16 w-auto object-contain" />
-          <button
-            type="button"
-            onClick={isReplay ? finish : skip}
-            disabled={pending}
-            className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold text-[#6B7280] transition-colors hover:bg-[#F5F5F7] hover:text-[#1A1B23] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] ${
-              isReplay || canSkip ? '' : 'invisible pointer-events-none'
-            }`}
-            aria-label={isReplay ? 'Close onboarding' : 'Skip onboarding'}
-            aria-hidden={!isReplay && !canSkip}
-            tabIndex={!isReplay && !canSkip ? -1 : undefined}
-          >
-            {isReplay ? <X className="h-3.5 w-3.5" aria-hidden="true" /> : null}
-            {isReplay ? 'Close' : 'Skip'}
-          </button>
+          {canSkip && (
+            <button
+              type="button"
+              onClick={isReplay ? finish : skip}
+              disabled={pending}
+              className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold text-[#6B7280] transition-colors hover:bg-[#F5F5F7] hover:text-[#1A1B23] focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
+              aria-label="Skip onboarding"
+            >
+              Skip
+            </button>
+          )}
         </div>
 
-        <div className="px-1 pt-5">
+        <div key={index} className="onlyfast-slide-content onlyfast-animated" style={{ animation: 'onlyfastSlideIn 260ms ease-out' }}>
+        <div className="px-1">
           <h1 id="how-onlyfast-title" ref={headingRef} tabIndex={-1} className="text-2xl font-black tracking-tight text-[#1A1B23] outline-none">
             {slide.title}
           </h1>
         </div>
 
-        <div className="mt-4 rounded-[1.5rem] border border-[#E5E7EB] bg-gradient-to-br from-white via-[#F7FBFD] to-[#EAF7FC] p-4 text-[#1A1B23] shadow-inner shadow-white">
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-[#007EAE]">
+        <div className="onlyfast-slide-visual rounded-[1.5rem] border border-[#E5E7EB] bg-gradient-to-br from-white via-[#F7FBFD] to-[#EAF7FC] p-4 text-[#1A1B23] shadow-inner shadow-white">
+          <div className="onlyfast-slide-accent flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-[#007EAE]">
             <Icon className="h-4 w-4" aria-hidden="true" />
             {slide.accent}
           </div>
-          <div className="mt-4 min-h-[218px]">
+          <div ref={artworkAreaRef} className="onlyfast-artwork-area mt-4">
+          <div ref={artworkRef} className="onlyfast-artwork">
             {slide.visual === 'welcome' && (
               <div className="grid gap-3">
                 {['Setup notebook', 'Timing results', 'Real setup advice'].map((label, i) => (
@@ -531,11 +588,13 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
               </div>
             )}
           </div>
+          </div>
         </div>
 
-        <div className="px-1 pt-5">
-          <p className="mt-2 min-h-[72px] text-sm leading-6 text-[#6B7280]">{slide.text}</p>
+          <p tabIndex={0} className="onlyfast-slide-description px-1 text-sm leading-6 text-[#6B7280]">{slide.text}</p>
+        </div>
 
+        <div className="onlyfast-slide-navigation px-1">
           <div className="mt-5 flex flex-wrap items-center justify-center gap-2" aria-label={`Slide ${index + 1} of ${slides.length}`}>
             {slides.map((item, dotIndex) => (
               <button
@@ -578,28 +637,16 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
             </button>
           )}
 
-          {!isReplay && canSkip && (
-            <div className="mt-4 flex flex-col items-center gap-2">
-              <button
-                type="button"
-                onClick={skip}
-                disabled={pending}
-                className="rounded-full text-xs font-semibold text-[#6B7280] hover:text-[#00A8E8] hover:underline focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
-              >
-                {skipLabel}
-              </button>
-              {canShowLogin && index !== 0 && (
-                <button
-                  type="button"
-                  onClick={onLogin}
-                  disabled={pending}
-                  className="flex items-center gap-1 rounded-full text-xs font-semibold text-[#007EAE] hover:text-[#00A8E8] hover:underline focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
-                >
-                  <LogIn className="h-3.5 w-3.5" aria-hidden="true" />
-                  Already a member? Login here
-                </button>
-              )}
-            </div>
+          {!isReplay && !isFinal && canShowLogin && index !== 0 && (
+            <button
+              type="button"
+              onClick={onLogin}
+              disabled={pending}
+              className="mx-auto mt-4 flex items-center gap-1 rounded-full text-xs font-semibold text-[#007EAE] hover:text-[#00A8E8] hover:underline focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
+            >
+              <LogIn className="h-3.5 w-3.5" aria-hidden="true" />
+              Already a member? Login here
+            </button>
           )}
 
           {!isReplay && isFinal && canShowLogin && (

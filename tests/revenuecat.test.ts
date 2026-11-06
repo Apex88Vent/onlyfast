@@ -220,8 +220,8 @@ test('Median rejected response objects retain cancellation and useful error mess
 test('absent feature flag blocks purchases and restore before any bridge call', async () => {
   let calls = 0;
   const controller = new NativePurchaseController(async () => { calls++; throw new Error('Must not reach bridge'); }, () => 'public-key', () => false);
-  await assert.rejects(controller.run('a', 'purchase'), /coming soon/);
-  await assert.rejects(controller.run('a', 'restore'), /coming soon/);
+  await assert.rejects(controller.run('a', 'purchase'), /unavailable in this build/);
+  await assert.rejects(controller.run('a', 'restore'), /unavailable in this build/);
   assert.equal(calls, 0);
 });
 
@@ -307,4 +307,53 @@ test('default entitlements match OnlyFast and Teams wins when both are granted',
   Object.assign(body.subscriber.entitlements, subscriber('OnlyFast Teams').subscriber.entitlements);
   Object.assign(body.subscriber.subscriptions, subscriber('OnlyFast Teams').subscriber.subscriptions);
   assert.equal(mapRevenueCatSnapshot(body, configured, now).plan, 'teams');
+});
+
+for (const identifier of ['$rc_monthly', '$rc_custom_teams_monthly']) {
+  test(`runtime offering ${identifier} is checked before opening the stock paywall`, async () => {
+    const { controller, bridge, calls } = harness();
+    bridge.getOfferings = async () => { calls.push('offerings'); return { identifiers: [identifier] }; };
+    await controller.setUser(A);
+    await controller.checkOffering(A, identifier);
+    assert.equal(calls.includes('paywall'), false);
+    await controller.run(A, 'purchase', identifier);
+    assert.equal(calls.filter(c => c === 'offerings').length, 2);
+    assert.equal(calls.filter(c => c === 'paywall').length, 1);
+  });
+}
+
+test('missing, malformed, offline or unsupported offerings never launch the paywall and support retry', async () => {
+  for (const response of [undefined, [], { identifiers: [] }, { identifiers: ['$rc_monthly'] }]) {
+    const { controller, bridge, calls } = harness();
+    bridge.getOfferings = async () => response as any;
+    await controller.setUser(A);
+    await assert.rejects(controller.checkOffering(A, '$rc_custom_teams_monthly'), /unavailable/);
+    await assert.rejects(controller.run(A, 'purchase', '$rc_custom_teams_monthly'), /unavailable/);
+    assert.equal(calls.includes('paywall'), false);
+    bridge.getOfferings = async () => ({ identifiers: ['$rc_custom_teams_monthly'] });
+    await controller.checkOffering(A, '$rc_custom_teams_monthly');
+    await controller.run(A, 'purchase', '$rc_custom_teams_monthly');
+    assert.equal(calls.filter(c => c === 'paywall').length, 1);
+  }
+  const { controller, bridge, calls } = harness();
+  await controller.setUser(A);
+  await assert.rejects(controller.checkOffering(A, '$rc_monthly'), /update OnlyFast/);
+  bridge.getOfferings = async () => { throw Error('Store offline'); };
+  await assert.rejects(controller.run(A, 'purchase', '$rc_monthly'), /Store offline/);
+  assert.equal(calls.includes('paywall'), false);
+});
+
+test('a late offering result after an account switch cannot open a paywall', async () => {
+  const { controller, bridge, calls } = harness();
+  let release!: (value: { identifiers: string[] }) => void;
+  let entered!: () => void;
+  const started = new Promise<void>(resolve => { entered = resolve; });
+  bridge.getOfferings = () => { entered(); return new Promise(resolve => { release = resolve; }); };
+  await controller.setUser(A);
+  const request = controller.run(A, 'purchase', '$rc_monthly');
+  await started;
+  const changed = controller.setUser(B);
+  release({ identifiers: ['$rc_monthly'] });
+  await assert.rejects(request, /account changed/); await changed;
+  assert.equal(calls.includes('paywall'), false);
 });

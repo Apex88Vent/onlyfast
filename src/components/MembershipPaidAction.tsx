@@ -5,11 +5,13 @@ import { fetchUserSubscription, deriveAccountStatus, syncMembershipFromSubscript
 import NativeSubscriptionControls from './NativeSubscriptionControls';
 import StripeBuyButton from './StripeBuyButton';
 
-export default function MembershipPaidAction({ userId, tier, onVerified, checkoutSelected, onSelect }: {
-  userId: string; tier: 'pro' | 'team'; onVerified: () => void | Promise<void>; checkoutSelected: boolean; onSelect: () => void;
+export default function MembershipPaidAction({ userId, tier, onVerified, checkoutSelected, onSelect, onboarding = false, allowWebCheckout = true }: {
+  userId: string; tier: 'pro' | 'team'; onVerified: () => void | Promise<void>; checkoutSelected: boolean; onSelect: () => void; onboarding?: boolean; allowWebCheckout?: boolean;
 }) {
   const [account, setAccount] = useState<AccountStatus | null>(null);
   const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+  const pending = useRef(false);
   const active = useRef(true);
   useEffect(() => {
     active.current = true;
@@ -21,10 +23,13 @@ export default function MembershipPaidAction({ userId, tier, onVerified, checkou
     return () => { active.current = false; };
   }, [userId]);
 
-  if (hideExternalPayments) return <NativeSubscriptionControls userId={userId} purchaseOnly onVerified={onVerified} />;
+  if (hideExternalPayments) return <NativeSubscriptionControls userId={userId} purchaseOnly onVerified={onVerified}
+    onboardingTier={onboarding ? tier : undefined} purchaseLabel={onboarding ? `Choose ${tier === 'team' ? 'Teams' : 'Pro'}` : undefined} />;
 
   const choose = async () => {
-    setMessage('');
+    if (pending.current) return;
+    pending.current = true;
+    setBusy(true); setMessage('');
     try {
       await syncMembershipFromSubscription();
       const row = await fetchUserSubscription(userId);
@@ -32,14 +37,19 @@ export default function MembershipPaidAction({ userId, tier, onVerified, checkou
       if (!active.current || data.session?.user.id !== userId) return;
       const status = deriveAccountStatus(row);
       setAccount(status);
-      if (!status.isPaid) onSelect();
-    } catch { if (active.current) setMessage('Could not confirm your subscription. Please try again.'); }
+      if (status.isPaid && onboarding) await onVerified();
+      else if (!status.isPaid) onSelect();
+    } catch { if (active.current) setMessage(onboarding ? 'Could not confirm your subscription or finish onboarding. Please try again.' : 'Could not confirm your subscription. Please try again.'); }
+    finally { pending.current = false; if (active.current) setBusy(false); }
   };
 
   return <div className="space-y-3">
-    {account?.isPaid ? <p className="text-sm text-[#6B7280]">Your membership already includes paid access. Manage plan changes in Account Settings through your current provider.</p> : checkoutSelected ?
+    {account?.isPaid ? <>
+      <p className="text-sm text-[#6B7280]">Your membership already includes paid access. Manage plan changes in Account Settings through your current provider.</p>
+      {onboarding && <button disabled={busy} onClick={() => void choose()} className="w-full rounded-xl bg-[#00A8E8] text-white py-3 font-semibold disabled:opacity-50">{busy ? 'Please wait…' : 'Continue with current membership'}</button>}
+    </> : checkoutSelected && !allowWebCheckout ? <p role="status" className="text-sm text-[#6B7280]">Store subscriptions are available in the OnlyFast Android and iOS apps. Continue with Rookie here, or open the mobile app to subscribe.</p> : checkoutSelected ?
       <StripeBuyButton plan={tier === 'team' ? 'teams' : 'pro'} clientReferenceId={userId} /> :
-      <button disabled={!account} onClick={() => void choose()} className="w-full rounded-xl bg-[#00A8E8] text-white py-3 font-semibold disabled:opacity-50">
+      <button disabled={busy || !account} onClick={() => void choose()} className="w-full rounded-xl bg-[#00A8E8] text-white py-3 font-semibold disabled:opacity-50">
         {tier === 'pro' ? 'Choose Pro' : 'Choose Teams'}
       </button>}
     {message && <p role="status" className="text-sm text-[#6B7280]">{message}</p>}

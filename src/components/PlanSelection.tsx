@@ -3,7 +3,6 @@ import { PLANS } from '@/lib/membership';
 import MembershipComparison from './MembershipComparison';
 import MembershipPaidAction from './MembershipPaidAction';
 import { hideExternalPayments } from '@/lib/paymentVisibility';
-import { nativePurchasesEnabled } from '@/lib/nativePurchases';
 
 interface PlanSelectionProps {
   onComplete: () => void | Promise<void>;
@@ -12,6 +11,7 @@ interface PlanSelectionProps {
   onPaidComplete?: () => void | Promise<void>;
   /** Only the existing web upgrade page may open Stripe checkout. */
   allowWebCheckout?: boolean;
+  onboarding?: boolean;
 }
 
 const CheckIcon = () => (
@@ -20,20 +20,20 @@ const CheckIcon = () => (
   </svg>
 );
 
-const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userId, onPaidComplete, allowWebCheckout = false }) => {
+const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userId, onPaidComplete, allowWebCheckout = false, onboarding = false }) => {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [checkoutTier, setCheckoutTier] = useState<'pro' | 'team' | null>(null);
   const submitting = useRef(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => { headingRef.current?.focus(); }, []);
-  const handleContinue = async () => {
+  const handleContinue = async (paid = false) => {
     if (submitting.current) return;
     submitting.current = true;
     setSaving(true);
     setSaveError('');
-    try { await onComplete(); }
-    catch { setSaveError('Your selection could not be saved. Please try again.'); }
+    try { await (paid ? onPaidComplete || onComplete : onComplete)(); }
+    catch (error) { setSaveError('Your selection could not be saved. Please try again.'); if (paid) throw error; }
     finally { submitting.current = false; setSaving(false); }
   };
 
@@ -62,8 +62,6 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userI
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6 items-stretch">
         {PLANS.map((plan) => {
           const isRecommended = plan.recommended;
-          const comingSoon = plan.tier !== 'rookie' &&
-            (hideExternalPayments ? !nativePurchasesEnabled : !allowWebCheckout);
           return (
             <div
               key={plan.tier}
@@ -79,21 +77,13 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userI
                 </div>
               )}
 
-              {comingSoon && (
-                <div className="flex justify-center mb-1 mt-1">
-                  <span className="inline-flex items-center gap-1.5 bg-[#1A1B23] text-white text-xs font-bold uppercase tracking-wide px-3 py-1 rounded-full shadow">
-                    Coming Soon
-                  </span>
-                </div>
-              )}
-
               <div className="text-center mb-4 mt-1">
                 <h3 className={`text-xl font-bold ${isRecommended ? 'text-[#00A8E8]' : 'text-[#1A1B23]'}`}>
                   {plan.tier === 'team' ? 'Teams' : plan.displayName}
                 </h3>
                 <p className="text-3xl font-extrabold text-[#1A1B23] mt-2">
-                  {plan.tier === 'rookie' ? 'FREE' : hideExternalPayments ? 'Store pricing' : plan.priceDisplay.split('/')[0]}
-                  {plan.tier !== 'rookie' && !hideExternalPayments && (
+                  {plan.tier === 'rookie' ? 'FREE' : hideExternalPayments && !onboarding ? 'Store pricing' : plan.priceDisplay.split('/')[0]}
+                  {plan.tier !== 'rookie' && (!hideExternalPayments || onboarding) && (
                     <span className="text-base font-medium text-[#6B7280]"> / month</span>
                   )}
                 </p>
@@ -113,8 +103,8 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userI
                 ))}
               </ul>
 
-              {plan.tier !== 'rookie' && userId && !comingSoon ? <MembershipPaidAction key={`${userId}:${plan.tier}`} userId={userId} tier={plan.tier} onVerified={onPaidComplete || onComplete} checkoutSelected={checkoutTier === plan.tier} onSelect={() => setCheckoutTier(plan.tier as 'pro' | 'team')} /> : <button
-                onClick={plan.tier === 'rookie' ? handleContinue : undefined}
+              {plan.tier !== 'rookie' && userId ? <MembershipPaidAction key={`${userId}:${plan.tier}`} userId={userId} tier={plan.tier} onboarding={onboarding} allowWebCheckout={allowWebCheckout} onVerified={() => handleContinue(true)} checkoutSelected={checkoutTier === plan.tier} onSelect={() => setCheckoutTier(plan.tier as 'pro' | 'team')} /> : <button
+                onClick={plan.tier === 'rookie' ? () => void handleContinue() : undefined}
                 disabled={saving || plan.tier !== 'rookie'}
                 className={`w-full py-3 rounded-xl font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2 disabled:opacity-50 ${
                   isRecommended
@@ -122,7 +112,7 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userI
                     : 'bg-[#F5F5F7] hover:bg-[#E5E7EB] text-[#1A1B23] border border-[#E5E7EB]'
                 }`}
               >
-                {comingSoon ? 'Coming Soon' : saving ? 'Saving…' : plan.buttonText}
+                {saving ? 'Saving…' : plan.tier !== 'rookie' ? 'Sign in to choose this plan' : plan.buttonText}
               </button>}
               {plan.tier === 'rookie' && <p className="mt-3 text-xs text-[#6B7280]">No payment information required. Saved setups remain viewable.</p>}
 
@@ -133,6 +123,10 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userI
 
       {saveError && <p role="alert" className="mb-4 text-sm text-red-600">{saveError}</p>}
       <MembershipComparison />
+      {onboarding && <div className="text-center text-xs text-[#6B7280] mt-4 space-y-2">
+        {hideExternalPayments && <p>Prices above are the reference USD prices. The store paywall shows the actual localized price and billing terms. Subscriptions renew monthly unless canceled through your store account.</p>}
+        <p><a href="/privacy-policy" target="_blank" rel="noopener noreferrer" className="underline">Privacy Policy</a>{' · '}<a href="/terms-of-service" target="_blank" rel="noopener noreferrer" className="underline">Terms of Use</a></p>
+      </div>}
       <p className="text-center text-xs text-[#9CA3AF] mt-4">
         Rookie is free forever. Existing paid memberships keep their current access.
       </p>

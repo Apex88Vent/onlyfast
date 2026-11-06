@@ -10,7 +10,7 @@ import SplashScreen from './SplashScreen';
 import OnboardingFlow from './OnboardingFlow';
 import HowOnlyFastWorks from './HowOnlyFastWorks';
 import Header from './Header';
-import SetupDashboard from './SetupDashboard';
+import { deferredFeature } from './DeferredFeature';
 import { HouseBottomBanner, HouseInterstitialDialog } from './HouseAdPlacement';
 import RookieAdSlot from './RookieAdSlot';
 import { shouldShowAds } from '@/lib/ads';
@@ -28,6 +28,9 @@ import { BETA_FEATURES } from '@/lib/betaFeatures';
 import { isOnlyFastFilePickerOpen } from '@/lib/filePickerState';
 import { resolveAuthUiTransition } from '@/lib/authUiTransition';
 import { canAccessSetupClass } from '@/lib/setupLibraryAccess';
+
+const dashboardFeature = deferredFeature(() => import('./SetupDashboard'), 'your dashboard');
+const SetupDashboard = dashboardFeature.Component;
 
 function DashboardWithHouseAds({ user, children }: { user: User | null; children: React.ReactNode }) {
   const ads = useSyncExternalStore(nativeAds.subscribeHouseAds, nativeAds.getHouseAds);
@@ -91,6 +94,11 @@ const AppLayout: React.FC = () => {
   const [authChecked, setAuthChecked] = useState(false);
   const [guestTutorialFinished, setGuestTutorialFinished] = useState(hasSeenGuestTutorial);
   const authenticatedUserId = user?.id ?? null;
+  useEffect(() => {
+    // Overlap the authorized dashboard download with the existing intro/profile
+    // loading. Importing code does not fetch or cache another account's data.
+    if (authenticatedUserId && isOnboarded) void dashboardFeature.preload().catch(() => {});
+  }, [authenticatedUserId, isOnboarded]);
   const onboardingLoginEscapeRef = useRef(false);
   const authUserIdRef = useRef<string | null>(null);
   const tutorialPending = useRef(false);
@@ -476,7 +484,6 @@ const AppLayout: React.FC = () => {
             onLogin={handleHowOnlyFastWorksLogin}
             isReplay={isReplayingHowOnlyFastWorks}
             pending={savingTutorial}
-            skipLabel={user ? undefined : 'Skip to Sign In'}
           />
         )}
         {classSelectionError && <p className="p-4 text-center text-sm text-red-600" role="alert">{classSelectionError}</p>}

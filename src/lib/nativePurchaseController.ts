@@ -2,6 +2,7 @@
 // Public activation authorized October 30, 2026. The master and per-platform
 // environment gates still control rollout; RevenueCatUI owns products and prices.
 export const NATIVE_PURCHASES_READY = true;
+export const NATIVE_MONTHLY_PACKAGES = { pro: '$rc_monthly', team: '$rc_custom_teams_monthly' } as const;
 export type NativeResult = { success: boolean; error?: { code?: string | number; message?: string } };
 export interface RevenueCatBridge {
   configure(params: { apiKey: string; appUserID: string }): Promise<NativeResult>;
@@ -9,6 +10,7 @@ export interface RevenueCatBridge {
   login(params: { appUserID: string }): Promise<NativeResult>;
   logout(): Promise<NativeResult>;
   presentPaywall(): Promise<NativeResult>;
+  getOfferings?(): Promise<{ identifiers: string[] }>;
   restorePurchases(): Promise<NativeResult>;
 }
 
@@ -17,6 +19,8 @@ export class NativePurchaseError extends Error {
   pending: boolean;
   constructor(message: string, cancelled = false, pending = false) { super(message); this.cancelled = cancelled; this.pending = pending; }
 }
+
+export class NativeOfferingError extends Error {}
 
 function checked(result: NativeResult): void {
   if (result?.success === true && !result.error) return;
@@ -110,15 +114,37 @@ export class NativePurchaseController {
     });
   }
 
-  async run(userId: string, action: 'purchase' | 'restore'): Promise<void> {
-    if (!this.enabled()) throw new Error('In-app subscriptions are coming soon.');
+  private async requireOffering(bridge: RevenueCatBridge, identifier: string): Promise<void> {
+    if (!bridge.getOfferings) throw new NativeOfferingError('Please update OnlyFast to load store subscriptions.');
+    const offerings = await this.call(bridge.getOfferings());
+    if (!Array.isArray(offerings?.identifiers) || !offerings.identifiers.includes(identifier)) {
+      throw new NativeOfferingError('This monthly subscription is unavailable from the store right now. Retry loading plans, or continue with Rookie.');
+    }
+  }
+
+  checkOffering(userId: string, identifier: string): Promise<void> {
+    const revision = this.identityRevision;
+    return this.enqueue(async () => {
+      if (!this.enabled()) throw new Error('Store subscriptions are unavailable in this build.');
+      const bridge = await this.identify(userId, revision);
+      await this.requireOffering(bridge, identifier);
+      this.assertIdentity(userId, revision);
+    });
+  }
+
+  async run(userId: string, action: 'purchase' | 'restore', packageIdentifier?: string): Promise<void> {
+    if (!this.enabled()) throw new Error('Store subscriptions are unavailable in this build.');
     if (this.purchasing) throw new Error('A store request is already open.');
     this.purchasing = true;
     const revision = this.identityRevision;
     try {
       await this.enqueue(async () => {
-        if (!this.enabled()) throw new Error('In-app subscriptions are coming soon.');
+        if (!this.enabled()) throw new Error('Store subscriptions are unavailable in this build.');
         const bridge = await this.identify(userId, revision);
+        if (action === 'purchase' && packageIdentifier) {
+          await this.requireOffering(bridge, packageIdentifier);
+          this.assertIdentity(userId, revision);
+        }
         let result: NativeResult;
         if (action === 'purchase') {
           // The stock paywall loads the current offering and performs the selected

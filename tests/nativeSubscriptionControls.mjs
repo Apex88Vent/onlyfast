@@ -4,7 +4,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import ts from 'typescript';
-import { NativePurchaseError } from '../src/lib/nativePurchaseController.ts';
+import { NativePurchaseError, NativeOfferingError, NATIVE_MONTHLY_PACKAGES } from '../src/lib/nativePurchaseController.ts';
 const require = createRequire(process.env.REACT_TEST_RENDERER_MODULE);
 const React = require('react');
 const { create, act } = require(process.env.REACT_TEST_RENDERER_MODULE);
@@ -27,9 +27,11 @@ function setup(status, enabled = false) {
     if (name === '@/lib/supabase') return { supabase: { auth: { getSession: async () => ({ data: { session: { user: { id: f.identity } } } }) } } };
     if (name === '@/lib/subscription') return { syncMembershipFromSubscription: async () => f.status,
       fetchUserSubscription: async () => f.status.row, deriveAccountStatus: () => f.status };
-    if (name === '@/lib/nativePurchaseController') return { NativePurchaseError };
+    if (name === '@/lib/nativePurchaseController') return { NativePurchaseError, NativeOfferingError, NATIVE_MONTHLY_PACKAGES };
     if (name === '@/lib/nativePurchases') return { nativePurchasesEnabled: enabled,
-      nativePurchases: { setUser: async id => { f.storeCalls.push(['identify', id]); }, run: async (id, action) => { f.storeCalls.push([action, id]); if (f.error) throw f.error; } },
+      nativePurchases: { setUser: async id => { f.storeCalls.push(['identify', id]); },
+        checkOffering: async (id, identifier) => { (f.offeringCalls ||= []).push([id, identifier]); if (f.offeringError) throw f.offeringError; },
+        run: async (id, action, identifier) => { f.storeCalls.push([action, id]); f.selectedPackage = identifier; if (f.error) throw f.error; } },
       syncNativeSubscription: async () => { f.syncCalls++; if (f.syncError) throw f.syncError; if (f.syncStatus) f.status = f.syncStatus; } };
     throw Error('Unexpected dependency ' + name);
   }
@@ -38,7 +40,7 @@ function setup(status, enabled = false) {
 const paid = (store, plan = 'pro') => ({ label: plan === 'teams' ? 'Teams' : 'Pro', plan, isPaid: true, isAdmin: false,
   row: { plan, status: 'active', subscription_source: store === 'stripe' ? 'stripe' : 'revenuecat', revenuecat_store: store,
     revenuecat_expires_at: new Date(Date.now() + 60000).toISOString() } });
-async function mount(Component, f) { let view; await act(async () => { view = create(React.createElement(Component, { userId: 'tester', onVerified: () => { f.verified++; } })); }); return view; }
+async function mount(Component, f, props = {}) { let view; await act(async () => { view = create(React.createElement(Component, { userId: 'tester', onVerified: () => { f.verified++; }, ...props })); }); return view; }
 async function click(view, label) { const button = view.root.findAllByType('button').find(b => text(b) === label); assert.ok(button); await act(async () => { await button.props.onClick(); }); }
 
 for (const status of [free(), paid('stripe'), paid('play_store'), paid('app_store', 'teams')]) {
@@ -116,5 +118,106 @@ test('an existing paid account cannot open another paywall even when activation 
     await click(view, 'View Pro and Teams subscriptions');
     assert.deepEqual(f.storeCalls, []); assert.equal(f.syncCalls, 0);
     assert.match(text(view.root), /paid membership is already active/);
+  } finally { await act(async () => view.unmount()); }
+});
+
+for (const tier of ['pro', 'team']) {
+  test(`onboarding ${tier}: offering check, stock paywall and server-confirmed completion`, async () => {
+    const { f, Component } = setup(free(), true);
+    f.syncStatus = paid(tier === 'pro' ? 'play_store' : 'app_store', tier === 'pro' ? 'pro' : 'teams');
+    const label = `Choose ${tier === 'pro' ? 'Pro' : 'Teams'}`;
+    const view = await mount(Component, f, { onboardingTier: tier, purchaseLabel: label });
+    try {
+      assert.doesNotMatch(text(view.root), /Coming Soon/);
+      assert.deepEqual(f.offeringCalls, [['tester', NATIVE_MONTHLY_PACKAGES[tier]]]);
+      const button = view.root.findAllByType('button').find(b => text(b) === label);
+      assert.equal(button.props.disabled, false);
+      await click(view, label);
+      assert.equal(f.selectedPackage, NATIVE_MONTHLY_PACKAGES[tier]);
+      assert.equal(f.verified, 1); assert.equal(f.syncCalls, 1);
+    } finally { await act(async () => view.unmount()); }
+  });
+}
+
+test('onboarding missing offering disables checkout, retry loads it, and restore stays available', async () => {
+  const { f, Component } = setup(free(), true); f.offeringError = Error('Monthly product unavailable');
+  const view = await mount(Component, f, { onboardingTier: 'team', purchaseLabel: 'Choose Teams' });
+  try {
+    assert.match(text(view.root), /Monthly product unavailable/);
+    assert.equal(view.root.findAllByType('button').find(b => text(b) === 'Subscription unavailable').props.disabled, true);
+    assert.equal(f.storeCalls.filter(c => c[0] === 'purchase').length, 0);
+    f.offeringError = null;
+    await click(view, 'Retry loading plans');
+    assert.equal(view.root.findAllByType('button').find(b => text(b) === 'Choose Teams').props.disabled, false);
+    f.syncStatus = paid('app_store', 'teams');
+    await click(view, 'Restore Purchases');
+    assert.equal(f.verified, 1); assert.equal(f.syncCalls, 1);
+  } finally { await act(async () => view.unmount()); }
+});
+
+test('onboarding paid continuation rechecks access without store calls, including when purchases are held', async () => {
+  for (const status of [paid('stripe'), paid('play_store'), paid('app_store', 'teams')]) {
+    const { f, Component } = setup(status, false);
+    const view = await mount(Component, f, { onboardingTier: 'pro' });
+    try {
+      await click(view, 'Continue with current membership');
+      assert.equal(f.verified, 1); assert.deepEqual(f.storeCalls, []); assert.equal(f.syncCalls, 0);
+    } finally { await act(async () => view.unmount()); }
+  }
+});
+
+test('onboarding expired or switched account cannot use a stale paid continue button', async () => {
+  for (const switchAccount of [false, true]) {
+    const { f, Component } = setup(paid('app_store'), true);
+    const view = await mount(Component, f, { onboardingTier: 'pro' });
+    try {
+      if (switchAccount) f.identity = 'someone-else'; else f.status = free();
+      await click(view, 'Continue with current membership');
+      assert.equal(f.verified, 0); assert.deepEqual(f.storeCalls.filter(c => c[0] === 'purchase'), []);
+      assert.match(text(view.root), switchAccount ? /account changed/ : /No active paid membership/);
+    } finally { await act(async () => view.unmount()); }
+  }
+});
+
+test('onboarding canceled, pending, failed and unconfirmed purchases preserve the plan step', async () => {
+  for (const error of [new NativePurchaseError('Purchase cancelled.', true), new NativePurchaseError('Payment pending', false, true), Error('Store offline'), null]) {
+    const { f, Component } = setup(free(), true); f.error = error;
+    const view = await mount(Component, f, { onboardingTier: 'pro', purchaseLabel: 'Choose Pro' });
+    try {
+      await click(view, 'Choose Pro');
+      assert.equal(f.verified, 0);
+      assert.equal(view.root.findAllByType('button').find(b => text(b) === 'Choose Pro').props.disabled, false);
+      assert.match(text(view.root), error ? /cancelled|pending|offline/ : /No active subscription is confirmed/);
+      f.error = null; f.syncStatus = paid('play_store');
+      await click(view, 'Refresh subscription');
+      assert.equal(f.verified, 1, 'Delayed verified access can complete without another purchase');
+      assert.equal(f.storeCalls.filter(c => c[0] === 'purchase').length, 1);
+    } finally { await act(async () => view.unmount()); }
+  }
+});
+
+test('onboarding completion failure remains retryable without charging again', async () => {
+  const { f, Component } = setup(free(), true); f.syncStatus = paid('app_store');
+  let fail = true;
+  const view = await mount(Component, f, { onboardingTier: 'pro', purchaseLabel: 'Choose Pro', onVerified: async () => { if (fail) throw Error('Profile save failed'); f.verified++; } });
+  try {
+    await click(view, 'Choose Pro'); assert.match(text(view.root), /Profile save failed/);
+    fail = false;
+    await click(view, 'Continue with current membership');
+    assert.equal(f.verified, 1); assert.equal(f.storeCalls.filter(c => c[0] === 'purchase').length, 1);
+  } finally { await act(async () => view.unmount()); }
+});
+
+test('a product withdrawn after initial loading disables checkout until offerings are retried', async () => {
+  const { f, Component } = setup(free(), true);
+  const view = await mount(Component, f, { onboardingTier: 'pro', purchaseLabel: 'Choose Pro' });
+  try {
+    f.error = new NativeOfferingError('Monthly plan was withdrawn. Retry loading plans.');
+    await click(view, 'Choose Pro');
+    assert.equal(f.verified, 0);
+    assert.equal(view.root.findAllByType('button').find(b => text(b) === 'Subscription unavailable').props.disabled, true);
+    f.error = null;
+    await click(view, 'Retry loading plans');
+    assert.equal(view.root.findAllByType('button').find(b => text(b) === 'Choose Pro').props.disabled, false);
   } finally { await act(async () => view.unmount()); }
 });

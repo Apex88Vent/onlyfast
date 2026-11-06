@@ -22,6 +22,7 @@ const { create, act } = qaRequire(process.env.REACT_TEST_RENDERER_MODULE);
 const empty = () => null;
 const wrapper = ({ children }) => children;
 const icon = props => React.createElement('span', props);
+const noHouseAds = Object.freeze({ bannerUser: null, interstitialUser: null });
 const text = node => typeof node === 'string' ? node : (node.children || []).map(text).join('');
 const experiment = buildBetaAccessSnapshot({ user_id: 'test-id', is_test_account: true, beta_features_enabled: true, tester_kind: 'experimental' }, [{ feature_key: 'test_account_full_access', enabled: true }]);
 let fixture;
@@ -32,7 +33,18 @@ function compile(file, modules = {}) {
   new Function('require', 'module', 'exports', code)(name => {
     if (name === 'react') return React;
     if (name === '@/hooks/useMembershipRevision') return { useMembershipRevision: () => {} };
-    if (name === '@/lib/nativeAds') return { nativeAds: { suspend: () => () => {} } };
+    if (name === '@/lib/nativeAds') return { nativeAds: {
+      suspend: () => () => {}, subscribeHouseAds: () => () => {}, getHouseAds: () => noHouseAds,
+    } };
+    if (name === '@/lib/ads') return { shouldShowAds: () => false };
+    if (name === './HouseAdPlacement') return { HouseBottomBanner: empty, HouseInterstitialDialog: wrapper };
+    if (name === './RookieAdSlot') return { __esModule: true, default: empty };
+    // This suite stubs the dashboard; the real loading/retry boundary is covered
+    // by deferredFeature.test.ts and the compiled browser navigation checks.
+    if (name === './DeferredFeature') return { deferredFeature: () => ({
+      Component: modules['./SetupDashboard'].default,
+      preload: () => Promise.resolve(),
+    }) };
     if (name.startsWith('react/')) return qaRequire(name);
     if (name === 'lucide-react') return new Proxy({}, { get: () => icon });
     if (name === '@/hooks/useBetaFeatures') return { useBetaFeatures: () => ({ ...fixture.access, loading: fixture.betaLoading, hasBetaFeature: () => false }) };
@@ -51,7 +63,10 @@ const How = compile('components/HowOnlyFastWorks.tsx');
 const membershipExports = {};
 const planSource = readFileSync(new URL('../src/lib/membership.ts', import.meta.url), 'utf8').match(/export const PLANS:[\s\S]*?\n\];/)[0];
 new Function('exports', ts.transpileModule(planSource, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText)(membershipExports);
-const Plan = compile('components/PlanSelection.tsx', { '@/lib/membership': membershipExports, './MembershipComparison': { default: empty }, './MembershipPaidAction': { default: empty }, '@/lib/paymentVisibility': { hideExternalPayments: true }, '@/lib/nativePurchases': { nativePurchasesEnabled: false } });
+const Plan = compile('components/PlanSelection.tsx', { '@/lib/membership': membershipExports, './MembershipComparison': { default: empty }, './MembershipPaidAction': { default: ({ tier, onboarding, userId }) => {
+  assert.equal(onboarding, true); assert.ok(userId, 'Authentication must precede billing');
+  return React.createElement('button', { 'data-paid-tier': tier }, `Choose ${tier === 'pro' ? 'Pro' : 'Teams'}`);
+} }, '@/lib/paymentVisibility': { hideExternalPayments: true }, '@/lib/nativePurchases': { nativePurchasesEnabled: false } });
 const Selection = compile('components/OnboardingFlow.tsx', { './PlanSelection': { default: Plan } });
 const Auth = ({ isOpen, onClose }) => {
   const [signup, setSignup] = React.useState(false);
@@ -157,14 +172,52 @@ async function requiredSlides(root) {
   assert.ok(heading(root, 'Timing Scan'));
 }
 
-test('A/F: configured returning user enters landing; replay Close preserves class and onboarding data', async () => {
+async function skipIntro(root) {
+  if (heading(root, 'Welcome to OnlyFast')) await requiredSlides(root);
+  await click(root, 'Skip');
+}
+
+test('intro Skip starts at slide 6 of 12, stays through the last slide and never replaces the member login', async () => {
+  reset();
+  let skipped = 0;
+  let logins = 0;
+  let view;
+  await act(async () => { view = create(React.createElement(How, {
+    onComplete() { assert.fail('Skipping must use the existing skip destination'); },
+    onSkip() { skipped++; }, onLogin() { logins++; },
+  })); });
+  const card = view.root.findByType('section');
+  const navigation = view.root.find(n => typeof n.props.className === 'string' && n.props.className.includes('onlyfast-slide-navigation'));
+  for (let slide = 1; slide <= 12; slide++) {
+    assert.equal(view.root.findByType('section'), card, 'the stationary card is not remounted for each slide');
+    assert.equal(view.root.find(n => typeof n.props.className === 'string' && n.props.className.includes('onlyfast-slide-navigation')), navigation, 'navigation stays outside the animated slide content');
+    const skipButtons = buttons(view.root).filter(b => text(b) === 'Skip');
+    assert.equal(skipButtons.length, slide >= 6 ? 1 : 0, `Skip at slide ${slide}`);
+    assert.equal(buttons(view.root).filter(b => /Skip to|Close/.test(text(b))).length, 0);
+    assert.equal(buttons(view.root).filter(b => text(b) === 'Already a member? Login here').length, 1);
+    await click(view.root, 'Already a member? Login here');
+    if (slide < 12) await click(view.root, slide === 1 ? 'Let’s Get Faster' : 'Continue');
+  }
+  assert.equal(logins, 12);
+  await click(view.root, 'Skip');
+  assert.equal(skipped, 1, 'final slide keeps the same Skip action');
+  await act(async () => view.root.findByProps({ 'aria-label': 'Go to slide 1: Welcome to OnlyFast' }).props.onClick());
+  assert.ok(heading(view.root, 'Welcome to OnlyFast'));
+  assert.equal(buttons(view.root).filter(b => text(b) === 'Skip').length, 1, 'revisiting an early slide does not remove unlocked Skip');
+  await act(async () => view.unmount());
+  await act(async () => { view = create(React.createElement(How, { onComplete() {} })); });
+  assert.equal(buttons(view.root).some(b => text(b) === 'Skip'), false, 'a freshly opened presentation starts without Skip');
+  await act(async () => view.unmount());
+});
+
+test('A/F: configured returning user enters landing; replay Skip preserves class and onboarding data', async () => {
   reset({ user: { id: 'existing', user_metadata: { onboarding_completed: true } }, activeClass: 'Dwarf Cars' });
   const view = await mount();
   assert.ok(landing(view.root));
   await click(view.root, 'Replay help');
-  assert.ok(buttons(view.root).some(b => text(b) === 'Close'));
-  assert.equal(buttons(view.root).some(b => text(b) === 'Skip' && !b.props['aria-hidden']), false);
-  await click(view.root, 'Close');
+  assert.equal(buttons(view.root).some(b => text(b) === 'Close'), false);
+  assert.equal(buttons(view.root).some(b => text(b) === 'Skip'), false);
+  await skipIntro(view.root);
   assert.ok(landing(view.root));
   assert.deepEqual(fixture.metadataWrites, []);
   assert.deepEqual(fixture.initializations, []);
@@ -178,8 +231,8 @@ test('B/E: new user ignores stale class/membership; Skip exits to discipline sel
   assert.equal(landing(view.root), false);
   assert.deepEqual(fixture.initializations, []);
   assert.equal(buttons(view.root).some(b => text(b) === 'Close'), false);
-  assert.equal(buttons(view.root).find(b => text(b) === 'Skip').props['aria-hidden'], false);
-  await click(view.root, 'Skip');
+  assert.equal(buttons(view.root).some(b => text(b) === 'Skip'), false);
+  await skipIntro(view.root);
   assert.ok(heading(view.root, 'Select Your Discipline'));
   assert.equal(landing(view.root), false);
   const categories = buttons(view.root).filter(b => / - /.test(b.props['aria-label'] || ''));
@@ -205,19 +258,19 @@ test('D: every Continue advances one slide; final button ends at Select Discipli
   await act(async () => view.unmount());
 });
 
-test('Skip from the welcome slide persists only discipline progress and Rookie still requires class plus plan selection', async () => {
+test('Skip after halfway persists only discipline progress and Rookie still requires class plus plan selection', async () => {
   reset();
   const view = await mount();
   assert.equal(buttons(view.root).filter(b => text(b) === 'Already a member? Login here').length, 1);
   assert.equal(view.root.findByProps({ role: 'main' }).props.id, 'main-content');
-  await click(view.root, 'Skip');
+  await skipIntro(view.root);
   assert.deepEqual(fixture.progressWrites, [{ step: 'discipline', discipline: undefined, car: undefined }]);
   assert.equal(landing(view.root), false);
   await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith('Dirt Track Oval -')).props.onClick());
   assert.equal(landing(view.root), false);
   await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith('Dwarf Cars -')).props.onClick());
   assert.ok(heading(view.root, 'Choose Your OnlyFast Plan'));
-  assert.equal(buttons(view.root).filter(b => text(b) === 'Coming Soon' && b.props.disabled && !b.props.onClick).length, 2);
+  assert.equal(buttons(view.root).filter(b => b.props['data-paid-tier']).length, 2);
   assert.deepEqual(fixture.initializations, []);
   await click(view.root, 'Continue Free');
   assert.ok(landing(view.root));
@@ -278,7 +331,7 @@ test('login from onboarding rechecks the new account; dismissing login does not 
   await click(view.root, 'Dismiss login');
   assert.ok(heading(view.root, 'Welcome to OnlyFast'));
   assert.deepEqual(fixture.metadataWrites, []);
-  await click(view.root, 'Skip');
+  await skipIntro(view.root);
   assert.deepEqual(fixture.progressWrites, []);
   await click(view.root, 'Create Account');
   assert.ok(heading(view.root, 'Create Account'));
@@ -315,7 +368,7 @@ for (const action of ['finish', 'skip']) {
       await requiredSlides(view.root);
       for (let i = 0; i < 6; i++) await click(view.root, 'Continue');
       await click(view.root, 'Select My Discipline');
-    } else await click(view.root, 'Skip');
+    } else await skipIntro(view.root);
     assert.ok(heading(view.root, 'Sign In'));
     assert.equal(heading(view.root, 'Welcome to OnlyFast'), false);
     assert.equal(heading(view.root, 'Select Your Discipline'), false);
@@ -330,7 +383,7 @@ for (const action of ['finish', 'skip']) {
     await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith('Dirt Track Oval -')).props.onClick());
     await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith('Dwarf Cars -')).props.onClick());
     assert.ok(heading(view.root, 'Choose Your OnlyFast Plan'));
-    assert.equal(buttons(view.root).filter(b => text(b) === 'Coming Soon' && b.props.disabled && !b.props.onClick).length, 2);
+    assert.equal(buttons(view.root).filter(b => b.props['data-paid-tier']).length, 2);
     assert.deepEqual(fixture.initializations, []);
     await click(view.root, 'Continue Free');
     assert.ok(landing(view.root));
@@ -344,7 +397,7 @@ for (const action of ['finish', 'skip']) {
 test('guest navigation survives email-confirmation wait/reload but never overrides a saved account step', async () => {
   reset({ user: null, progress: { onboarding_step: 'tutorial' } });
   let view = await mount();
-  await click(view.root, 'Skip');
+  await skipIntro(view.root);
   await click(view.root, 'Create Account');
   // Registration requiring email confirmation has not authenticated a user.
   assert.deepEqual(fixture.progressWrites, []);
@@ -376,7 +429,7 @@ test('completed account signs in directly to landing; logout/account switch clea
   await act(async () => fixture.authListener('SIGNED_OUT', null));
   assert.ok(heading(view.root, 'Welcome to OnlyFast'));
   assert.equal(landing(view.root), false);
-  await click(view.root, 'Skip');
+  await skipIntro(view.root);
   fixture.user = { id: 'other', user_metadata: {} };
   fixture.activeClass = null;
   fixture.progress = { onboarding_step: 'plan', onboarding_discipline: 'road_course', onboarding_race_class: 'road_gt3' };
@@ -431,7 +484,7 @@ test('preview Finish/Skip uses the real discipline/class screens without writing
   reset({ access: experiment });
   const view = await mount(Preview);
   await requiredSlides(view.root);
-  await click(view.root, 'Skip to discipline selection');
+  await skipIntro(view.root);
   assert.ok(heading(view.root, 'Select Your Discipline'));
   assert.equal(buttons(view.root).filter(b => / - /.test(b.props['aria-label'] || '')).length, 3);
   assert.deepEqual(fixture.metadataWrites, []);
@@ -570,9 +623,9 @@ test('unfinished discipline, vehicle and plan steps resume from server after rem
     assert.ok(heading(view.root, title));
     assert.deepEqual(fixture.initializations, []);
     if (step === 'plan') {
-      const paid = buttons(view.root).filter(b => text(b) === 'Coming Soon');
+      const paid = buttons(view.root).filter(b => b.props['data-paid-tier']);
       assert.equal(paid.length, 2);
-      for (const button of paid) { assert.equal(button.props.disabled, true); assert.equal(button.props.onClick, undefined); }
+      for (const button of paid) assert.ok(['pro', 'team'].includes(button.props['data-paid-tier']));
       await click(view.root, 'Continue Free');
       assert.ok(landing(view.root));
       assert.deepEqual(fixture.initializations, ['road_gt3']);
@@ -585,7 +638,7 @@ test('Dirt Track Dwarf Cars waits for Rookie selection and progress failures sta
   reset();
   const view = await mount();
   await requiredSlides(view.root);
-  await click(view.root, 'Skip');
+  await skipIntro(view.root);
   fixture.rejectProgress = true;
   await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith('Dirt Track Oval -')).props.onClick());
   assert.ok(heading(view.root, 'Select Your Discipline'));
@@ -605,7 +658,7 @@ for (const car of ['road_spec_miata', 'road_gt3', 'road_karts', 'road_ta2']) {
     reset();
     const view = await mount();
     await requiredSlides(view.root);
-    await click(view.root, 'Skip');
+    await skipIntro(view.root);
     const road = buttons(view.root).find(b => b.props['aria-label']?.startsWith('Road Racing -'));
     await act(async () => road.props.onClick());
     const selected = buttons(view.root).find(b => b.props['aria-label']?.startsWith(library.setupClassLabel(car) + ' -'));
@@ -624,7 +677,7 @@ for (const car of ['road_karts']) {
     reset({ access: experiment });
     const view = await mount(Preview);
     await requiredSlides(view.root);
-    await click(view.root, 'Skip to discipline selection');
+    await skipIntro(view.root);
     await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith('Road Racing -')).props.onClick());
     await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith(library.setupClassLabel(car) + ' -')).props.onClick());
     await click(view.root, 'Continue Free');

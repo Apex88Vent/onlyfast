@@ -194,8 +194,8 @@ test('public native flag cannot enable a purchase; synchronization pins the orig
     './subscription': {},
   });
   assert.equal(module.nativePurchasesEnabled, false);
-  await assert.rejects(module.nativePurchases.run('user-a', 'purchase'), /coming soon/);
-  await assert.rejects(module.nativePurchases.run('user-a', 'restore'), /coming soon/);
+  await assert.rejects(module.nativePurchases.run('user-a', 'purchase'), /unavailable in this build/);
+  await assert.rejects(module.nativePurchases.run('user-a', 'restore'), /unavailable in this build/);
   await assert.rejects(module.syncNativeSubscription('user-a'), /account changed/);
   assert.deepEqual(invocations, [['sync-revenuecat-subscription', { body: {}, headers: { Authorization: 'Bearer token-user-a' } }]]);
 });

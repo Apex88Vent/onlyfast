@@ -14,6 +14,11 @@ import { formatSetupAssistResponse } from '../supabase/functions/_shared/setup-a
 const qaRequire = createRequire(process.env.REACT_TEST_RENDERER_MODULE);
 const React = qaRequire('react');
 const { create, act } = qaRequire(process.env.REACT_TEST_RENDERER_MODULE);
+const placementSource = ts.createSourceFile('HouseAdPlacement.tsx', readFileSync(new URL('../src/components/HouseAdPlacement.tsx', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+const plansDeclaration = placementSource.statements.filter(ts.isVariableStatement)
+  .flatMap(statement => [...statement.declarationList.declarations]).find(declaration => declaration.name.getText(placementSource) === 'HOUSE_AD_PLANS_PATH');
+assert.ok(plansDeclaration && ts.isStringLiteral(plansDeclaration.initializer));
+const housePlansPath = plansDeclaration.initializer.text;
 function compile(file, modules = {}) {
   const source = readFileSync(new URL(`../src/components/${file}`, import.meta.url), 'utf8');
   const code = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2021, esModuleInterop: true } }).outputText;
@@ -23,6 +28,7 @@ function compile(file, modules = {}) {
     if (name.startsWith('react/')) return qaRequire(name);
     if (name === '@/lib/roadTrackFeedback') return road;
     if (name === '@/lib/setupLibrary') return library;
+    if (name === './HouseAdPlacement') return { HOUSE_AD_PLANS_PATH: housePlansPath };
     if (name === '@/hooks/useMembershipRevision') return { useMembershipRevision: () => 0 };
     if (name === '@/lib/nativeAds') return { nativeAds: {
       suspend: () => () => {}, beginSetupAssistDismissal: () => null, completeSetupAssistDismissal: () => 'suppressed',
@@ -216,11 +222,12 @@ test('mounted pavement oval changes only surface colors, keeping dirt geometry a
   await act(async () => { dirt.unmount(); pavement.unmount(); });
 });
 
-test('original inline upgrade design works on Android, iOS and web while preserving the iOS post-save Continue behavior', async () => {
+test('inline upgrade keeps platform pricing and full-screen creative offers Continue on every platform', async () => {
   const previousWindow = globalThis.window;
   globalThis.window = { matchMedia: () => ({ matches: true, addEventListener() {}, removeEventListener() {} }) };
   const icon = props => React.createElement('span', props);
   try {
+    assert.equal(housePlansPath, '/pricing');
     for (const platform of ['android', 'ios', 'web']) {
       const navigation = []; let pending = 0; let continued = 0;
       const Ad = compile('RookieHouseAdContent.tsx', {
@@ -239,12 +246,15 @@ test('original inline upgrade design works on Android, iOS and web while preserv
       assert.deepEqual(navigation, [['/upgrade', { state: { plan: 'pro' } }]]);
       assert.equal(pending, platform === 'web' ? 1 : 0, 'native house ad must not enable external payment state');
       await act(async () => { view.unmount(); });
-      if (platform === 'ios') {
-        await act(async () => { view = create(React.createElement(Ad, { placement: 'after_save_interstitial', onContinue: () => { continued++; } })); });
-        assert.equal(text(view.toJSON()), 'Continue');
-        await act(async () => { view.root.findByType('button').props.onClick(); }); assert.equal(continued, 1);
-        await act(async () => { view.unmount(); });
-      }
+      await act(async () => { view = create(React.createElement(Ad, { placement: 'after_save_interstitial', onContinue: () => { continued++; } })); });
+      const continueButton = view.root.findAllByType('button').find(button => text(button) === 'Continue with Rookie');
+      assert.ok(continueButton);assert.equal(continued, 0);
+      await act(async () => { continueButton.props.onClick(); });assert.equal(continued, 1);
+      const upgradeButton = view.root.findAllByType('button').find(button => text(button).includes(platform === 'web' ? 'Upgrade to Pro' : 'View Pro details'));
+      await act(async () => { upgradeButton.props.onClick(); });
+      assert.deepEqual(navigation.at(-1), [housePlansPath]);assert.equal(continued, 2);
+      assert.equal(pending, platform === 'web' ? 1 : 0, 'interstitial navigation must not create external payment state');
+      await act(async () => { view.unmount(); });
     }
   } finally { globalThis.window = previousWindow; }
 });
@@ -262,7 +272,7 @@ test('both What If CTAs use one panel without automatic requests; failures hide 
   });
   let view;
   try {
-    await act(async () => { view = create(React.createElement(Feedback, { entryHandling: '', midHandling: '', exitHandling: '', setupData: { road_low_speed_entry: 'understeer', road_straightaway: 'under_geared' }, raceClass: 'road_gt3', user: { id: 'test' }, raceWeekendKey: 'Saved Weekend' })); });
+    await act(async () => { view = create(React.createElement(Feedback, { entryHandling: '', midHandling: '', exitHandling: '', setupData: { road_low_speed_entry: 'understeer', road_straightaway: 'under_geared' }, raceClass: 'road_gt3', user: { id: 'test' }, raceWeekendKey: 'Saved Weekend', onlyfastSessionId: '00000000-0000-4000-8000-000000000001' })); });
     const buttons = () => view.root.findAllByType('button');
     const ctas = () => buttons().filter(button => text(button) === 'What If?');
     const suggestions = () => view.root.findAllByProps({ 'aria-label': 'AI setup suggestions' });
@@ -275,6 +285,8 @@ test('both What If CTAs use one panel without automatic requests; failures hide 
     assert.equal(suggestions().length, 1);
     assert.equal(requests.length, 1);
     assert.equal(requests[0].body.discipline, 'road_course');
+    assert.equal(requests[0].body.onlyfast_session_id, '00000000-0000-4000-8000-000000000001');
+    assert.match(requests[0].body.request_id, /^[0-9a-f-]{36}$/);
     const headings = () => suggestions()[0].findAllByType('h4').map(text);
     const firstHeadings = headings();
     assert.deepEqual(firstHeadings, ['Summary', 'Recommended Changes', 'Why / Reasoning', 'Expected Effect', 'Notes / Cautions']);
@@ -319,7 +331,7 @@ test('real map selections feed matching speed/phase keys into Setup Assist and W
     const [data, setData] = React.useState({});
     return React.createElement(React.Fragment, null,
       React.createElement(RoadMap, { data, onChange: (key, value) => setData(previous => ({ ...previous, [key]: value })) }),
-      React.createElement(Feedback, { entryHandling: 'tight', midHandling: 'loose', exitHandling: 'perfect', setupData: data, raceClass: 'road_gt3', user: { id: 'test' }, raceWeekendKey: 'Saved Weekend' }),
+      React.createElement(Feedback, { entryHandling: 'tight', midHandling: 'loose', exitHandling: 'perfect', setupData: data, raceClass: 'road_gt3', user: { id: 'test' }, raceWeekendKey: 'Saved Weekend', onlyfastSessionId: '00000000-0000-4000-8000-000000000001' }),
     );
   }
   let view;

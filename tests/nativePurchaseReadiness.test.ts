@@ -28,8 +28,8 @@ function client(env: Record<string, string> = {}, platform: 'android' | 'ios' | 
 test('platform hold blocks purchases and restoration even when the master flag is true', async () => {
   const module = client();
   assert.equal(module.nativePurchasesEnabled, false);
-  await assert.rejects(module.nativePurchases.run('local-test-uuid', 'purchase'), /coming soon/);
-  await assert.rejects(module.nativePurchases.run('local-test-uuid', 'restore'), /coming soon/);
+  await assert.rejects(module.nativePurchases.run('local-test-uuid', 'purchase'), /unavailable in this build/);
+  await assert.rejects(module.nativePurchases.run('local-test-uuid', 'restore'), /unavailable in this build/);
   assert.equal(module.calls(), 0);
 });
 

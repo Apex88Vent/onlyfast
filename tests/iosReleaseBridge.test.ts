@@ -7,7 +7,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { prepareMedianIosReleaseSource } from '../scripts/prepare-median-ios-release-source.mjs';
 import { ReleaseNativePurchaseController, type BillingReply, type BillingRequest, type StoreCatalog } from '../src/lib/releaseNativeBilling.ts';
-import { NATIVE_PURCHASES_READY } from '../src/lib/nativePurchaseController.ts';
 
 const swift = readFileSync(new URL('../native/ios/OnlyFastBilling.swift', import.meta.url), 'utf8');
 const bootstrap = swift.match(/private static let bootstrap = #"""([\s\S]*?)"""#/)![1];
@@ -39,8 +38,9 @@ test('actual iOS transport preserves JSON envelope and rejects a response for an
   assert.throws(() => p.channel.postMessage('x'.repeat(65_537)));
 });
 
-test('Swift security/SDK boundary refuses foreign ownership, invalidates identity, and holds transactions before Auth/store calls', () => {
-  assert.equal(NATIVE_PURCHASES_READY, false);
+test('historical Swift boundary refuses foreign ownership, invalidates identity, and holds transactions before Auth/store calls', () => {
+  // The selected stock Median controller has its own readiness/rollout tests.
+  // This preserved adapter must independently keep its transaction hold.
   assert.match(swift, /transactionsEnabled = false/);
   assert.ok(swift.indexOf('&& !Self.transactionsEnabled') < swift.indexOf('await execute('));
   assert.match(swift, /message\.frameInfo\.isMainFrame/);

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { fetchUserSubscription, deriveAccountStatus, syncMembershipFromSubscription, type AccountStatus } from '@/lib/subscription';
 import { nativePurchases, nativePurchasesEnabled, syncNativeSubscription } from '@/lib/nativePurchases';
-import { NativePurchaseError } from '@/lib/nativePurchaseController';
+import { NativePurchaseError, NativeOfferingError, NATIVE_MONTHLY_PACKAGES } from '@/lib/nativePurchaseController';
 import { supabase } from '@/lib/supabase';
 
 async function loadStatus(userId: string) {
@@ -13,15 +13,21 @@ async function loadStatus(userId: string) {
   return status;
 }
 
-export function useNativeSubscription(userId: string, { onVerified }: {
+export function useNativeSubscription(userId: string, { onVerified, onboardingTier }: {
   onVerified?: () => void | Promise<void>;
+  onboardingTier?: 'pro' | 'team';
 } = {}) {
   const [account, setAccount] = useState<AccountStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [loadError, setLoadError] = useState(false);
+  const [offering, setOffering] = useState<'loading' | 'ready' | 'unavailable'>('loading');
+  const [offeringError, setOfferingError] = useState('');
+  const [offeringRetry, setOfferingRetry] = useState(0);
   const generation = useRef(0);
   const pending = useRef(false);
+  const hasAccount = account !== null;
+  const hasPaidAccess = account?.isPaid === true;
   useEffect(() => {
     const revision = ++generation.current;
     const generationRef = generation;
@@ -51,8 +57,30 @@ export function useNativeSubscription(userId: string, { onVerified }: {
     return () => { generationRef.current++; window.removeEventListener('subscription-updated', refresh); window.removeEventListener('membership-updated', refreshDisplay); };
   }, [userId]);
 
-  const run = async (action: 'purchase' | 'restore' | 'refresh') => {
-    if (action !== 'refresh' && !nativePurchasesEnabled) return;
+  useEffect(() => {
+    if (!onboardingTier || !hasAccount || hasPaidAccess) return;
+    let active = true;
+    setOffering('loading'); setOfferingError('');
+    void (async () => {
+      try {
+        if (!nativePurchasesEnabled) throw new Error('Store subscriptions are unavailable in this build. Use the current OnlyFast mobile app, or continue with Rookie.');
+        const { data } = await supabase.auth.getSession();
+        if (!active) return;
+        if (data.session?.user.id !== userId) throw new Error('Your account changed. Please sign in again.');
+        await nativePurchases.setUser(userId);
+        if (!active) return;
+        await nativePurchases.checkOffering(userId, NATIVE_MONTHLY_PACKAGES[onboardingTier]);
+        const current = await supabase.auth.getSession();
+        if (active && current.data.session?.user.id === userId) setOffering('ready');
+      } catch (error) {
+        if (active) { setOffering('unavailable'); setOfferingError(error instanceof Error ? error.message : 'Store plans could not be loaded. Please retry.'); }
+      }
+    })();
+    return () => { active = false; };
+  }, [userId, onboardingTier, hasPaidAccess, hasAccount, offeringRetry]);
+
+  const run = async (action: 'purchase' | 'restore' | 'refresh' | 'continue') => {
+    if ((action === 'purchase' || action === 'restore') && !nativePurchasesEnabled) return;
     if (pending.current) return;
     pending.current = true;
     const revision = generation.current;
@@ -63,28 +91,33 @@ export function useNativeSubscription(userId: string, { onVerified }: {
         const existing = await loadStatus(userId);
         const { data: session } = await supabase.auth.getSession();
         if (generation.current !== revision || session.session?.user.id !== userId) return;
-        if (action === 'purchase' && existing.isPaid) {
+        if (action === 'continue' || (action === 'purchase' && existing.isPaid)) {
           setAccount(existing);
+          if (onboardingTier && existing.isPaid) { await onVerified?.(); return; }
+          if (!existing.isPaid) throw new Error('No active paid membership is confirmed. Choose a plan or continue with Rookie.');
           setMessage('Your paid membership is already active. Manage changes through your current subscription provider.');
           return;
         }
         await nativePurchases.setUser(userId);
         if (generation.current !== revision) return;
-        await nativePurchases.run(userId, action);
+        await nativePurchases.run(userId, action, action === 'purchase' && onboardingTier ? NATIVE_MONTHLY_PACKAGES[onboardingTier] : undefined);
       }
       if (nativePurchasesEnabled || account?.row?.subscription_source === 'revenuecat') await syncNativeSubscription(userId);
       const status = await loadStatus(userId);
       if (generation.current !== revision) return;
       setAccount(status); setLoadError(false);
-      if (status.isPaid && action !== 'refresh') await onVerified?.();
+      if (status.isPaid && (action !== 'refresh' || onboardingTier)) await onVerified?.();
       setMessage(status.isPaid ? 'Your subscription is active.' : action === 'restore' ?
         'No active store subscription was found for this account. Check your store account and OnlyFast login.' :
         'No active subscription is confirmed yet. If you purchased, refresh in a moment.');
     } catch (error) {
+      if (generation.current === revision && onboardingTier && error instanceof NativeOfferingError) {
+        setOffering('unavailable'); setOfferingError(error.message);
+      }
       if (generation.current === revision) setMessage(error instanceof NativePurchaseError && error.cancelled ?
         'Purchase cancelled.' : error instanceof Error ? error.message : 'Unable to complete the request. Please try again.');
     } finally { pending.current = false; if (generation.current === revision) setBusy(false); }
   };
 
-  return { account, busy, message, loadError, run };
+  return { account, busy, message, loadError, run, offering, offeringError, retryOffering: () => setOfferingRetry(value => value + 1) };
 }
