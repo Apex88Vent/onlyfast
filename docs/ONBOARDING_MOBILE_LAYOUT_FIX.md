@@ -1,0 +1,76 @@
+# Mobile onboarding layout correction — November 9, 2026
+
+## Root cause
+
+Commit `89bb4a54` (November 6, “11-6- 3”) changed `HowOnlyFastWorks.tsx` to a viewport-height card with desktop-sized internal tracks: a 64px header, a 64px title row, an illustration row of at least 236px, a 96px description row, and a fixed 196px navigation area, plus gaps and padding. Both the slide content and description used `overflow-y: auto`.
+
+Those minimums exceed the available content height on phones. Before this correction, every slide at 320×568 had 230px of overflowing central content; the welcome description also had 96px of independently scrollable text. At 375×667 every slide had 131px of overflowing central content. Even at 390×844 and 430×932, the welcome text still required internal scrolling.
+
+The later public-homepage release did not introduce these rules. Its stylesheet is scoped to `.of-public`; the tutorial sizing rules were already present. `src/App.css` is not imported by the application. The global 24px minimum button targets also mean progress indicators can wrap, which the navigation now sizes naturally to accommodate.
+
+## Exact files changed
+
+- `src/components/HowOnlyFastWorks.tsx`: changes only the component's existing scoped CSS.
+- `qa/automation/onboarding-layout.mjs`: adds a local browser regression and screenshot harness, using an existing Vite development server and an external/local Playwright installation.
+- `docs/ONBOARDING_MOBILE_LAYOUT_FIX.md`: this report.
+
+No slide definitions, text, logos, colors, illustration markup, event handlers, or navigation conditions were changed. Subscription, authentication, account data, discipline, car class, and plan-selection implementations are unchanged. Production advertising and purchasing holds remain in place.
+
+## Correction
+
+- Titles and descriptions use their natural height; illustrations use the remaining space and retain the existing uniform fitting behavior.
+- Navigation uses its content height, including wrapped progress indicators and member login, instead of reserving 196px.
+- Viewports up to 800px tall use smaller logo height, padding, gaps, and illustration minimums. Body text remains 14px at normal text settings, with 20px line height in the compact layout.
+- The card height follows `100dvh`, with a `100vh` fallback, subtracting the same top/bottom safe-area values used for page padding. Existing left/right safe-area protection remains.
+- The page can grow beyond the viewport for short screens or enlarged text. Nested slide/text scroll containers were removed. Long enlarged headings and button labels can wrap without horizontal overflow.
+- Existing Next/Finish, progress-dot Back navigation, swipes, login, and halfway-unlocked Skip behavior are preserved. Replay keeps its existing Skip/Finish behavior and callback; no new Close or Back button was introduced.
+
+## Responsive verification
+
+Installed Chrome on Windows rendered all 12 real tutorial slides at each size below. Each size also passed all 11 backward transitions using the existing progress controls. No horizontal page overflow or nested vertical scrolling was detected in any case. All normal portrait, tablet, and desktop cases had zero vertical page overflow and visible navigation.
+
+| Viewport | All 12 slides | Vertical page scrolling |
+|---|---|---|
+| 320×568 | Pass | None |
+| 375×667 | Pass | None |
+| 390×844 | Pass | None |
+| 393×852 | Pass | None |
+| 430×932 | Pass | None |
+| 568×320 | Pass | 54–94px, intentionally allowed |
+| 667×375 | Pass | 0–39px, intentionally allowed |
+| 844×390 | Pass | 0–24px, intentionally allowed |
+| 852×393 | Pass | 0–21px, intentionally allowed |
+| 932×430 | Pass | None |
+| 768×1024 / 1024×768 | Pass | None |
+| 820×1180 / 1180×820 | Pass | None |
+| 1440×900 / 1920×1080 | Pass | None |
+
+Additional checks passed:
+
+- All 12 slides with simulated 47px top and 34px bottom safe areas at 390×844.
+- All 12 slides after live viewport resizes between 390×650, 390×744, and 390×844, representing browser chrome height changes.
+- All 12 slides with 200% root text size at 320×568: no horizontal overflow, text remains fully available, and navigation is reachable by scrolling.
+- Navigation remains reachable on all 60 short landscape slide/viewport combinations.
+- Actual `/app` browser flow, separately using Finish and Skip: tutorial → discipline → car → plan → Continue Free → existing landing. Discipline and plan Back controls also passed. Completion was recorded only after required selections. Backend responses were intercepted fixtures; no live account or purchase was involved.
+- 61 mounted onboarding and public-routing tests passed, including guest authentication handoff, replay, resume, account switching, and required-selection guards.
+- All 16 existing public-website browser checks passed, including authenticated app entry and simulated Android/iOS Median routing. The desktop and mobile homepage screenshots generated by that suite are byte-identical to the task's pre-fix screenshots.
+- ESLint passed for both affected code files. `git diff --check` passed.
+- Production Vite build passed, with the existing bundle-size warning. Build output is under `tmp/onboarding-mobile/build`; the existing `dist` was preserved.
+
+## Local visual review
+
+The local development server is at `http://127.0.0.1:8080`.
+
+- Gallery: [all 12 slides at three phone sizes](http://127.0.0.1:8080/tmp/onboarding-mobile/gallery.html).
+- [Interactive tutorial preview](http://127.0.0.1:8080/tmp/onboarding-mobile/layout.html). This isolated layout preview ends with “Tutorial complete”; actual selection flow is tested separately above.
+- Contact sheets: `tmp/onboarding-mobile/all-slides-320.png` and `tmp/onboarding-mobile/all-slides-390.png`.
+- Individual screenshots: `tmp/onboarding-mobile/after-{320,390,430}-slide-{1…12}.png`.
+- Measurements: `tmp/onboarding-mobile/baseline.json`, `results.json`, and `extra-checks.json`.
+
+Generated previews, measurements, and build output are local ignored artifacts, outside the production bundle. To regenerate measurements/screenshots, start `npm run dev`, set `ONLYFAST_PLAYWRIGHT_MODULE` to a local Playwright `index.mjs` if it is not otherwise installed, and run `node qa/automation/onboarding-layout.mjs` from this checkout. `ONLYFAST_LAYOUT_URL` can specify another loopback Vite server.
+
+## Limitations and release status
+
+Physical Android and iOS Median WebViews and Safari/WebKit were not tested. Browser-bar changes, device safe areas, and enlarged text were simulated in Chrome; hardware validation remains advisable before release. Very short viewports and enlarged accessibility text intentionally scroll. The existing discipline, car, and plan selection pages retain their scrolling lists and existing layouts.
+
+The primary checkout remains on `main`. No commit, push, deployment, native-wrapper configuration change, or production activation was performed.

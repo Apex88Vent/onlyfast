@@ -236,35 +236,42 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
     <div id="main-content" tabIndex={-1} className="onlyfast-onboarding min-h-screen bg-[#F5F5F7] flex items-center justify-center px-4 py-6" role="main">
       <style>{`
         .onlyfast-onboarding {
-          min-height: 0;
-          height: 100vh;
-          height: 100dvh;
-          padding-top: max(24px, env(safe-area-inset-top, 0px));
-          padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
+          --onboarding-page-space: 24px;
+          --onboarding-top: max(var(--onboarding-page-space), env(safe-area-inset-top, 0px));
+          --onboarding-bottom: max(var(--onboarding-page-space), env(safe-area-inset-bottom, 0px));
+          --onboarding-viewport: 100vh;
+          min-height: var(--onboarding-viewport);
+          padding-top: var(--onboarding-top);
+          padding-bottom: var(--onboarding-bottom);
           padding-left: max(16px, env(safe-area-inset-left, 0px));
           padding-right: max(16px, env(safe-area-inset-right, 0px));
+        }
+        @supports (height: 100dvh) {
+          .onlyfast-onboarding { --onboarding-viewport: 100dvh; }
         }
         .onlyfast-onboarding-card {
           display: flex;
           flex-direction: column;
-          /* The largest reviewed original card was 939.5px high. */
-          height: min(940px, 100%);
+          flex-shrink: 0;
+          height: min(940px, calc(var(--onboarding-viewport) - var(--onboarding-top) - var(--onboarding-bottom)));
+          /* Grow the whole page for short viewports or enlarged text, never clip it. */
+          min-height: min-content;
         }
-        .onlyfast-onboarding-header { flex: 0 0 64px; }
+        .onlyfast-onboarding-header { flex: 0 0 auto; min-height: 64px; }
+        .onlyfast-onboarding-header > img { height: 64px; max-width: 70%; }
         .onlyfast-slide-content {
-          flex: 1 1 0;
-          min-height: 0;
+          flex: 1 0 auto;
+          min-width: 0;
           display: grid;
-          grid-template-rows: 64px minmax(236px, 1fr) 96px;
+          grid-template-columns: minmax(0, 1fr);
+          grid-template-rows: auto minmax(min-content, 1fr) auto;
+          overflow-wrap: anywhere;
           gap: 16px;
           padding-top: 20px;
-          overflow-y: auto;
-          overflow-x: hidden;
-          scrollbar-gutter: stable;
         }
-        .onlyfast-slide-visual { min-height: 0; display: flex; flex-direction: column; }
-        .onlyfast-slide-accent { flex: 0 0 36px; }
-        .onlyfast-artwork-area { position: relative; flex: 1 1 0; min-height: 0; }
+        .onlyfast-slide-visual { min-height: 140px; display: flex; flex-direction: column; }
+        .onlyfast-slide-accent { flex: 0 0 auto; min-height: 36px; }
+        .onlyfast-artwork-area { position: relative; flex: 1 1 0; min-height: 48px; }
         .onlyfast-artwork {
           position: absolute;
           top: 50%;
@@ -273,9 +280,29 @@ const HowOnlyFastWorks: React.FC<HowOnlyFastWorksProps> = ({
           transform: translate(-50%, -50%) scale(var(--onboarding-artwork-scale, 1));
           transform-origin: center;
         }
-        .onlyfast-slide-description { min-height: 0; overflow-y: auto; margin-top: 0; }
-        .onlyfast-slide-navigation { flex: 0 0 196px; min-height: 196px; padding-top: 20px; }
-        .onlyfast-slide-navigation > [aria-label] { height: 56px; margin-top: 0; }
+        .onlyfast-slide-description { margin-top: 0; }
+        .onlyfast-slide-navigation { flex: 0 0 auto; padding-top: 12px; }
+        .onlyfast-slide-navigation > button { overflow-wrap: anywhere; }
+        .onlyfast-slide-navigation > [aria-label] { min-height: 24px; margin-top: 0; }
+        .onlyfast-slide-navigation > .onlyfast-pulse { margin-top: 12px; }
+        .onlyfast-slide-navigation > button:not(.onlyfast-pulse) { min-height: 32px; margin-top: 8px; }
+        .onlyfast-onboarding-header > button { min-height: 44px; }
+        @media (max-height: 800px) {
+          .onlyfast-onboarding { --onboarding-page-space: 8px; }
+          .onlyfast-onboarding-card { padding: 12px; }
+          .onlyfast-onboarding-header { min-height: 40px; }
+          .onlyfast-onboarding-header > img { height: 40px; max-width: 70%; }
+          .onlyfast-slide-content { gap: 8px; padding-top: 8px; }
+          .onlyfast-slide-content h1 { font-size: 1.375rem; line-height: 1.75rem; }
+          .onlyfast-slide-description { line-height: 1.25rem; }
+          .onlyfast-slide-visual { min-height: 88px; padding: 8px; }
+          .onlyfast-slide-accent { min-height: 16px; letter-spacing: .12em; }
+          .onlyfast-artwork-area { min-height: 32px; margin-top: 6px; }
+          .onlyfast-slide-navigation { padding-top: 8px; }
+          .onlyfast-slide-navigation > [aria-label] { min-height: 16px; }
+          .onlyfast-slide-navigation > .onlyfast-pulse { min-height: 44px; padding-block: 10px; margin-top: 8px; }
+          .onlyfast-slide-navigation > button:not(.onlyfast-pulse) { min-height: 24px; margin-top: 4px; }
+        }
         @keyframes onlyfastSlideIn {
           from { opacity: 0; transform: translateX(22px); }
           to { opacity: 1; transform: translateX(0); }
