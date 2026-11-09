@@ -1,4 +1,4 @@
-import { isMedianIOS, isMedianUserAgent } from './nativeEnvironment';
+import { isMedianIOS, isMedianUserAgent, isNativeAppContext } from './nativeEnvironment';
 
 // Require Median evidence as well as iOS: Safari must keep the web UI.
 export const isMedianIOSApp = typeof navigator !== 'undefined' &&
@@ -8,6 +8,20 @@ const HIDE_EXTERNAL_PAYMENTS_STORAGE_KEY = 'onlyfast_hide_external_payments';
 
 const hideExternalPaymentsBuildFlag =
   import.meta.env.VITE_HIDE_EXTERNAL_PAYMENTS === 'true';
+
+const host = typeof window === 'undefined' ? undefined : window as Window & {
+  median?: object;
+  gonative?: object;
+};
+const userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent;
+const hasNativeEvidence = isMedianUserAgent(userAgent) ||
+  Boolean(host && (host.median || host.gonative));
+
+// Evaluate before query cleanup. Never use the legacy localStorage flag as
+// evidence: it outlives both browser sessions and visits to native test URLs.
+export const isNativeApp = isNativeAppContext(
+  host?.location.search ?? '', userAgent, hasNativeEvidence,
+);
 
 const cleanNativeAppQueryParam = () => {
   if (typeof window === 'undefined') return;
@@ -27,8 +41,8 @@ const cleanNativeAppQueryParam = () => {
   }
 };
 
-const readRuntimeHideExternalPayments = (): boolean => {
-  if (typeof window === 'undefined') return false;
+const recordNativeLaunchContext = () => {
+  if (typeof window === 'undefined') return;
 
   try {
     const params = new URLSearchParams(window.location.search);
@@ -37,11 +51,13 @@ const readRuntimeHideExternalPayments = (): boolean => {
     if (nativeApp === 'true') {
       try {
         window.localStorage.setItem(HIDE_EXTERNAL_PAYMENTS_STORAGE_KEY, 'true');
-        cleanNativeAppQueryParam();
+        // Real wrappers identify themselves on subsequent documents. With only
+        // an explicit launch URL, retain it so a reload keeps that launch context.
+        if (hasNativeEvidence) cleanNativeAppQueryParam();
       } catch {
         // Some embedded browsers restrict storage; the URL flag still applies for this load.
       }
-      return true;
+      return;
     }
 
     if (nativeApp === 'false') {
@@ -51,26 +67,18 @@ const readRuntimeHideExternalPayments = (): boolean => {
         // Storage reset is best-effort for testing.
       }
       cleanNativeAppQueryParam();
-      return false;
+      return;
     }
 
-    try {
-      return window.localStorage.getItem(HIDE_EXTERNAL_PAYMENTS_STORAGE_KEY) === 'true';
-    } catch {
-      return false;
-    }
   } catch {
-    return false;
+    // Restricted URL/storage access must not interrupt the app.
   }
 };
 
-const runtimeHideExternalPayments = readRuntimeHideExternalPayments();
-// Routing only. Reuse the wrapper's persisted marker; a payment-only build
-// flag must never turn an ordinary browser into a native app.
-export const isNativeApp = runtimeHideExternalPayments ||
-  (typeof navigator !== 'undefined' && isMedianUserAgent(navigator.userAgent));
-export const hideExternalPayments = hideExternalPaymentsBuildFlag || runtimeHideExternalPayments ||
-  (typeof navigator !== 'undefined' && isMedianUserAgent(navigator.userAgent));
+recordNativeLaunchContext();
+// The build preference affects payment UI only. Wrapper evidence/launch context
+// preserves native billing; a stale browser flag affects neither routing nor it.
+export const hideExternalPayments = hideExternalPaymentsBuildFlag || isNativeApp;
 
 export const nativeUpgradeMessage =
   'View Pro and Team subscriptions in the app. Prices and available offers are shown before purchase.';

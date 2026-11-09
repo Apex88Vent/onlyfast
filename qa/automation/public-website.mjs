@@ -41,6 +41,9 @@ const session = {
 async function fixture({
   authenticated = false,
   expired = false,
+  rejectedUser = false,
+  rejectedRefresh = false,
+  nativeMarker = false,
   viewport = { width: 1440, height: 1000 },
   userAgent,
 } = {}) {
@@ -52,6 +55,11 @@ async function fixture({
     if (url.origin === new URL(base).origin) return route.continue();
     if (url.hostname.endsWith('.supabase.co')) {
       requests.push({ path: url.pathname, method: route.request().method() });
+      if ((rejectedUser && url.pathname.includes('/auth/v1/user')) ||
+          (rejectedRefresh && url.pathname.includes('/auth/v1/token'))) {
+        return route.fulfill({ status: rejectedRefresh ? 400 : 401, contentType: 'application/json',
+          body: JSON.stringify({ code: rejectedRefresh ? 'refresh_token_not_found' : 'bad_jwt', message: 'Session is no longer valid' }) });
+      }
       let data = [];
       if (url.pathname.includes('/auth/v1/token')) data = session;
       else if (url.pathname.includes('/auth/v1/user')) data = user;
@@ -77,15 +85,17 @@ async function fixture({
     return route.abort();
   });
   await context.addInitScript(
-    ({ authenticated, session, storageKey }) => {
+    ({ authenticated, session, storageKey, nativeMarker }) => {
       localStorage.setItem('onlyfast_cookie_consent', 'declined');
+      if (nativeMarker) localStorage.setItem('onlyfast_hide_external_payments', 'true');
+      localStorage.setItem('onlyfast_saved_setting_test', 'keep');
       // Seed once so reload and signout checks exercise actual SDK persistence.
       if (authenticated && !sessionStorage.getItem('onlyfast_qa_auth_seeded')) {
         if (!localStorage.getItem(storageKey)) localStorage.setItem(storageKey, JSON.stringify(session));
         sessionStorage.setItem('onlyfast_qa_auth_seeded', 'true');
       }
     },
-    { authenticated, session: expired ? { ...session, expires_at: Math.floor(Date.now() / 1000) - 60 } : session,
+    { authenticated, nativeMarker, session: expired ? { ...session, expires_at: Math.floor(Date.now() / 1000) - 60 } : session,
       storageKey: 'sb-thpyjvwtfvfxiufchrxn-auth-token' },
   );
   const page = await context.newPage();
@@ -273,13 +283,17 @@ try {
       await context.close();
     }
   });
-  await test('persisted parameter marker works without wrapper UA, and explicit browser reset restores marketing', async () => {
+  await test('an ordinary browser native test URL does not persistently bypass marketing', async () => {
     const { page, context } = await fixture();
     await go(page, '/?nativeApp=true');
     await page.getByRole('heading', { name: 'Welcome to OnlyFast', exact: true }).waitFor();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: 'Welcome to OnlyFast', exact: true }).waitFor();
     await go(page, '/support');
     await go(page);
-    await page.getByRole('heading', { name: 'Welcome to OnlyFast', exact: true }).waitFor();
+    await hero(page).waitFor();
+    assert.equal(await page.evaluate(() => localStorage.getItem('onlyfast_hide_external_payments')), 'true');
+    assert.equal(await page.evaluate(() => localStorage.getItem('onlyfast_saved_setting_test')), 'keep');
     await go(page, '/?nativeApp=false');
     await hero(page).waitFor();
     await context.close();
@@ -337,6 +351,7 @@ try {
       const { page, context } = await fixture({ userAgent, authenticated: true });
       await go(page, '/?nativeApp=true');
       await page.getByRole('button', { name: 'Open menu' }).waitFor();
+      await page.getByRole('button', { name: 'New Setup', exact: true }).waitFor();
       await page.getByRole('button', { name: 'Open menu' }).click();
       await page
         .getByRole('dialog', { name: 'Main menu' })
@@ -398,6 +413,36 @@ try {
     assert.ok(requests.some(request => request.path === '/auth/v1/token' && request.method === 'POST'));
     assert.equal(await hero(page).count(), 0);
     await context.close();
+  });
+  await test('stale native markers never override ordinary desktop/mobile browser authentication', async () => {
+    for (const userAgent of ['Mozilla/5.0 Windows Chrome/130.0', 'Mozilla/5.0 Android Chrome/130.0 Mobile Safari/537.36', 'Mozilla/5.0 iPhone Version/18.0 Mobile Safari/604.1']) {
+      for (const authenticated of [false, true]) {
+        const { page, context } = await fixture({ userAgent, nativeMarker: true, authenticated });
+        await go(page);
+        if (authenticated) {
+          await page.getByRole('button', { name: 'New Setup', exact: true }).waitFor();
+          assert.equal(new URL(page.url()).pathname, '/app');
+          await page.getByRole('button', { name: 'Account menu for Preview Racer' }).click();
+          await page.getByRole('menuitem', { name: 'Sign Out', exact: true }).click();
+          await dialog(page).waitFor();
+          await go(page);
+        }
+        await hero(page).waitFor();
+        await page.reload({ waitUntil: 'domcontentloaded' }); await hero(page).waitFor();
+        assert.equal(await page.evaluate(() => localStorage.getItem('onlyfast_saved_setting_test')), 'keep');
+        await context.close();
+      }
+    }
+  });
+  await test('server-rejected cached users and expired invalid refresh sessions return to marketing', async () => {
+    for (const scenario of [{ rejectedUser: true }, { expired: true, rejectedRefresh: true }]) {
+      const { page, context, requests } = await fixture({ authenticated: true, nativeMarker: true, ...scenario });
+      await go(page); await hero(page).waitFor();
+      assert.equal(new URL(page.url()).pathname, '/');
+      assert.ok(requests.some(r => r.path.includes(scenario.rejectedUser ? '/auth/v1/user' : '/auth/v1/token')));
+      assert.equal(await page.evaluate(() => localStorage.getItem('onlyfast_saved_setting_test')), 'keep');
+      await context.close();
+    }
   });
 } finally {
   await browser.close();
