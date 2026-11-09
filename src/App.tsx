@@ -7,6 +7,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/components/theme-provider";
 import Index from "./pages/Index";
+import AppEntry from "./pages/AppEntry";
+import RouteMetadata from "./components/RouteMetadata";
 import NotFound from "./pages/NotFound";
 import ResetPassword from "./pages/ResetPassword";
 import Upgrade from "./pages/Upgrade";
@@ -37,8 +39,11 @@ const App = () => (
           <BetaFeaturesProvider>
             <AppProvider>
             <SafeBackHandler />
+            <RouteMetadata />
             <Routes>
-              <Route path="/" element={<Index />} />
+              <Route path="/" element={<AppEntry />} />
+              <Route path="/app" element={<AppEntry />} />
+              <Route path="/login" element={<AppEntry />} />
               <Route path="/account" element={<Index />} />
               <Route path="/upgrade" element={<Upgrade />} />
               <Route path="/pricing" element={<Upgrade />} />

@@ -37,10 +37,10 @@ const readRuntimeHideExternalPayments = (): boolean => {
     if (nativeApp === 'true') {
       try {
         window.localStorage.setItem(HIDE_EXTERNAL_PAYMENTS_STORAGE_KEY, 'true');
+        cleanNativeAppQueryParam();
       } catch {
         // Some embedded browsers restrict storage; the URL flag still applies for this load.
       }
-      cleanNativeAppQueryParam();
       return true;
     }
 
@@ -65,6 +65,10 @@ const readRuntimeHideExternalPayments = (): boolean => {
 };
 
 const runtimeHideExternalPayments = readRuntimeHideExternalPayments();
+// Routing only. Reuse the wrapper's persisted marker; a payment-only build
+// flag must never turn an ordinary browser into a native app.
+export const isNativeApp = runtimeHideExternalPayments ||
+  (typeof navigator !== 'undefined' && isMedianUserAgent(navigator.userAgent));
 export const hideExternalPayments = hideExternalPaymentsBuildFlag || runtimeHideExternalPayments ||
   (typeof navigator !== 'undefined' && isMedianUserAgent(navigator.userAgent));
 

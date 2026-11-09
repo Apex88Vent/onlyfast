@@ -1,4 +1,5 @@
 import type { NavigateFunction } from 'react-router-dom';
+import { isNativeApp } from './paymentVisibility';
 
 export const SAFE_BACK_DASHBOARD_EVENT = 'onlyfast-safe-navigate';
 
@@ -15,10 +16,12 @@ interface SafeBackTarget {
 let internalStack: SafeBackTarget[] = [];
 let currentPath = HOME_PATH;
 let currentDashboardView = HOME_VIEW;
+let dashboardPath = HOME_PATH;
 let pendingDashboardView: string | null = null;
 let isApplyingSafeBack = false;
 
 const normalizePath = (path: string) => path || HOME_PATH;
+const isDashboardPath = (path: string) => ['/', '/app'].includes(path.split(/[?#]/)[0]);
 
 const targetKey = (target: SafeBackTarget) =>
   `${normalizePath(target.path)}::${target.dashboardView || ''}`;
@@ -27,22 +30,23 @@ const targetsMatch = (a: SafeBackTarget, b: SafeBackTarget) => targetKey(a) === 
 
 const currentTarget = (): SafeBackTarget => ({
   path: currentPath,
-  dashboardView: currentPath === HOME_PATH ? currentDashboardView : undefined,
+  dashboardView: isDashboardPath(currentPath) ? currentDashboardView : undefined,
 });
 
 const homeTarget = (): SafeBackTarget => ({
-  path: HOME_PATH,
+  path: dashboardPath,
   dashboardView: HOME_VIEW,
 });
 
 const isHomeTarget = (target: SafeBackTarget) =>
-  normalizePath(target.path) === HOME_PATH && (!target.dashboardView || target.dashboardView === HOME_VIEW);
+  isDashboardPath(normalizePath(target.path)) && (!target.dashboardView || target.dashboardView === HOME_VIEW);
 
 const dispatchDashboardView = (view: string) => {
   window.dispatchEvent(new CustomEvent(SAFE_BACK_DASHBOARD_EVENT, { detail: { view } }));
 };
 
 export const armSafeBackGuard = () => {
+  if (!isNativeApp) return;
   try {
     const state = window.history.state || {};
     if (state[GUARD_STATE_KEY]) return;
@@ -55,16 +59,17 @@ export const armSafeBackGuard = () => {
 
 export const recordSafeBackRoute = (path: string) => {
   currentPath = normalizePath(path);
-  const target: SafeBackTarget = currentPath === HOME_PATH
-    ? { path: HOME_PATH, dashboardView: currentDashboardView }
+  if (isDashboardPath(currentPath)) dashboardPath = currentPath;
+  const target: SafeBackTarget = isDashboardPath(currentPath)
+    ? { path: currentPath, dashboardView: currentDashboardView }
     : { path: currentPath };
   recordSafeBackTarget(target);
 };
 
 export const recordSafeBackDashboardView = (view: string) => {
   currentDashboardView = view || HOME_VIEW;
-  if (currentPath !== HOME_PATH) return;
-  recordSafeBackTarget({ path: HOME_PATH, dashboardView: currentDashboardView });
+  if (!isDashboardPath(currentPath)) return;
+  recordSafeBackTarget({ path: currentPath, dashboardView: currentDashboardView });
 };
 
 export const consumePendingSafeBackDashboardView = () => {
@@ -78,7 +83,7 @@ export const recordSafeBackTarget = (target: SafeBackTarget) => {
 
   const normalized: SafeBackTarget = {
     path: normalizePath(target.path),
-    dashboardView: target.path === HOME_PATH ? (target.dashboardView || HOME_VIEW) : undefined,
+    dashboardView: isDashboardPath(target.path) ? (target.dashboardView || HOME_VIEW) : undefined,
   };
   const last = internalStack[internalStack.length - 1];
   if (last && targetsMatch(last, normalized)) return;

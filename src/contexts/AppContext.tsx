@@ -41,7 +41,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => watchNativePurchases(), []);
 
   useLayoutEffect(() => {
-    nativeAds.setRouteSupported(pathname === '/');
+    // /app is the browser alias of the same dashboard. Preserve the existing
+    // Rookie house-ad/native placement policy on either entry route.
+    nativeAds.setRouteSupported(pathname === '/' || pathname === '/app');
     return () => nativeAds.setRouteSupported(false);
   }, [pathname]);
 

@@ -8,6 +8,25 @@
   "buildCommand": "vite build",
   "installCommand": "npm install",
   "outputDirectory": "dist",
+  "headers": [
+    {
+      "source": "/:path(app|account|login|upgrade|pricing|checkout|reset-password)",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+    },
+    {
+      "source": "/app/:path*",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+    },
+    {
+      "source": "/subscription/:path*",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+    },
+    {
+      "source": "/",
+      "has": [{ "type": "query", "key": "nativeApp", "value": "true" }],
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+    }
+  ],
   "rewrites": [
     {
       "source": "/((?!api/).*)",

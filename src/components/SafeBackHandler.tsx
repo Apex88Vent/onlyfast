@@ -7,6 +7,7 @@ import {
   safeBack,
 } from '@/lib/safeBack';
 import { isOnlyFastFilePickerOpen } from '@/lib/filePickerState';
+import { isNativeApp } from '@/lib/paymentVisibility';
 
 const SafeBackHandler: React.FC = () => {
   const location = useLocation();
@@ -15,7 +16,7 @@ const SafeBackHandler: React.FC = () => {
   useEffect(() => {
     const path = `${location.pathname}${location.search}${location.hash}`;
     recordSafeBackRoute(path);
-    armSafeBackGuard();
+    if (isNativeApp) armSafeBackGuard();
   }, [location.pathname, location.search, location.hash]);
 
   useEffect(() => {
@@ -27,6 +28,7 @@ const SafeBackHandler: React.FC = () => {
     };
 
     const handlePopState = () => {
+      if (!isNativeApp) return;
       if (isOnlyFastFilePickerOpen()) {
         armSafeBackGuard();
         return;
