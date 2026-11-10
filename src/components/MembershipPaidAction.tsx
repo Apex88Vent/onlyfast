@@ -24,7 +24,8 @@ export default function MembershipPaidAction({ userId, tier, onVerified, checkou
   }, [userId]);
 
   if (hideExternalPayments) return <NativeSubscriptionControls userId={userId} purchaseOnly onVerified={onVerified}
-    onboardingTier={onboarding ? tier : undefined} purchaseLabel={onboarding ? `Choose ${tier === 'team' ? 'Teams' : 'Pro'}` : undefined} />;
+    planTier={tier} onboardingTier={onboarding ? tier : undefined}
+    purchaseLabel={onboarding ? `Choose ${tier === 'team' ? 'Teams' : 'Pro'}` : `View ${tier === 'team' ? 'Teams' : 'Pro'} store price`} />;
 
   const choose = async () => {
     if (pending.current) return;

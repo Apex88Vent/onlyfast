@@ -13,10 +13,12 @@ async function loadStatus(userId: string) {
   return status;
 }
 
-export function useNativeSubscription(userId: string, { onVerified, onboardingTier }: {
+export function useNativeSubscription(userId: string, { onVerified, onboardingTier, planTier }: {
   onVerified?: () => void | Promise<void>;
   onboardingTier?: 'pro' | 'team';
+  planTier?: 'pro' | 'team';
 } = {}) {
+  const selectedTier = onboardingTier || planTier;
   const [account, setAccount] = useState<AccountStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -59,7 +61,7 @@ export function useNativeSubscription(userId: string, { onVerified, onboardingTi
   }, [userId]);
 
   useEffect(() => {
-    if (!onboardingTier || !hasAccount || hasPaidAccess || isTestOverride) return;
+    if (!selectedTier || !hasAccount || hasPaidAccess || isTestOverride) return;
     let active = true;
     setOffering('loading'); setOfferingError('');
     void (async () => {
@@ -70,7 +72,7 @@ export function useNativeSubscription(userId: string, { onVerified, onboardingTi
         if (data.session?.user.id !== userId) throw new Error('Your account changed. Please sign in again.');
         await nativePurchases.setUser(userId);
         if (!active) return;
-        await nativePurchases.checkOffering(userId, NATIVE_MONTHLY_PACKAGES[onboardingTier]);
+        await nativePurchases.checkOffering(userId, NATIVE_MONTHLY_PACKAGES[selectedTier]);
         const current = await supabase.auth.getSession();
         if (active && current.data.session?.user.id === userId) setOffering('ready');
       } catch (error) {
@@ -78,7 +80,7 @@ export function useNativeSubscription(userId: string, { onVerified, onboardingTi
       }
     })();
     return () => { active = false; };
-  }, [userId, onboardingTier, hasPaidAccess, hasAccount, isTestOverride, offeringRetry]);
+  }, [userId, selectedTier, hasPaidAccess, hasAccount, isTestOverride, offeringRetry]);
 
   const run = async (action: 'purchase' | 'restore' | 'refresh' | 'continue') => {
     if ((action === 'purchase' || action === 'restore') && !nativePurchasesEnabled) return;
@@ -108,7 +110,7 @@ export function useNativeSubscription(userId: string, { onVerified, onboardingTi
         }
         await nativePurchases.setUser(userId);
         if (generation.current !== revision) return;
-        await nativePurchases.run(userId, action, action === 'purchase' && onboardingTier ? NATIVE_MONTHLY_PACKAGES[onboardingTier] : undefined);
+        await nativePurchases.run(userId, action, action === 'purchase' && selectedTier ? NATIVE_MONTHLY_PACKAGES[selectedTier] : undefined);
       }
       if (nativePurchasesEnabled || account?.row?.subscription_source === 'revenuecat') await syncNativeSubscription(userId);
       const status = await loadStatus(userId);
@@ -119,7 +121,7 @@ export function useNativeSubscription(userId: string, { onVerified, onboardingTi
         'No active store subscription was found for this account. Check your store account and OnlyFast login.' :
         'No active subscription is confirmed yet. If you purchased, refresh in a moment.');
     } catch (error) {
-      if (generation.current === revision && onboardingTier && error instanceof NativeOfferingError) {
+      if (generation.current === revision && selectedTier && error instanceof NativeOfferingError) {
         setOffering('unavailable'); setOfferingError(error.message);
       }
       if (generation.current === revision) setMessage(error instanceof NativePurchaseError && error.cancelled ?

@@ -66,6 +66,10 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userI
           return (
             <div
               key={plan.tier}
+              onClick={hideExternalPayments && plan.tier !== 'rookie' ? event => {
+                if ((event.target as HTMLElement).closest('button, a, input, select, textarea')) return;
+                event.currentTarget.querySelector<HTMLButtonElement | HTMLAnchorElement>('[data-plan-action]')?.click();
+              } : undefined}
               className={`relative flex flex-col rounded-2xl border-2 p-6 transition-all bg-white ${
                 isRecommended
                   ? 'border-[#00A8E8] shadow-xl shadow-[#00A8E8]/15 md:-mt-2 md:mb-2 ring-1 ring-[#00A8E8]/30'
@@ -83,15 +87,15 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userI
                   {plan.tier === 'team' ? 'Teams' : plan.displayName}
                 </h3>
                 <p className="text-3xl font-extrabold text-[#1A1B23] mt-2">
-                  {plan.tier === 'rookie' ? 'FREE' : hideExternalPayments && !onboarding ? 'Store pricing' : plan.priceDisplay.split('/')[0]}
-                  {plan.tier !== 'rookie' && (!hideExternalPayments || onboarding) && (
+                  {plan.tier === 'rookie' ? 'FREE' : hideExternalPayments ? 'Monthly subscription' : plan.priceDisplay.split('/')[0]}
+                  {plan.tier !== 'rookie' && !hideExternalPayments && (
                     <span className="text-base font-medium text-[#6B7280]"> / month</span>
                   )}
                 </p>
               </div>
 
               <p className="text-sm text-[#6B7280] mb-4">{plan.description}</p>
-              {plan.tier !== 'rookie' && <p className="text-xs text-[#6B7280] mb-3">Localized store prices, subscription terms and any eligible introductory offer will be shown before purchase.</p>}
+              {plan.tier !== 'rookie' && <p className="text-xs text-[#6B7280] mb-3">{hideExternalPayments ? 'Tap to view your localized price and choose Pro or Teams in the store paywall. Existing subscribers can manage changes through their store.' : 'Localized store prices, subscription terms and any eligible introductory offer will be shown before purchase.'}</p>}
               {plan.tier === 'rookie' && <p className="text-xs text-[#6B7280] mb-3">Setup export, leaderboard uploads and badges, and advanced profiles are locked. Pro or Teams unlocks them.</p>}
               <ul className="space-y-2 mb-6 flex-1">
                 {plan.synopsis.map((line, i) => (
@@ -125,7 +129,7 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userI
       {saveError && <p role="alert" className="mb-4 text-sm text-red-600">{saveError}</p>}
       <MembershipComparison />
       {onboarding && <div className="text-center text-xs text-[#6B7280] mt-4 space-y-2">
-        {hideExternalPayments && <p>Prices above are the reference USD prices. The store paywall shows the actual localized price and billing terms. Subscriptions renew monthly unless canceled through your store account.</p>}
+        {hideExternalPayments && <p>The store paywall shows your actual localized price and billing terms. Subscriptions renew monthly unless canceled through your store account.</p>}
         <p><a href="/privacy-policy" target="_blank" rel="noopener noreferrer" className="underline">Privacy Policy</a>{' · '}<a href="/terms-of-service" target="_blank" rel="noopener noreferrer" className="underline">Terms of Use</a></p>
       </div>}
       <p className="text-center text-xs text-[#9CA3AF] mt-4">
