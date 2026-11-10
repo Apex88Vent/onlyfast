@@ -28,6 +28,7 @@ export function useNativeSubscription(userId: string, { onVerified, onboardingTi
   const pending = useRef(false);
   const hasAccount = account !== null;
   const hasPaidAccess = account?.isPaid === true;
+  const isTestOverride = !!account?.testTier;
   useEffect(() => {
     const revision = ++generation.current;
     const generationRef = generation;
@@ -58,7 +59,7 @@ export function useNativeSubscription(userId: string, { onVerified, onboardingTi
   }, [userId]);
 
   useEffect(() => {
-    if (!onboardingTier || !hasAccount || hasPaidAccess) return;
+    if (!onboardingTier || !hasAccount || hasPaidAccess || isTestOverride) return;
     let active = true;
     setOffering('loading'); setOfferingError('');
     void (async () => {
@@ -77,7 +78,7 @@ export function useNativeSubscription(userId: string, { onVerified, onboardingTi
       }
     })();
     return () => { active = false; };
-  }, [userId, onboardingTier, hasPaidAccess, hasAccount, offeringRetry]);
+  }, [userId, onboardingTier, hasPaidAccess, hasAccount, isTestOverride, offeringRetry]);
 
   const run = async (action: 'purchase' | 'restore' | 'refresh' | 'continue') => {
     if ((action === 'purchase' || action === 'restore') && !nativePurchasesEnabled) return;
@@ -86,9 +87,16 @@ export function useNativeSubscription(userId: string, { onVerified, onboardingTi
     const revision = generation.current;
     setBusy(true); setMessage('');
     try {
+      const confirmed = await loadStatus(userId);
+      if (generation.current !== revision) return;
+      if (confirmed.testTier) {
+        setAccount(confirmed);
+        setMessage('Choose your test tier on the Plans page. No purchase is needed.');
+        return;
+      }
       if (action !== 'refresh') {
         // Recheck the database immediately before presenting a paid offer.
-        const existing = await loadStatus(userId);
+        const existing = confirmed;
         const { data: session } = await supabase.auth.getSession();
         if (generation.current !== revision || session.session?.user.id !== userId) return;
         if (action === 'continue' || (action === 'purchase' && existing.isPaid)) {

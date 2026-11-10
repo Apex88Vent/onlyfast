@@ -3,6 +3,7 @@ import { PLANS } from '@/lib/membership';
 import MembershipComparison from './MembershipComparison';
 import MembershipPaidAction from './MembershipPaidAction';
 import { hideExternalPayments } from '@/lib/paymentVisibility';
+import TestSubscriptionGate from './TestSubscriptionGate';
 
 interface PlanSelectionProps {
   onComplete: () => void | Promise<void>;
@@ -134,4 +135,8 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userI
   );
 };
 
-export default PlanSelection;
+export default function AuthorizedPlanSelection(props: PlanSelectionProps) {
+  return <TestSubscriptionGate key={props.userId} userId={props.userId} onContinue={props.onComplete} onBack={props.onBack}>
+    <PlanSelection {...props} />
+  </TestSubscriptionGate>;
+}

@@ -36,7 +36,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       },
     }, window, document);
     const stopBannerSafety = watchNativeBannerSafety(nativeAds, window, document, true);
-    return () => { stopBannerSafety(); stopAds(); };
+    let active = true;
+    let stopDiagnostics: (() => void) | undefined;
+    if (import.meta.env.DEV) void import('@/dev/nativeAdmobDiagnostics').then(module => {
+      if (active) stopDiagnostics = module.installNativeAdmobDiagnostics(window);
+    });
+    return () => { active = false; stopDiagnostics?.(); stopBannerSafety(); stopAds(); };
   }, []);
   useEffect(() => watchNativePurchases(), []);
 

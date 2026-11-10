@@ -1,9 +1,10 @@
-import React, { useLayoutEffect, useRef, useState } from 'react';
+import React, { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import type { User } from '@supabase/supabase-js';
 import { shouldShowAds } from '@/lib/ads';
 import { useMembershipRevision } from '@/hooks/useMembershipRevision';
 import { HOUSE_BOUNDARIES, measureHouseBoundary } from '@/lib/houseAdMidpoint';
+import { nativeAds } from '@/lib/nativeAds';
 import RookieAdSlot, { type RookieAdPlacement } from './RookieAdSlot';
 
 /** One existing house ad, in normal document flow at a measured safe boundary. */
@@ -11,7 +12,8 @@ export default function RookieHouseAdPage({ user, view, children }: {
   user: User | null; view: string; children: React.ReactNode;
 }) {
   useMembershipRevision();
-  const eligible = shouldShowAds(user);
+  const ads = useSyncExternalStore(nativeAds.subscribeHouseAds, nativeAds.getHouseAds);
+  const eligible = shouldShowAds(user) && ads.nativeBannerUser !== user?.id;
   const root = useRef<HTMLDivElement>(null);
   const [target, setTarget] = useState<HTMLElement | null>(null);
   const placement: RookieAdPlacement = view === 'home' ? 'home_middle' : view === 'schedule' ? 'schedule_bottom' :

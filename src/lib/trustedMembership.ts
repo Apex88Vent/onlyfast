@@ -1,4 +1,4 @@
-import type { MembershipState } from './membership';
+import type { MembershipState, MembershipTier } from './membership';
 
 type Subscription = { plan: string | null; status: string | null; subscription_source?: string | null; revenuecat_expires_at?: string | null };
 type Grants = Record<string, unknown>;
@@ -7,7 +7,8 @@ const empty: MembershipState = { membership_tier: 'rookie', promo_code_used: nul
 
 // Inputs must come from an authenticated database read and auth.getUser().app_metadata.
 // Neither browser storage nor user_metadata participates in permission decisions.
-export function resolveAuthorizedMembership(row: Subscription | null, grants: Grants = {}, now = Date.now()): MembershipState {
+export function resolveAuthorizedMembership(row: Subscription | null, grants: Grants = {}, now = Date.now(), testTier: MembershipTier | null = null): MembershipState {
+  if (testTier) return { ...empty, membership_tier: testTier };
   if (grants.has_admin_full_access === true) return { ...empty, membership_tier: 'team', has_admin_full_access: true };
   const nativeActive = row?.subscription_source !== 'revenuecat' ||
     (typeof row.revenuecat_expires_at === 'string' && Date.parse(row.revenuecat_expires_at) > now);
@@ -22,7 +23,7 @@ export function resolveAuthorizedMembership(row: Subscription | null, grants: Gr
 }
 
 let activeUser: string | null = null;
-let authorization: { row: Subscription | null; grants: Grants } | null = null;
+let authorization: { row: Subscription | null; grants: Grants; testTier: MembershipTier | null } | null = null;
 // Advertising may fail closed without changing subscription entitlement behavior.
 export const AD_AUTHORIZATION_MAX_AGE_MS = 5 * 60 * 1000;
 let advertisingVerifiedAt: number | null = null;
@@ -42,15 +43,20 @@ export function clearTrustedMembership(userId: string | null = null) {
   advertisingVerifiedAt = null;
   changed();
 }
-export function setTrustedAuthorization(userId: string, row: Subscription | null, grants: Grants) {
+export function setTrustedAuthorization(userId: string, row: Subscription | null, grants: Grants, testTier: MembershipTier | null = null) {
   activeUser = userId;
-  authorization = { row: row ? { ...row } : null, grants: { ...grants } };
+  authorization = { row: row ? { ...row } : null, grants: { ...grants }, testTier };
   advertisingVerifiedAt = Date.now();
   changed();
 }
 export function getTrustedMembership(userId: string | null = activeUser): MembershipState | null {
   if (userId !== activeUser) return null;
-  return authorization ? resolveAuthorizedMembership(authorization.row, authorization.grants) : null;
+  return authorization ? resolveAuthorizedMembership(authorization.row, authorization.grants, Date.now(), authorization.testTier) : null;
+}
+
+// Set only from the authenticated, own-account test-tier RPC, never beta caches.
+export function getTrustedTestTier(userId: string | null = activeUser): MembershipTier | null {
+  return userId === activeUser ? authorization?.testTier ?? null : null;
 }
 
 /** Invalidate only advertising evidence while a membership refresh is pending. */
@@ -65,19 +71,19 @@ export function getAdvertisingAuthorizationExpiry(): number | null {
 }
 
 /** Never substitute the default Rookie tier for missing, stale or another user's evidence. */
-export function getTrustedAdvertisingMembership(userId: string, now = Date.now()): MembershipState | null {
+export function getTrustedAdvertisingMembership(userId: string, now = Date.now(), applyTestTier = true): MembershipState | null {
   if (!userId || activeUser !== userId || !authorization || advertisingVerifiedAt === null ||
       now < advertisingVerifiedAt || now >= advertisingVerifiedAt + AD_AUTHORIZATION_MAX_AGE_MS) return null;
   // Preserve every server-authorized promotional exemption, including ambassador
   // grants that do not confer a subscription tier. Never consult user_metadata.
-  if (authorization.grants.promo_access_level) return null;
+  if ((!applyTestTier || !authorization.testTier) && authorization.grants.promo_access_level) return null;
   if (authorization.row && !['free', 'rookie', 'pro', 'team', 'teams'].includes(
     authorization.row.plan?.toLowerCase() || '')) return null;
-  return resolveAuthorizedMembership(authorization.row, authorization.grants, now);
+  return resolveAuthorizedMembership(authorization.row, authorization.grants, now, applyTestTier ? authorization.testTier : null);
 }
 
 export function getMembershipExpiration(): number | null {
-  if (!authorization) return null;
+  if (!authorization || authorization.testTier) return null;
   const values = [authorization.row?.subscription_source === 'revenuecat' ? authorization.row.revenuecat_expires_at : null,
     authorization.grants.promo_access_expires_at];
   const future = values.filter((value): value is string => typeof value === 'string')

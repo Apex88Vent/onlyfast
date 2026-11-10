@@ -7,6 +7,11 @@ export default function NativeSubscriptionControls({ userId, purchaseOnly = fals
 }) {
   const { account, busy, message, loadError, run, offering, offeringError, retryOffering } = useNativeSubscription(userId, { onVerified, onboardingTier });
 
+  if (account?.testTier) return <div className="space-y-3 text-center">
+    <p className="text-sm font-semibold">Current test tier: {account.testTier === 'team' ? 'Team' : account.testTier === 'pro' ? 'Pro' : 'Rookie'}</p>
+    <a href="/pricing" className="text-sm font-semibold text-[#00A8E8] underline">Choose test subscription — no payment</a>
+  </div>;
+
   if (onboardingTier) return <div className="space-y-3 text-center" aria-busy={busy || (!account && !loadError) || (account && !account.isPaid && offering === 'loading')}>
     {account?.isPaid ? <>
       <p className="text-sm text-[#6B7280]">Your {account.label} membership is active. No additional purchase is needed.</p>

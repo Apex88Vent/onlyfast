@@ -97,11 +97,14 @@ test('shared measured house owner keeps one scrolling ad across every view, cont
   const records = Array.from({ length: 6 }, () => node('li')); records.forEach(record => list.appendChild(record));
   root.querySelectorAll = selector => { assert.equal(selector, HOUSE_BOUNDARIES); return records; };
   let midpoint = records[2]; let eligible = true;
+  const emptyAds = { bannerUser: null, interstitialUser: null, nativeBannerUser: null };
+  let adSelection = emptyAds; const listeners = new Set();
   const Page = compile('components/RookieHouseAdPage.tsx', {
     'react-dom': { createPortal: (children, target) => { assert.ok(target.parentElement); return children; } },
     '@/lib/ads': { shouldShowAds: user => !!user && eligible },
     '@/hooks/useMembershipRevision': { useMembershipRevision() {} },
     '@/lib/houseAdMidpoint': { HOUSE_BOUNDARIES, measureHouseBoundary: () => midpoint },
+    '@/lib/nativeAds': { nativeAds: { subscribeHouseAds: fn => { listeners.add(fn); return () => listeners.delete(fn); }, getHouseAds: () => adSelection } },
     './RookieAdSlot': { __esModule: true, default: () => React.createElement('aside', { 'data-house-ad': true }, 'Original house ad') },
   }).default;
   Object.defineProperties(globalThis, {
@@ -118,6 +121,9 @@ test('shared measured house owner keeps one scrolling ad across every view, cont
   try {
     await act(async () => { view = create(React.createElement(Page, props), { createNodeMock: element => element.props['data-house-ad-page'] ? root : null }); });
     assertOne();
+    await act(async () => { adSelection = { ...emptyAds, nativeBannerUser: 'rookie' }; listeners.forEach(fn => fn()); });
+    assert.equal(hosts().length, 0); assert.equal(view.root.findAllByType('aside').length, 0, 'native banner lane cannot retain a duplicate house tile');
+    await act(async () => { adSelection = emptyAds; listeners.forEach(fn => fn()); }); assertOne();
     midpoint = records[4]; onResize(); onMutation(); await flush(); assertOne();
     for (const page of ['setup', 'saved', 'create-base', 'compare', 'schedule', 'todo', 'parts', 'home']) {
       midpoint = records[1]; props = { ...props, view: page };
@@ -153,6 +159,7 @@ test('actual Settings status stays live, reveals no IDs, remains suspended, and 
     request: { consent: async () => { calls.push('consent'); return { result: true }; } },
   };
   const controller = new native.NativeAdsController({
+    mode: () => 'android-test',
     nativeAdPermission: () => 'allowed',
     adRegion: () => 'US',
     enabled: uid => uid === id, eligible: uid => uid === currentId && eligible,
@@ -188,6 +195,7 @@ test('actual Settings status stays live, reveals no IDs, remains suspended, and 
     await controller.requestConsent();
     await act(async () => { view = create(React.createElement(Settings, props)); });
     assert.equal(value('Advertising enabled'), 'Yes'); assert.equal(value('Rookie eligible'), 'Yes');
+    assert.equal(value('Advertising mode'), 'android-test');
     assert.equal(value('Median bridge available'), 'Yes'); assert.equal(value('Device verification'), 'advertising-id-unavailable');
     assert.equal(value('Native consent'), 'Completed (permission unverified)'); assert.equal(value('Banner request sent'), 'No');
     assert.match(text(status()[0]), /Settings pauses native banners/);

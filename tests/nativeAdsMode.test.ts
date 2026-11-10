@@ -43,3 +43,20 @@ test('test mode stays explicitly restricted to the existing tester and never gra
   assert.equal(nativeAdsAccountEnabled('production', null, 'tester'), false);
   assert.equal(nativeAdsAccountEnabled('off', 'tester', 'tester'), false);
 });
+
+test('controlled Android test rollout requires a canonical production build and never authorizes another account or iOS', () => {
+  const config = { ...production, mode: 'android-test' };
+  assert.equal(resolveNativeAdsMode(config), 'android-test');
+  for (const change of [{ enabled: 'false' }, { enabled: undefined }, { productionBuild: false }, { deployment: 'preview' },
+    { deployment: 'development' }, { deployment: 'local' }, { origin: 'https://onlyfast-preview.vercel.app' },
+    { origin: 'http://localhost:8080' }]) assert.equal(resolveNativeAdsMode({ ...config, ...change }), 'off');
+  assert.equal(nativeAdsAccountEnabled('android-test', 'tester', 'tester', 'android'), true);
+  for (const platform of ['android', 'ios', null] as const) {
+    for (const id of [null, 'another-rookie', 'rookie@test.com']) {
+      assert.equal(nativeAdsAccountEnabled('android-test', id, 'tester', platform), false);
+    }
+  }
+  assert.equal(nativeAdsAccountEnabled('android-test', 'tester', 'tester', 'ios'), false);
+  assert.equal(nativeAdsAccountEnabled('android-test', 'tester', 'tester', null), false);
+  assert.equal(resolveNativeAdsMode({ ...config, mode: 'off' }), 'off');
+});

@@ -1,6 +1,6 @@
 import { shouldShowAds } from './ads';
 import { isMedianUserAgent, nativePlatform } from './nativeEnvironment';
-import { getAdvertisingAuthorizationExpiry, invalidateAdvertisingMembership } from './trustedMembership';
+import { getAdvertisingAuthorizationExpiry, invalidateAdvertisingMembership, getTrustedAdvertisingMembership } from './trustedMembership';
 import { supabase } from './supabase';
 import { nativeBannerIsSafe, houseInterstitialIsSafe } from './nativeBannerSafety';
 import { resolveNativeAdsMode, nativeAdsAccountEnabled, type NativeAdsMode } from './nativeAdsMode';
@@ -147,7 +147,8 @@ export interface NativeAdsDependencies {
   diagnostic?(value: ReturnType<NativeAdsController['getDiagnostics']>): void;
 }
 
-type InterstitialTrigger = 'manual-save' | 'setup-assist';
+type InterstitialTrigger = 'manual-save' | 'setup-assist' | 'development-test';
+export type NativeAdTestCommand = 'banner' | 'hide-banner' | 'automatic' | 'interstitial';
 type SaveTicket = Readonly<{ userId: string; generation: number; activity: number; trigger: InterstitialTrigger }>;
 export type PostSaveAdResult = 'house' | 'suppressed' | 'requested';
 export type NativeConsentStatus = 'idle' | 'pending' | 'unverified' | 'unavailable' | 'error';
@@ -165,9 +166,11 @@ export class NativeAdsController {
   private suspensions = new Set<object>();
   private banner: MedianAdmobBridge | null = null;
   private disabledBanner: MedianAdmobBridge | null = null;
+  private bannerDisableUncertain = false;
   private pendingSave: SaveTicket | null = null;
   private requesting = false;
-  private house = { bannerUser: null as string | null, interstitialUser: null as string | null };
+  private house = { bannerUser: null as string | null, interstitialUser: null as string | null, nativeBannerUser: null as string | null };
+  private developmentBannerHidden = false;
   private houseListeners = new Set<() => void>();
   private consentStatus: NativeConsentStatus = 'idle';
   private consentResponse: unknown;
@@ -190,11 +193,11 @@ export class NativeAdsController {
     return () => { this.houseListeners.delete(listener); };
   };
 
-  closeHouseInterstitial = () => this.updateHouseAds(this.house.bannerUser, null);
+  closeHouseInterstitial = () => { this.updateHouseAds(this.house.bannerUser, null); this.refresh(); };
 
-  private updateHouseAds(bannerUser: string | null, interstitialUser: string | null) {
-    if (bannerUser === this.house.bannerUser && interstitialUser === this.house.interstitialUser) return;
-    this.house = { bannerUser, interstitialUser };
+  private updateHouseAds(bannerUser: string | null, interstitialUser: string | null, nativeBannerUser: string | null = null) {
+    if (bannerUser === this.house.bannerUser && interstitialUser === this.house.interstitialUser && nativeBannerUser === this.house.nativeBannerUser) return;
+    this.house = { bannerUser, interstitialUser, nativeBannerUser };
     this.houseListeners.forEach(listener => listener());
   }
 
@@ -205,6 +208,7 @@ export class NativeAdsController {
       this.updateHouseAds(null, null);
       this.deps.resetRegion?.();
       this.generation++;
+      this.developmentBannerHidden = false;
       this.pendingSave = null;
       this.consentStatus = 'idle';
       this.consentResponse = undefined;
@@ -282,7 +286,7 @@ export class NativeAdsController {
   }
 
   canViewDiagnostics(userId: string | null) {
-    return (this.deps.mode?.() ?? 'test') === 'test' &&
+    return ['test', 'android-test'].includes(this.deps.mode?.() ?? 'test') &&
       userId === NATIVE_ADS_ROLLOUT_USER_ID && this.userId === userId;
   }
 
@@ -306,8 +310,10 @@ export class NativeAdsController {
     const deviceAllowed = this.deps.deviceAllowed?.(platform) ?? true;
     const bannerBlockers = [
       ...(!enabled ? [this.deps.houseOnly ? 'house-only-mode' : 'advertising-disabled-for-account'] : []),
-      ...(permission !== 'allowed' ? [`native-ad-permission-${permission}`] : []),
-      ...(region !== 'US' ? [`ad-region-${region}`] : []),
+      ...(this.deps.nativeAdPermission && permission !== 'allowed' ? [`native-ad-permission-${permission}`] : []),
+      ...(this.deps.adRegion && region !== 'US' ? [`ad-region-${region}`] : []),
+      ...(this.developmentBannerHidden ? ['development-banner-hidden'] : []),
+      ...(this.bannerDisableUncertain ? ['native-banner-disable-unconfirmed'] : []),
       ...(!eligible ? ['membership-not-verified-rookie'] : []),
       ...(!platform ? ['not-median-android-or-ios'] : []),
       ...(!bridgeAvailable ? ['banner-bridge-unavailable'] : []),
@@ -335,6 +341,7 @@ export class NativeAdsController {
       consent: this.consentStatus,
       consentRequestCompleted: this.consentStatus === 'unverified',
       advertisingPermission: permission,
+      permissionEnforcement: this.deps.nativeAdPermission ? 'native-permission-reader' : 'median-native-sdk',
       advertisingRegion: region,
       bannerCommandDispatched: this.bannerDispatches > 0,
       interstitialCommandDispatched: this.interstitialDispatches > 0,
@@ -450,10 +457,19 @@ export class NativeAdsController {
     } catch { return 'unknown'; }
   }
 
+  private permissionAllowsCommands() {
+    // The documented stock bridge has no UMP canRequestAds getter. Do not invent
+    // one or equate a completed form with permission. The native SDK enforces
+    // consent when loading/serving. Honor a real permission reader if supplied.
+    return !this.deps.nativeAdPermission || this.nativeAdPermission() === 'allowed';
+  }
+
+  private regionAllowsCommands() { return !this.deps.adRegion || this.deps.adRegion() === 'US'; }
+
   private allowed() {
     return !!this.userId && this.deps.enabled(this.userId) && this.platform() !== null && this.foreground &&
       (this.deps.deviceAllowed?.(this.platform()) ?? true) &&
-      this.deps.adRegion?.() === 'US' && this.nativeAdPermission() === 'allowed' &&
+      this.regionAllowsCommands() && this.permissionAllowsCommands() &&
       this.routeSupported && this.suspensions.size === 0 && this.consentStatus === 'unverified' &&
       this.consentAttempt?.bridge === this.deps.bridge() && this.consentAttempt.generation === this.generation &&
       this.deps.eligible(this.userId);
@@ -466,7 +482,8 @@ export class NativeAdsController {
     try {
       bridge.banner?.disable?.();
       this.disabledBanner = bridge;
-    } catch { /* Missing/stopped native plugin; retry on the next lifecycle event. */ }
+      this.bannerDisableUncertain = false;
+    } catch { this.bannerDisableUncertain = true; /* Retry without stacking a house banner. */ }
   }
 
   refresh() {
@@ -483,33 +500,60 @@ export class NativeAdsController {
       const bridge = this.deps.bridge();
       const eligible = !!bridge && !!this.userId && this.deps.enabled(this.userId) && this.deps.eligible(this.userId) &&
         this.platform() !== null && this.foreground && this.routeSupported && this.suspensions.size === 0;
-      if (eligible && this.deps.nativeAdPermission) this.deps.prepareRegion?.(() => this.refresh());
+      if (eligible && this.deps.adRegion) this.deps.prepareRegion?.(() => this.refresh());
       // Run UMP at an eligible, non-editing screen, before either native format.
       // Once per account/bridge attempt; Settings may explicitly retry errors or
       // re-request the flow. Do not loop when a native form cannot be displayed.
-      if (eligible && this.deps.nativeAdPermission && this.deps.adRegion?.() === 'US' &&
+      if (eligible && this.regionAllowsCommands() &&
           this.canRequestConsent() && this.placement?.userId === this.userId &&
           (this.deps.bannerSafe?.() ?? true) && BANNER_VIEWS.includes(this.placement.view) &&
           (!this.consentAttempt || this.consentAttempt.bridge !== bridge || this.consentAttempt.generation !== this.generation)) {
         void this.requestConsent();
       }
-      if (eligible && this.deps.adRegion?.() === 'US' && this.nativeAdPermission(bridge) === 'allowed' &&
+      if (eligible && this.regionAllowsCommands() && this.permissionAllowsCommands() &&
           this.consentStatus === 'unverified') {
         this.deps.prepareDevice?.(this.platform(), () => this.refresh());
       }
-      const show = this.allowed() && this.placement?.userId === this.userId &&
+      const show = !this.developmentBannerHidden && !this.house.interstitialUser && this.allowed() && this.placement?.userId === this.userId &&
         (this.deps.bannerSafe?.() ?? true) && BANNER_VIEWS.includes(this.placement.view) &&
         typeof bridge?.banner?.enable === 'function' && typeof bridge?.banner?.disable === 'function';
       // Also clear a banner retained by the native shell across a page reload.
       if (!show || this.banner !== bridge) this.hideBanner(this.platform() !== null ? bridge : undefined);
       if (show && !this.banner) {
+        // Reserve the native banner lane before calling the bridge. No native
+        // display/no-fill callback exists; this selection is not an impression.
+        this.updateHouseAds(null, null, this.userId);
         this.banner = bridge;
         this.disabledBanner = null;
         bridge.banner.enable();
         this.bannerDispatches++;
       }
     } catch { this.hideBanner(); }
+    const houseEligible = !!this.userId && this.foreground && this.routeSupported && this.deps.eligible(this.userId);
+    const houseBanner = houseEligible && !this.banner && !this.bannerDisableUncertain && !this.house.interstitialUser && this.suspensions.size === 0 &&
+      this.placement?.userId === this.userId && BANNER_VIEWS.includes(this.placement.view) && (this.deps.bannerSafe?.() ?? true);
+    this.updateHouseAds(houseBanner ? this.userId : null, houseEligible ? this.house.interstitialUser : null,
+      this.banner || this.bannerDisableUncertain ? this.userId : null);
     this.diagnose();
+  }
+
+  /** DEV console only: same device/consent/membership guards and shared cooldown. */
+  runDevelopmentTest(command: NativeAdTestCommand) {
+    if (!import.meta.env.DEV || this.deps.mode?.() !== 'test' || this.deps.houseOnly) {
+      return { result: 'suppressed', reason: 'development-test-mode-required', diagnostics: this.getDiagnostics() };
+    }
+    if (command === 'interstitial') {
+      if (this.deps.bannerSafe?.() === false) {
+        return { result: 'suppressed', reason: 'banner-space-or-input-unsafe', diagnostics: this.getDiagnostics() };
+      }
+      const result = this.completeInterstitial(this.beginInterstitial(this.userId, 'development-test'), 'development-test');
+      return { result, reason: this.lastInterstitialSuppression, diagnostics: this.getDiagnostics() };
+    }
+    this.developmentBannerHidden = command === 'hide-banner';
+    const before = this.bannerDispatches;
+    this.refresh();
+    return { result: this.bannerDispatches > before ? 'requested' : command === 'hide-banner' ? 'hidden' : 'unchanged',
+      diagnostics: this.getDiagnostics() };
   }
 
   beginManualSave(userId: string | null): SaveTicket | null {
@@ -606,9 +650,9 @@ export class NativeAdsController {
       if (typeof bridge?.showInterstitialIfReady !== 'function') return houseFallback('interstitial-bridge-unavailable');
       if (this.consentRequest || this.consentStatus === 'pending') return suppress('native-consent-pending');
       const permission = this.nativeAdPermission(bridge);
-      if (permission !== 'allowed') return houseFallback(`native-ad-permission-${permission}`);
+      if (!this.permissionAllowsCommands()) return houseFallback(`native-ad-permission-${permission}`);
       const region = this.deps.adRegion?.() ?? 'unknown';
-      if (region !== 'US') return houseFallback(`ad-region-${region}`);
+      if (!this.regionAllowsCommands()) return houseFallback(`ad-region-${region}`);
       if (!(this.deps.deviceAllowed?.(this.platform()) ?? true)) return suppress(`device-${this.deps.deviceStatus?.() ?? 'not-authorized'}`);
       if (this.consentStatus !== 'unverified') return suppress(`native-consent-${this.consentStatus}`);
       if (!this.allowed()) return suppress('native-consent-or-authorization-changed');
@@ -685,26 +729,26 @@ function prepareAdRegion(updated: () => void) {
 }
 
 export const nativeAds = new NativeAdsController({
-  // Temporary app-side hold. Median can still preload from its native startup hooks.
-  houseOnly: true,
-  // Stock Median exposes a consent refresh, but no documented current UMP
-  // permission reader. Leave nativeAdPermission unset until one is available.
-  adRegion: () => regionExpiresAt > Date.now() ? resolvedAdRegion : 'unknown',
+  // Stock Median owns UMP enforcement; a completed request is not permission.
+  // Keep the existing US release policy. DEV tests use registered Google test
+  // devices and native privacy prompts without pretending to know their region.
+  adRegion: import.meta.env.DEV ? undefined : () => regionExpiresAt > Date.now() ? resolvedAdRegion : 'unknown',
   prepareRegion: prepareAdRegion,
   resetRegion: resetAdRegion,
   mode: currentAdsMode,
-  enabled: userId => nativeAdsAccountEnabled(currentAdsMode(), userId, NATIVE_ADS_ROLLOUT_USER_ID),
+  enabled: userId => nativeAdsAccountEnabled(currentAdsMode(), userId, NATIVE_ADS_ROLLOUT_USER_ID,
+    isMedianUserAgent(navigator.userAgent) ? nativePlatform(navigator.userAgent, navigator.maxTouchPoints) : null),
   // Production keeps trusted Rookie membership + native consent enforcement,
   // but does not turn advertising identifiers or test allowlists into ad consent.
   deviceAllowed: platform => currentAdsMode() === 'production' ||
     testDevice.allowed(platform, (window as NativeAdsWindow).median),
   prepareDevice: (platform, updated) => {
-    if (currentAdsMode() === 'test') testDevice.prepare(platform, (window as NativeAdsWindow).median, updated);
+    if (['test', 'android-test'].includes(currentAdsMode())) testDevice.prepare(platform, (window as NativeAdsWindow).median, updated);
   },
   deviceStatus: () => currentAdsMode() === 'production' ? 'production-device-check-not-required' : testDevice.getStatus(),
   resetDevice: () => testDevice.reset(),
   diagnostic: value => {
-    if (currentAdsMode() !== 'test' || !value.rolloutAccount || import.meta.env.VITE_MEDIAN_ADMOB_DIAGNOSTICS !== 'true') return;
+    if (!['test', 'android-test'].includes(currentAdsMode()) || !value.rolloutAccount || import.meta.env.VITE_MEDIAN_ADMOB_DIAGNOSTICS !== 'true') return;
     const current = JSON.stringify(value);
     if (current !== lastDiagnostic) console.debug('[OnlyFast AdMob]', value);
     lastDiagnostic = current;
@@ -712,7 +756,13 @@ export const nativeAds = new NativeAdsController({
   maxTouchPoints: () => navigator.maxTouchPoints,
   userAgent: () => navigator.userAgent,
   bridge: () => (window as NativeAdsWindow).median?.admob,
-  eligible: userId => shouldShowAds({ id: userId }),
+  eligible: userId => {
+    // A test-tier selector may reduce displayed access, but cannot authorize
+    // native ads against an underlying paid/admin/promotional exemption.
+    const actual = getTrustedAdvertisingMembership(userId, Date.now(), false);
+    return actual?.membership_tier === 'rookie' && !actual.has_admin_full_access &&
+      !actual.promo_access_level && shouldShowAds({ id: userId });
+  },
   storage: () => window.localStorage,
   now: Date.now,
   bannerSafe: () => typeof document !== 'undefined' && nativeBannerIsSafe(window, document),

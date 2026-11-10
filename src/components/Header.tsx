@@ -34,9 +34,6 @@ const getNickname = (user: User | null, override?: string): string => {
 const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBackToCarSelect, onOpenHowOnlyFastWorks }) => {
   const navigate = useNavigate();
   const { hasBetaFeature, loading: betaAccessLoading, testerKind } = useBetaFeatures();
-  const hasExperimentalFullAccess =
-    testerKind === 'experimental' &&
-    hasBetaFeature(BETA_FEATURES.testAccountFullAccess);
   const [showDropdown, setShowDropdown] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -45,7 +42,6 @@ const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBac
   useMembershipRevision();
   const membership = user ? getTrustedMembership(user.id) : null;
   const planLabel = !membership ? null
-    : hasExperimentalFullAccess ? 'Team'
     : membership.has_admin_full_access ? 'Admin'
     : membership.membership_tier === 'team' ? 'Team'
     : membership.membership_tier === 'pro' ? 'Pro'

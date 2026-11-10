@@ -3,9 +3,6 @@
 
 import { supabase, supabaseUrl, supabaseKey } from '@/lib/supabase';
 import { getTrustedMembership } from './trustedMembership';
-// The disposable experimental account can retain its legacy full-access mode
-// through an explicit account-level feature flag.
-import { isCurrentUserTestAccount } from '@/lib/testAccount';
 
 export type MembershipTier = 'rookie' | 'pro' | 'team';
 
@@ -291,9 +288,6 @@ export interface UserAccess {
 
 // Resolve effective tier accounting for promo expiration.
 export function getEffectiveTier(state: MembershipState): MembershipTier {
-  // The explicitly flagged experimental account gets the top tier so existing
-  // production feature/limit checks remain testable. Other users are unaffected.
-  if (isCurrentUserTestAccount()) return 'team';
   if (state.has_admin_full_access) return 'team';
   if (
     state.promo_access_expires_at &&
@@ -320,9 +314,6 @@ export function hasFeatureAccess(
   state: MembershipState,
   featureName: keyof TierLimits
 ): boolean {
-  // Preserve the legacy full-access behavior only for the account explicitly
-  // assigned test_account_full_access. Other users keep normal restrictions.
-  if (isCurrentUserTestAccount()) return true;
   if (state.has_admin_full_access) return true;
 
   const access = getUserAccess(state);
@@ -340,9 +331,7 @@ export function hasFeatureAccess(
 // Single place that decides whether a save is allowed for the user's tier,
 // using the existing `tierLimits` values (no new limit numbers introduced).
 //
-// NOTE: pass the EFFECTIVE tier (from getEffectiveTier). Because the explicitly
-// flagged experimental account and admin both resolve to 'team', this helper lets them
-// bypass every restriction below — no special-casing required here.
+// Pass the effective server-authorized tier, including an explicit test selection.
 
 export type SaveKind = 'race_weekend' | 'base_template';
 

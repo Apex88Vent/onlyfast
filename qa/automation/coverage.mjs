@@ -4,7 +4,7 @@ export const smokeTests = ['tests/qaAutomation.test.ts','tests/offlineQueueSecur
   'tests/timingData.test.ts','tests/scheduleSelection.test.ts','tests/scheduleFinishingPosition.test.ts'];
 export const mountedTests = ['tests/onboardingNavigation.mjs','tests/setupAssistTrackUpdates.mjs',
   'tests/nativeSubscriptionControls.mjs','tests/nativeBridgeDiagnostics.mjs','tests/nativeAdSettings.mjs'];
-export const databaseTests = ['tests/phase1Database.mjs','tests/subscriptionAuthorizationDatabase.mjs',
+export const databaseTests = ['tests/testSubscriptionDatabase.mjs','tests/phase1Database.mjs','tests/subscriptionAuthorizationDatabase.mjs',
   'tests/revenuecatDatabase.mjs','tests/racingOnboardingDatabase.mjs','tests/setupLibraryDatabase.mjs','tests/stagingDatabase.mjs'];
 export const coverage = {
   auth:['qaAutomation','subscriptionAccountSwitch','racingSelectionAccountSwitch','membershipLifecycle','offlineQueueSecurity'],

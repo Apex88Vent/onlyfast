@@ -63,7 +63,7 @@ const How = compile('components/HowOnlyFastWorks.tsx');
 const membershipExports = {};
 const planSource = readFileSync(new URL('../src/lib/membership.ts', import.meta.url), 'utf8').match(/export const PLANS:[\s\S]*?\n\];/)[0];
 new Function('exports', ts.transpileModule(planSource, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText)(membershipExports);
-const Plan = compile('components/PlanSelection.tsx', { '@/lib/membership': membershipExports, './MembershipComparison': { default: empty }, './MembershipPaidAction': { default: ({ tier, onboarding, userId }) => {
+const Plan = compile('components/PlanSelection.tsx', { './TestSubscriptionGate': { default: wrapper }, '@/lib/membership': membershipExports, './MembershipComparison': { default: empty }, './MembershipPaidAction': { default: ({ tier, onboarding, userId }) => {
   assert.equal(onboarding, true); assert.ok(userId, 'Authentication must precede billing');
   return React.createElement('button', { 'data-paid-tier': tier }, `Choose ${tier === 'pro' ? 'Pro' : 'Teams'}`);
 } }, '@/lib/paymentVisibility': { hideExternalPayments: true }, '@/lib/nativePurchases': { nativePurchasesEnabled: false } });

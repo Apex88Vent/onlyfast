@@ -9,6 +9,8 @@ import test from 'node:test';
 import { prepareStagingDatabase, stagingSequence, repoRoot } from '../scripts/prepare-staging-database.mjs';
 const { PGlite } = await import(pathToFileURL(process.env.PGLITE_MODULE).href);
 const read = relative => readFile(path.join(repoRoot, relative), 'utf8');
+const accountOnlyMigrations = ['202607280005_enable_cmar_test_account_full_access.sql', '20261001_verify_designated_test_account.sql'];
+const testTierMigration = '20261110233145_restore_test_subscription_switching.sql';
 
 async function platform(db) {
   // Supabase-managed platform objects only. Every application table comes from the prepared SQL.
@@ -52,7 +54,8 @@ test('offline staging workspace is deterministic, complete, immutable and refuse
     const output = path.join(root, 'fresh');
     const manifest = await prepareStagingDatabase(output);
     assert.equal(manifest.entries.length, 16);
-    assert.equal(Object.keys(manifest.excluded).filter(name => !name.includes('_phase1_')).length, 2);
+    assert.deepEqual(Object.keys(manifest.excluded).filter(name => accountOnlyMigrations.includes(name)).sort(), [...accountOnlyMigrations].sort());
+    assert.ok(manifest.excluded[testTierMigration], 'test switching requires an explicit reviewed migration after Phase 1');
     assert.equal(Object.keys(manifest.excluded).filter(name => name.includes('_phase1_')).length, 4);
     const files = await readdir(path.join(output, 'supabase', 'migrations'));
     assert.deepEqual(files.sort(), manifest.entries.map(e => e.file).sort());
@@ -110,10 +113,12 @@ test('all staged migrations rebuild 23 application tables from empty Auth and pr
       assert.equal((await db.query(`select count(*)::int as n from public.${name}`)).rows[0].n, 0, 'no customer/account data seeded');
     }
     // Verify account-specific migrations really are unsuitable for an empty Auth database.
-    for (const name of Object.keys(sequence.excluded).filter(name => !name.includes('_phase1_'))) {
+    for (const name of accountOnlyMigrations) {
       await assert.rejects(db.exec(await read('supabase/migrations/' + name)), /was not found|does not exist/);
       await db.exec('rollback');
     }
+    await assert.rejects(db.exec(await read('supabase/migrations/' + testTierMigration)), /TEST_TIER_REQUIRES_PHASE1_MEMBERSHIP/);
+    await db.exec('rollback');
     const a = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
     const b = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
     await db.query('insert into auth.users(id,email,raw_user_meta_data) values($1,$2,$3::jsonb),($4,$5,\'{}\')',

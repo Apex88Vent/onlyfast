@@ -1,10 +1,8 @@
 // Subscription state derives from server-owned subscription rows and grants.
 
 import { supabase } from '@/lib/supabase';
-import { setTrustedAuthorization, clearTrustedMembership, invalidateAdvertisingMembership } from './trustedMembership';
-// The disposable experimental account can retain its legacy full-access mode
-// through an explicit account-level feature flag.
-import { isCurrentUserTestAccount } from '@/lib/testAccount';
+import { setTrustedAuthorization, clearTrustedMembership, invalidateAdvertisingMembership, getTrustedTestTier } from './trustedMembership';
+import type { MembershipTier } from './membership';
 import {
   readMembership,
 } from '@/lib/membership';
@@ -25,6 +23,7 @@ export interface UserSubscriptionRow {
 }
 
 export interface AccountStatus {
+  testTier?: MembershipTier | null;
   /** Display label for the account. */
   label: 'Free' | 'Pro' | 'Teams' | 'Admin';
   /** Normalized plan from Stripe (ignores admin override). */
@@ -94,13 +93,13 @@ export function deriveAccountStatus(
   row: UserSubscriptionRow | null,
   metadata?: Record<string, any> | null
 ): AccountStatus {
-  // The explicitly flagged experimental account is treated as fully paid so
-  // every gate that checks `isPaid`
-  // (e.g. the save → /pricing redirect) passes through. This does NOT create or
-  // modify any Stripe/subscription record — it's a pure in-memory override that
-  // only applies to that stored Auth user ID. Other users are unaffected.
-  if (isCurrentUserTestAccount()) {
-    return { label: 'Teams', plan: 'teams', isPaid: true, isAdmin: false, row };
+  const testTier = getTrustedTestTier(row?.user_id);
+  if (testTier) {
+    return {
+      label: testTier === 'rookie' ? 'Free' : testTier === 'pro' ? 'Pro' : 'Teams',
+      plan: testTier === 'rookie' ? 'free' : testTier === 'team' ? 'teams' : 'pro',
+      isPaid: testTier !== 'rookie', isAdmin: false, row, testTier,
+    };
   }
 
   const access = readMembership();
@@ -131,20 +130,29 @@ export function deriveAccountStatus(
   return { label: 'Free', plan: 'free', isPaid: false, isAdmin: false, row };
 }
 
+let refreshRevision = 0;
+// A completed tier mutation invalidates older reads of the same account.
+export function invalidatePendingMembershipRefresh() { refreshRevision++; }
 /** Refresh the UI from server-owned subscription and grant records. */
 export async function syncMembershipFromSubscription(): Promise<AccountStatus | null> {
+  const revision = refreshRevision;
   const { data } = await supabase.auth.getSession();
   const user = data.session?.user;
   if (!user) { clearTrustedMembership(); return null; }
   clearTrustedMembership(user.id);
   invalidateAdvertisingMembership(user.id);
-  const [row, verified] = await Promise.all([
+  const [row, verified, testOverride] = await Promise.all([
     fetchUserSubscription(user.id),
     supabase.auth.getUser(),
+    supabase.rpc('get_onlyfast_test_tier'),
   ]);
   const { data: latest } = await supabase.auth.getSession();
   if (latest.session?.user.id !== user.id) return null;
+  if (revision !== refreshRevision) return syncMembershipFromSubscription();
   if (verified.error || verified.data.user?.id !== user.id) throw new Error('Could not verify membership identity');
-  setTrustedAuthorization(user.id, row, verified.data.user.app_metadata || {});
+  if (testOverride.error) throw testOverride.error;
+  const testTier = testOverride.data;
+  if (testTier !== null && !['rookie', 'pro', 'team'].includes(testTier)) throw new Error('Invalid test membership');
+  setTrustedAuthorization(user.id, row, verified.data.user.app_metadata || {}, testTier);
   return deriveAccountStatus(row);
 }

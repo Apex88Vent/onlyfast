@@ -67,7 +67,7 @@ export function watchNativePurchases(): () => void {
       if ((await supabase.auth.getSession()).data.session?.user.id !== id) return;
       // Existing native subscribers can refresh while new purchases are held.
       // Stripe, Rookie and promotional memberships never trigger native billing.
-      if (hideExternalPayments && status?.row?.subscription_source === 'revenuecat') {
+      if (hideExternalPayments && !status?.testTier && status?.row?.subscription_source === 'revenuecat') {
         try { await syncNativeSubscription(id, false); }
         finally { await syncMembershipFromSubscription(); }
       }

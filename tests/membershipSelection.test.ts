@@ -26,6 +26,7 @@ function renderPlans(native: boolean, allowWebCheckout = false, enabled = false,
         assert.equal(name, './NativeSubscriptionControls', 'Native plans must use the stock paywall');
         return React.createElement('button', { disabled: !enabled, onClick: onVerified }, enabled ? purchaseLabel || 'View Pro and Teams subscriptions' : 'Subscription unavailable');
       }, __esModule: true };
+      if (name === './TestSubscriptionGate') return { __esModule: true, default: ({ children }: { children: React.ReactNode }) => children };
       if (name.startsWith('./')) return load('components/' + name.slice(2) + '.tsx');
       return require(name);
     }, mod, mod.exports);

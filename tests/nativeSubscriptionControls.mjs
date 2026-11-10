@@ -43,6 +43,23 @@ const paid = (store, plan = 'pro') => ({ label: plan === 'teams' ? 'Teams' : 'Pr
 async function mount(Component, f, props = {}) { let view; await act(async () => { view = create(React.createElement(Component, { userId: 'tester', onVerified: () => { f.verified++; }, ...props })); }); return view; }
 async function click(view, label) { const button = view.root.findAllByType('button').find(b => text(b) === label); assert.ok(button); await act(async () => { await button.props.onClick(); }); }
 
+for (const tier of ['rookie', 'pro', 'team']) test(`Median ${tier} test override never loads offerings, purchases, restores, or syncs RevenueCat`, async () => {
+  const status = { ...free(), testTier: tier, isPaid: tier !== 'rookie',
+    label: tier === 'team' ? 'Teams' : tier === 'pro' ? 'Pro' : 'Free' };
+  for (const onboardingTier of [undefined, 'pro', 'team']) {
+    const { f, Component } = setup(status, true);
+    const view = await mount(Component, f, { onboardingTier });
+    try {
+      assert.match(text(view.root), /Current test tier/);
+      assert.equal(view.root.findByType('a').props.href, '/pricing');
+      assert.equal(view.root.findAllByType('button').length, 0);
+      assert.deepEqual(f.storeCalls, []);
+      assert.deepEqual(f.offeringCalls || [], []);
+      assert.equal(f.syncCalls, 0);
+    } finally { await act(async () => view.unmount()); }
+  }
+});
+
 for (const status of [free(), paid('stripe'), paid('play_store'), paid('app_store', 'teams')]) {
   test(`purchase hold preserves ${status.label}/${status.row?.revenuecat_store || 'free'} display, management and refresh without native calls`, async () => {
     const { f, Component } = setup(status); const view = await mount(Component, f);

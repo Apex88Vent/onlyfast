@@ -23,6 +23,7 @@
     "20261105090932_phase1_membership_and_sharing.sql": "Prepared Phase 1 rollout step. Apply explicitly in review order after the compatible frontend and Edge acceptance. Never auto-apply with the legacy staging baseline.",
     "20261105090937_phase1_setup_and_usage_authorization.sql": "Prepared Phase 1 rollout step. Apply explicitly in review order after the compatible frontend and Edge acceptance. Never auto-apply with the legacy staging baseline.",
     "20261105091108_phase1_restrict_legacy_access.sql": "Prepared Phase 1 rollout step. Apply explicitly in review order after the compatible frontend and Edge acceptance. Never auto-apply with the legacy staging baseline.",
-    "20261105202924_phase1_fix_sharing_policy_recursion.sql": "Forward-only M3 policy correction. Apply individually only against the reviewed production policy definitions after the dedicated recursion regression passes. Never auto-apply with the legacy staging baseline."
+    "20261105202924_phase1_fix_sharing_policy_recursion.sql": "Forward-only M3 policy correction. Apply individually only against the reviewed production policy definitions after the dedicated recursion regression passes. Never auto-apply with the legacy staging baseline.",
+    "20261110233145_restore_test_subscription_switching.sql": "Apply explicitly after Phase 1 membership authorization and test-tier QA, with the compatible frontend. Never auto-apply to the legacy staging baseline."
   }
 }

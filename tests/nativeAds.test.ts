@@ -858,7 +858,7 @@ test('same-user auth events invalidate cached device authorization before anothe
   controller.stop();
 });
 
-test('the held stock bridge keeps the Rookie house fallback without queuing native ads', async () => {
+test('stock test rollout keeps house fallback when region is unknown and never queues a later interstitial', async () => {
   const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
   const previousDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
   const previousNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
@@ -884,18 +884,19 @@ test('the held stock bridge keeps the Rookie house fallback without queuing nati
       trusted.clearTrustedMembership(); controller.setUser(id);
       if (verified) trusted.setTrustedAuthorization(id, row, {});
       controller.setPlacement(id, 'home'); controller.refresh();
-      assert.equal(controller.getDiagnostics().enabled, false);
+      assert.equal(controller.getDiagnostics().eligible && controller.getDiagnostics().enabled, false);
       assert.ok(!calls.includes('enable') && !calls.includes('interstitial') && !calls.includes('consent'));
     }
     const id = native.NATIVE_ADS_ROLLOUT_USER_ID;
     trusted.setTrustedAuthorization(id, null, {}); controller.refresh();
-    assert.ok(!calls.includes('consent'), 'the held controller does not prompt automatically');
+    assert.ok(!calls.includes('consent'), 'unknown region does not prompt automatically');
     await controller.requestConsent();
     const snapshot = controller.getDiagnostics();
     assert.equal(snapshot.eligible, true); assert.equal(snapshot.consentRequestCompleted, true);
     assert.equal(snapshot.device, 'idle'); assert.equal(snapshot.deviceAllowed, false);
-    assert.ok(snapshot.bannerBlockers.includes('native-ad-permission-unknown'));
-    assert.ok(snapshot.bannerBlockers.includes('house-only-mode'));
+    assert.equal(snapshot.advertisingPermission, 'unknown');
+    assert.equal(snapshot.permissionEnforcement, 'median-native-sdk');
+    assert.ok(snapshot.bannerBlockers.includes('ad-region-unknown'));
     controller.setPlacement(id, 'setup');
     const save = () => controller.completeManualSave(controller.beginManualSave(id), { persisted: true, queued: false, editing: false });
     assert.equal(save(), 'house');
@@ -906,7 +907,7 @@ test('the held stock bridge keeps the Rookie house fallback without queuing nati
     controller.setPlacement(id, 'saved');
     for (const display of delayedDisplays) display();
     assert.equal(delayedDisplays.length, 0);
-    assert.ok(!calls.includes('enable') && !calls.includes('disable') && !calls.includes('interstitial'));
+    assert.ok(!calls.includes('enable') && !calls.includes('interstitial'));
     assert.equal(calls.filter(call => call === 'cooldown').length, 1);
     controller.setForeground(false); assert.equal(controller.getDiagnostics().device, 'idle');
   } finally {
@@ -917,8 +918,9 @@ test('the held stock bridge keeps the Rookie house fallback without queuing nati
   }
 });
 
-test('stock release ignores experimental transports and production flags cannot activate native ads on either platform', async () => {
-  const previous = ['window', 'document', 'navigator'].map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)] as const);
+test('stock release calls documented commands on both platforms after native flow and US region, preserving exclusions', async () => {
+  const previous = ['window', 'document', 'navigator', 'fetch'].map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)] as const);
+  Object.defineProperty(globalThis, 'fetch', { configurable: true, value: async () => ({ ok: true, json: async () => ({ region: 'US' }) }) });
   try {
     for (const ua of ['MedianAndroid/1.0 Android', 'MedianIOS/1.0 iPhone']) {
       const calls: string[] = [];
@@ -940,17 +942,21 @@ test('stock release ignores experimental transports and production flags cannot 
       trusted.setTrustedAuthorization(id, null, {});
       live.setUser(id); live.setForeground(true); live.setRouteSupported(true); live.setPlacement(id, 'setup');
       await live.requestConsent();
-      assert.ok(!calls.includes('banner') && !calls.includes('hide'), ua);
+      assert.ok(calls.includes('banner'), ua);
       assert.equal(live.getDiagnostics().mode, 'production');
-      assert.ok(live.getDiagnostics().bannerBlockers.includes('native-ad-permission-unknown'));
-      assert.equal(live.completeManualSave(live.beginManualSave(id), { persisted: true, queued: false, editing: false }), 'house');
+      assert.equal(live.getDiagnostics().advertisingPermission, 'unknown');
+      assert.equal(live.getDiagnostics().adDisplayed, 'unknown');
+      assert.equal(live.getHouseAds().bannerUser, null);
+      assert.equal(live.getHouseAds().nativeBannerUser, id);
+      assert.equal(live.completeManualSave(live.beginManualSave(id), { persisted: true, queued: false, editing: false }), 'requested');
+      const dispatched = calls.filter(call => call === 'interstitial').length;
       for (const [row, grants] of [[paid('pro'), {}], [paid('teams'), {}], [null, { has_admin_full_access: true }],
         [null, { promo_access_level: 'ad_free' }], [null, { promo_access_level: 'ambassador' }]] as const) {
         trusted.setTrustedAuthorization(id, row, grants); live.refresh();
         assert.equal(live.getDiagnostics().eligible, false);
         assert.equal(live.completeSetupAssistDismissal(live.beginSetupAssistDismissal(id)), 'suppressed');
       }
-      assert.ok(!calls.includes('interstitial'));
+      assert.equal(calls.filter(call => call === 'interstitial').length, dispatched);
       assert.ok(!calls.includes('experimental-bridge'));
       live.stop(); trusted.clearTrustedMembership();
     }
@@ -959,6 +965,91 @@ test('stock release ignores experimental transports and production flags cannot 
       if (descriptor) Object.defineProperty(globalThis, name, descriptor); else Reflect.deleteProperty(globalThis, name);
     }
     trusted.clearTrustedMembership();
+  }
+});
+
+test('actual controlled production singleton authorizes only the Android tester and registered device, leaving every other account on house ads', async () => {
+  const previous = ['window', 'document', 'navigator', 'fetch', 'crypto'].map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)] as const);
+  const realDigest = crypto.subtle.digest.bind(crypto.subtle);
+  // Model the registered fixture phone's hash at the native boundary, without
+  // publishing a real advertising ID. Other identifiers use real SHA-256.
+  const registeredHash = 'b852c51655b137b99f626bce5bb63a4757787247d602e6954cb6afc042eb29f4';
+  Object.defineProperty(globalThis, 'crypto', { configurable: true, value: { subtle: { digest: async (algorithm: string, bytes: Uint8Array) =>
+    new TextDecoder().decode(bytes) === testAdvertisingId ? Uint8Array.from(registeredHash.match(/../g)!, pair => parseInt(pair, 16)).buffer : realDigest(algorithm, bytes),
+  } } });
+  Object.defineProperty(globalThis, 'fetch', { configurable: true, value: async () => ({ ok: true, json: async () => ({ region: 'US' }) }) });
+  const calls: string[] = []; let gaid = testAdvertisingId;
+  const storage = new Map<string, string>();
+  const bridge = { banner: { enable: () => calls.push('enable'), disable: () => calls.push('disable') },
+    request: { consent: async () => { calls.push('consent'); return { result: false }; },
+      tracking: async () => { calls.push('tracking'); return { status: 'denied' }; } },
+    showInterstitialIfReady: () => calls.push('interstitial') };
+  const browser = Object.assign(new EventTarget(), { location: { origin: 'https://onlyfast.app' },
+    localStorage: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => { storage.set(key, value); } },
+    median: { admob: bridge, deviceInfo: async () => { calls.push('device'); return { platform: 'android', appId: 'app.onlyfast', gaid }; } },
+  });
+  const deviceNavigator = { userAgent: 'MedianAndroid Android', maxTouchPoints: 5 };
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: browser });
+  Object.defineProperty(globalThis, 'document', { configurable: true, value: {} });
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: deviceNavigator });
+  const controlled = loadModule<typeof native>('../src/lib/nativeAds.ts', {
+    './ads': ads, './nativeEnvironment': environment, './trustedMembership': trusted, './supabase': { supabase: {} },
+    './nativeBannerSafety': { nativeBannerIsSafe: () => true, houseInterstitialIsSafe: () => true }, './nativeAdsMode': adsMode,
+  }, { VITE_MEDIAN_ADMOB_ENABLED: 'true', VITE_MEDIAN_ADMOB_MODE: 'android-test', PROD: true, DEV: false, ONLYFAST_ADS_DEPLOYMENT: 'production' }).nativeAds;
+  const id = native.NATIVE_ADS_ROLLOUT_USER_ID;
+  const settle = () => new Promise<void>(resolve => setImmediate(resolve));
+  const save = () => controlled.completeManualSave(controlled.beginManualSave(id), { persisted: true, queued: false, editing: false });
+  try {
+    trusted.clearTrustedMembership(); controlled.setForeground(true); controlled.setRouteSupported(true);
+    controlled.setUser(id); controlled.setPlacement(id, 'home');
+    await settle(); assert.ok(!calls.includes('enable') && !calls.includes('consent'), 'unknown membership cannot authorize the tester');
+    trusted.setTrustedAuthorization(id, null, {}); controlled.refresh(); await settle();
+    assert.equal(controlled.getDiagnostics().mode, 'android-test');
+    assert.equal(controlled.getDiagnostics().device, 'matched');
+    assert.equal(calls.filter(call => call === 'enable').length, 1);
+    assert.equal(controlled.getHouseAds().bannerUser, null); assert.equal(controlled.getHouseAds().nativeBannerUser, id);
+    assert.equal(controlled.canViewDiagnostics(id), true); assert.equal(controlled.canViewDiagnostics('ordinary-rookie'), false);
+    assert.equal(controlled.runDevelopmentTest('interstitial').reason, 'development-test-mode-required');
+    controlled.refresh(); assert.equal(calls.filter(call => call === 'enable').length, 1);
+    controlled.setPlacement(id, 'setup'); assert.equal(save(), 'requested');
+    assert.equal(controlled.getHouseAds().interstitialUser, null, 'a native opportunity cannot stack a house modal');
+    assert.equal(controlled.completeSetupAssistDismissal(controlled.beginSetupAssistDismissal(id)), 'suppressed');
+    assert.equal(controlled.getDiagnostics().lastInterstitialSuppression, 'cooldown');
+    assert.equal(calls.filter(call => call === 'interstitial').length, 1);
+    assert.equal(controlled.getDiagnostics().adDisplayed, 'unknown');
+    for (const [row, grants] of [[paid('pro'), {}], [paid('teams'), {}], [null, { has_admin_full_access: true }],
+      [null, { promo_access_level: 'ambassador' }], [null, { promo_access_level: 'ad_free' }], [null, { promo_access_level: 'pro' }]] as const) {
+      trusted.setTrustedAuthorization(id, row, grants); controlled.refresh();
+      assert.equal(controlled.getDiagnostics().eligible, false); assert.equal(save(), 'suppressed');
+      assert.equal(controlled.getHouseAds().bannerUser, null); assert.equal(controlled.getHouseAds().nativeBannerUser, null);
+      trusted.setTrustedAuthorization(id, row, grants, 'rookie'); controlled.refresh();
+      assert.equal(controlled.getDiagnostics().eligible, false, 'a test selection cannot erase the underlying ad exemption');
+      assert.equal(save(), 'suppressed');
+    }
+    controlled.setUser('ordinary-rookie'); trusted.setTrustedAuthorization('ordinary-rookie', null, {});
+    controlled.setPlacement('ordinary-rookie', 'setup'); await settle();
+    assert.equal(controlled.getDiagnostics().enabled, false); assert.equal(controlled.canViewDiagnostics('ordinary-rookie'), false);
+    assert.equal(controlled.getHouseAds().bannerUser, 'ordinary-rookie');
+    assert.equal(controlled.completeManualSave(controlled.beginManualSave('ordinary-rookie'), { persisted: true, queued: false, editing: false }), 'house');
+    controlled.closeHouseInterstitial();
+    for (const ua of ['MedianIOS iPhone', 'Chrome Android']) {
+      deviceNavigator.userAgent = ua; controlled.setUser(id); trusted.setTrustedAuthorization(id, null, {});
+      controlled.setPlacement(id, 'home'); await settle();
+      assert.equal(controlled.getDiagnostics().enabled, false, ua); assert.equal(controlled.getHouseAds().bannerUser, id);
+    }
+    deviceNavigator.userAgent = 'MedianAndroid Android'; gaid = '99999999-2222-4333-8444-555555555555';
+    controlled.setUser(id); controlled.setPlacement(id, 'home'); await settle();
+    if (controlled.getDiagnostics().device === 'pending') await new Promise<void>(resolve => {
+      const off = controlled.subscribeDiagnostics(value => { if (value.device !== 'pending') { off(); resolve(); } });
+    });
+    assert.equal(controlled.getDiagnostics().device, 'unregistered-device');
+    assert.equal(controlled.getHouseAds().bannerUser, id); assert.equal(controlled.getHouseAds().nativeBannerUser, null);
+    assert.equal(calls.filter(call => call === 'enable').length, 1); assert.equal(calls.filter(call => call === 'interstitial').length, 1);
+    assert.ok(!calls.includes('tracking'), 'Android-only rollout never starts iOS ATT');
+    controlled.setUser(null); assert.equal(controlled.getHouseAds().bannerUser, null); assert.equal(controlled.getHouseAds().interstitialUser, null);
+  } finally {
+    controlled.stop(); trusted.clearTrustedMembership();
+    for (const [name, descriptor] of previous) { if (descriptor) Object.defineProperty(globalThis, name, descriptor); else Reflect.deleteProperty(globalThis, name); }
   }
 });
 
@@ -979,6 +1070,76 @@ test('live production advertising never exposes tester diagnostic controls', () 
   mode = 'test';
   assert.equal(controller.canViewDiagnostics(id), true);
   controller.stop();
+});
+
+test('DEV commands exercise each format independently but cannot bypass native/privacy/device/membership guards or the shared cooldown', async () => {
+  const dev = loadModule<typeof native>('../src/lib/nativeAds.ts', {
+    './ads': ads, './nativeEnvironment': environment, './trustedMembership': trusted, './supabase': { supabase: {} },
+    './nativeBannerSafety': bannerSafety, './nativeAdsMode': adsMode,
+  }, { DEV: true });
+  let eligible = true; let device = false; let mode: 'test' | 'production' = 'test';
+  let now = 1_000_000; let safe = true; const calls: string[] = []; const storage = new Map<string, string>();
+  const bridge = { banner: { enable: () => calls.push('enable'), disable: () => calls.push('disable') },
+    request: { consent: async () => ({ result: false }) }, showInterstitialIfReady: () => calls.push('interstitial') };
+  const controller = new dev.NativeAdsController({
+    enabled: id => id === 'tester', mode: () => mode, eligible: () => eligible, bannerSafe: () => safe,
+    userAgent: () => 'MedianAndroid Android', bridge: () => bridge, deviceAllowed: () => device,
+    deviceStatus: () => device ? 'matched' : 'unregistered-device', now: () => now,
+    storage: () => ({ getItem: key => storage.get(key) ?? null, setItem: (key, value) => { storage.set(key, value); } }),
+  });
+  try {
+    controller.setUser('tester'); controller.setForeground(true); controller.setRouteSupported(true); controller.setPlacement('tester', 'setup');
+    await controller.requestConsent();
+    assert.equal(controller.getDiagnostics().advertisingPermission, 'unknown', 'false/true completion booleans are never personalized permission');
+    assert.equal(controller.runDevelopmentTest('banner').result, 'unchanged');
+    assert.equal(controller.runDevelopmentTest('interstitial').result, 'suppressed'); assert.ok(!calls.includes('interstitial'));
+    device = true; assert.equal(controller.runDevelopmentTest('banner').result, 'requested');
+    assert.equal(controller.getHouseAds().bannerUser, null); assert.equal(controller.getHouseAds().nativeBannerUser, 'tester');
+    controller.runDevelopmentTest('banner'); assert.equal(calls.filter(call => call === 'enable').length, 1);
+    controller.runDevelopmentTest('hide-banner'); assert.equal(calls.at(-1), 'disable');
+    assert.equal(controller.getHouseAds().bannerUser, 'tester');
+    controller.runDevelopmentTest('automatic'); assert.equal(calls.at(-1), 'enable');
+    safe = false; assert.equal(controller.runDevelopmentTest('interstitial').reason, 'banner-space-or-input-unsafe'); safe = true;
+    const resume = controller.suspend(); assert.equal(controller.runDevelopmentTest('interstitial').result, 'suppressed'); resume();
+    assert.equal(controller.runDevelopmentTest('interstitial').result, 'requested');
+    assert.equal(controller.getDiagnostics().adDisplayed, 'unknown');
+    assert.equal(controller.completeManualSave(controller.beginManualSave('tester'), { persisted: true, queued: false, editing: false }), 'suppressed');
+    assert.equal(controller.getDiagnostics().lastInterstitialSuppression, 'cooldown');
+    assert.equal(controller.runDevelopmentTest('interstitial').result, 'suppressed');
+    now += 600_000;
+    assert.equal(controller.completeSetupAssistDismissal(controller.beginSetupAssistDismissal('tester')), 'requested');
+    assert.equal(controller.runDevelopmentTest('interstitial').reason, 'cooldown');
+    eligible = false; controller.refresh(); assert.equal(calls.at(-1), 'disable');
+    assert.equal(controller.runDevelopmentTest('banner').result, 'unchanged');
+    assert.equal(controller.runDevelopmentTest('interstitial').result, 'suppressed');
+    mode = 'production'; assert.equal(controller.runDevelopmentTest('banner').reason, 'development-test-mode-required');
+    controller.setUser(null); assert.equal(controller.getHouseAds().bannerUser, null);
+  } finally { controller.stop(); }
+  const f = await fixture();
+  assert.equal(f.controller.runDevelopmentTest('interstitial').reason, 'development-test-mode-required');
+  assert.ok(!f.calls.includes('interstitial'), 'production-compiled controller cannot run DEV trigger'); f.controller.stop();
+});
+
+test('browsers retain house banners and native mode removes both house banner selection and selection on logout', async () => {
+  const f = await fixture(undefined, false, { ua: 'Chrome' });
+  assert.equal(f.controller.getHouseAds().bannerUser, 'a'); assert.equal(f.controller.getHouseAds().nativeBannerUser, null);
+  f.state.ua = 'MedianAndroid Android'; await f.controller.requestConsent(); f.controller.refresh();
+  assert.equal(f.controller.getHouseAds().bannerUser, null); assert.equal(f.controller.getHouseAds().nativeBannerUser, 'a');
+  f.controller.setUser(null); assert.equal(f.controller.getHouseAds().bannerUser, null); assert.equal(f.controller.getHouseAds().nativeBannerUser, null);
+  assert.equal(f.calls.at(-1), 'disable'); f.controller.stop();
+});
+
+test('a failed native banner disable cannot stack a house banner while native visibility is uncertain', async () => {
+  const f = await fixture();
+  const disable = f.bridge.banner.disable;
+  f.bridge.banner.disable = () => { throw Error('Native transport failed'); };
+  f.state.device = false; f.controller.refresh();
+  assert.equal(f.controller.getHouseAds().bannerUser, null);
+  assert.equal(f.controller.getHouseAds().nativeBannerUser, 'a');
+  assert.ok(f.controller.getDiagnostics().bannerBlockers.includes('native-banner-disable-unconfirmed'));
+  f.bridge.banner.disable = disable; f.controller.refresh();
+  assert.equal(f.controller.getHouseAds().bannerUser, 'a'); assert.equal(f.controller.getHouseAds().nativeBannerUser, null);
+  f.controller.stop();
 });
 
 test('Settings diagnostics notify live consent/device/placement gates and unsubscribe without changing ad policy', async () => {
