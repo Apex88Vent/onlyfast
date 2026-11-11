@@ -48,7 +48,7 @@ const clearDeletedAccountLocalState = (userId: string) => {
 };
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) => {
-  useLayoutEffect(() => { if (isOpen) return nativeAds.suspend(); }, [isOpen]);
+  useLayoutEffect(() => { if (isOpen) return nativeAds.suspend('settings'); }, [isOpen]);
   const { betaIndicatorLabel, hasBetaFeature, testerKind } = useBetaFeatures();
   const hasExperimentalFullAccess =
     testerKind === 'experimental' &&
@@ -369,6 +369,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
                 <dt>Consent initialization</dt><dd>{adDiagnostics.consentInitialization}</dd>
                 <dt>Initialization waiting for</dt><dd className="break-words">{adDiagnostics.initializationBlockers.join(', ') || 'None'}</dd>
                 <dt>Last screen prerequisites</dt><dd className="break-words">{adDiagnostics.lastScreenInitializationBlockers.join(', ') || 'None'}</dd>
+                <dt>Current screen blocker</dt><dd>{adDiagnostics.currentScreen?.blocker ?? 'None'}</dd>
+                <dt>Native keyboard state</dt><dd>{adDiagnostics.currentScreen?.keyboardVisibility ?? 'Unknown'}</dd>
+                <dt>Keyboard state check</dt><dd>{adDiagnostics.currentScreen?.keyboardCheck ?? 'Not started'}</dd>
+                <dt>Stale keyboard corrected</dt><dd>{adDiagnostics.currentScreen?.staleKeyboardVisibilityCorrected ? 'Yes — confirmed hidden by native read' : 'No'}</dd>
+                <dt>Last underlying screen</dt><dd className="break-words">{adDiagnostics.lastScreenObservation ? `${adDiagnostics.lastScreenObservation.placement}: ${adDiagnostics.lastScreenObservation.blockers.join(', ') || 'None'}` : 'Not observed'}</dd>
+                <dt>Before Settings (last underlying screen)</dt><dd className="break-words">{adDiagnostics.beforeSettingsObservation ? `${adDiagnostics.beforeSettingsObservation.placement}: ${adDiagnostics.beforeSettingsObservation.blockers.join(', ') || 'None'}` : 'Not observed'}</dd>
                 <dt>Native request state</dt><dd>{adDiagnostics.nativeRequestState}</dd>
                 <dt>Banner request sent</dt><dd>{adDiagnostics.bannerCommandDispatched ? 'Yes' : 'No'}</dd>
                 <dt>Last interstitial trigger</dt><dd>{adDiagnostics.lastInterstitialTrigger ?? 'None'}</dd>
@@ -387,7 +393,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
               {adDiagnostics.device === 'registered-phone-session' && (
                 <p className="mt-2 text-xs text-[#6B7280]">Authorized using your confirmed test phone’s verified login session because Median omitted its advertising ID. This does not confirm Google test mode. Signing out requires reauthorization.</p>
               )}
-              <p className="mt-2 text-xs text-[#6B7280]">Settings pauses native banners. Close Settings to test the landing page. Request sent records a command during this session; Google ad display is not confirmed.</p>
+              <p className="mt-2 text-xs text-[#6B7280]">Current blockers include Settings itself. Before Settings records the last underlying screen, not this dialog. Settings pauses native banners. Close Settings to test the landing page. Request sent records a command during this session; Google ad display is not confirmed.</p>
             </section>
           )}
 

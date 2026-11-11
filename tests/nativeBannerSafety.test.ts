@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { nativeBannerIsSafe, nativeBannerBlocker, nativeConsentScreenBlocker, watchNativeBannerSafety } from '../src/lib/nativeBannerSafety.ts';
+import { nativeBannerIsSafe, nativeBannerBlocker, nativeConsentScreenBlocker, nativeScreenDiagnostics, watchNativeBannerSafety } from '../src/lib/nativeBannerSafety.ts';
 
 function fixture() {
-  const state = { ready: true, blocked: false, input: false, editable: false, hidden: false };
+  const state = { ready: true, blocked: false, input: false, editable: false, hidden: false, view: 'home' };
   const frames = new Map<number, FrameRequestCallback>();
   let nextFrame = 0;
   const viewport = Object.assign(new EventTarget(), { height: 800, offsetTop: 0 });
@@ -14,8 +14,9 @@ function fixture() {
     cancelAnimationFrame: (id: number) => { frames.delete(id); },
   }) as unknown as Window;
   const page = Object.assign(new EventTarget(), {
-    documentElement: {},
-    querySelector: (selector: string) => selector === '[data-native-banner-layout]' ? state.ready || null : state.blocked || null,
+    documentElement: {}, visibilityState: 'visible',
+    querySelector: (selector: string) => selector === '[data-native-banner-layout]' ? state.ready || null :
+      selector === '[data-house-ad-page]' ? { getAttribute: () => state.view } : null,
     querySelectorAll: () => state.blocked ? [{ closest: () => state.hidden, getClientRects: () => state.hidden ? [] : [{}] }] : [],
     activeElement: { matches: () => state.input, get isContentEditable() { return state.editable; } },
   }) as unknown as Document;
@@ -34,6 +35,65 @@ test('native banner safety requires an authenticated layout, unobstructed viewpo
   f.viewport.height = 300; assert.equal(nativeBannerIsSafe(f.host, f.page), false);
   f.viewport.height = 600; assert.equal(nativeBannerIsSafe(f.host, f.page), false, 'overlay keyboard');
   f.viewport.height = 800; assert.equal(nativeBannerIsSafe(f.host, f.page), true);
+});
+
+test('a missed native keyboard hide is refreshed on safe navigation, without inferring hidden from geometry or looping on diagnostic DOM changes', async () => {
+  const f = fixture(); let notify!: (value: unknown) => void; let mutate!: () => void; let subscriptions = 0;
+  const reads: ((value: unknown) => void)[] = [];
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'MutationObserver');
+  Object.defineProperty(globalThis, 'MutationObserver', { configurable: true, value: class {
+    constructor(callback: () => void) { mutate = callback; } observe() {} disconnect() {}
+  } });
+  Object.assign(f.host, { median: { keyboard: { listen: (callback: typeof notify | '') => {
+    if (callback !== '') { notify = callback; subscriptions++; }
+  }, info: () => new Promise(resolve => reads.push(resolve)) } } });
+  const settle = async () => { await Promise.resolve(); await Promise.resolve(); f.flush(); };
+  const stop = watchNativeBannerSafety({ refresh() {} }, f.host, f.page);
+  try {
+    f.flush(); reads[0]({ visible: true }); await settle();
+    assert.equal(nativeConsentScreenBlocker(f.host, f.page), 'native-keyboard-visible');
+    f.state.view = 'saved'; mutate(); f.flush();
+    assert.equal(reads.length, 2); assert.equal(subscriptions, 1);
+    assert.equal(nativeScreenDiagnostics(f.host, f.page).keyboardCheck, 'pending');
+    assert.equal(nativeConsentScreenBlocker(f.host, f.page), 'native-keyboard-visible', 'navigation cannot authorize a hidden keyboard');
+    reads[1]({ visible: false }); await settle();
+    assert.equal(nativeConsentScreenBlocker(f.host, f.page), null);
+    assert.equal(nativeScreenDiagnostics(f.host, f.page).staleKeyboardVisibilityCorrected, true);
+    mutate(); await settle(); assert.equal(reads.length, 2, 'text-only diagnostic renders cannot query native state repeatedly');
+    f.state.input = true;
+    assert.equal(nativeConsentScreenBlocker(f.host, f.page), 'editing-input-focused', 'native hidden cannot open UMP over active input');
+    notify({ visible: true }); await settle(); assert.equal(nativeScreenDiagnostics(f.host, f.page).staleKeyboardVisibilityCorrected, false);
+  } finally { stop(); if (previous) Object.defineProperty(globalThis, 'MutationObserver', previous); else Reflect.deleteProperty(globalThis, 'MutationObserver'); }
+});
+
+test('keyboard dismissal/resume re-read native state; failed reads and late results never override visibility evidence', async () => {
+  const f = fixture(); let notify!: (value: unknown) => void;
+  const reads: { resolve(value: unknown): void; reject(error: Error): void }[] = [];
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'MutationObserver');
+  Object.defineProperty(globalThis, 'MutationObserver', { configurable: true, value: class { observe() {} disconnect() {} } });
+  Object.assign(f.host, { median: { keyboard: { listen: (callback: typeof notify | '') => { if (callback !== '') notify = callback; },
+    info: () => new Promise((resolve, reject) => reads.push({ resolve, reject })) } } });
+  const settle = async () => { await Promise.resolve(); await Promise.resolve(); f.flush(); };
+  const stop = watchNativeBannerSafety({ refresh() {} }, f.host, f.page);
+  try {
+    f.flush(); notify({ visible: true }); reads[0].resolve({ visible: false }); await settle();
+    assert.equal(nativeScreenDiagnostics(f.host, f.page).keyboardVisibility, 'visible', 'older info cannot overwrite a newer show event');
+    f.page.dispatchEvent(new Event('focusout')); f.viewport.dispatchEvent(new Event('resize')); f.flush();
+    assert.equal(reads.length, 2, 'dismissal events coalesce');
+    reads[1].reject(Error('Native info unavailable')); await settle();
+    assert.equal(nativeScreenDiagnostics(f.host, f.page).keyboardCheck, 'error');
+    assert.equal(nativeConsentScreenBlocker(f.host, f.page), 'native-keyboard-visible');
+    Object.assign(f.page, { visibilityState: 'hidden' }); f.page.dispatchEvent(new Event('visibilitychange')); f.flush();
+    assert.equal(reads.length, 2, 'no native query in background');
+    Object.assign(f.page, { visibilityState: 'visible' }); f.host.dispatchEvent(new Event('pageshow')); f.flush();
+    assert.equal(reads.length, 3); reads[2].resolve({ visible: false }); await settle();
+    assert.equal(nativeScreenDiagnostics(f.host, f.page).keyboardVisibility, 'hidden');
+    assert.equal(nativeConsentScreenBlocker(f.host, f.page), null);
+    f.host.dispatchEvent(new Event('membership-updated')); f.flush();
+    assert.equal(reads.length, 4, 'trusted membership arrival also refreshes native screen state');
+    stop(); reads[3].resolve({ visible: true }); await settle();
+    assert.equal(f.frames.size, 0, 'an unmounted watcher cannot refresh from a late read');
+  } finally { stop(); if (previous) Object.defineProperty(globalThis, 'MutationObserver', previous); else Reflect.deleteProperty(globalThis, 'MutationObserver'); }
 });
 
 test('native consent does not require banner space but retains layout, editing, keyboard and overlay safeguards', () => {

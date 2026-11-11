@@ -937,7 +937,7 @@ test('stock release calls documented commands on both platforms after native flo
       Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { userAgent: ua, maxTouchPoints: 5 } });
       const live = loadModule<typeof native>('../src/lib/nativeAds.ts', {
         './ads': ads, './nativeEnvironment': environment, './trustedMembership': trusted, './supabase': { supabase: {} },
-        './nativeBannerSafety': { nativeBannerIsSafe: () => true, nativeBannerBlocker: () => null, nativeConsentScreenBlocker: () => null, houseInterstitialIsSafe: () => true }, './nativeAdsMode': adsMode,
+        './nativeBannerSafety': { nativeBannerIsSafe: () => true, nativeBannerBlocker: () => null, nativeConsentScreenBlocker: () => null, nativeScreenDiagnostics: () => null, houseInterstitialIsSafe: () => true }, './nativeAdsMode': adsMode,
       }, { VITE_MEDIAN_ADMOB_ENABLED: 'true', VITE_MEDIAN_ADMOB_MODE: 'production', PROD: true, ONLYFAST_ADS_DEPLOYMENT: 'production' }).nativeAds;
       const id = 'another-authenticated-rookie';
       trusted.setTrustedAuthorization(id, null, {});
@@ -995,7 +995,7 @@ test('actual controlled production singleton authorizes only the Android tester 
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: deviceNavigator });
   const controlled = loadModule<typeof native>('../src/lib/nativeAds.ts', {
     './ads': ads, './nativeEnvironment': environment, './trustedMembership': trusted, './supabase': { supabase: {} },
-    './nativeBannerSafety': { nativeBannerIsSafe: () => true, nativeBannerBlocker: () => null, nativeConsentScreenBlocker: () => null, houseInterstitialIsSafe: () => true }, './nativeAdsMode': adsMode,
+    './nativeBannerSafety': { nativeBannerIsSafe: () => true, nativeBannerBlocker: () => null, nativeConsentScreenBlocker: () => null, nativeScreenDiagnostics: () => null, houseInterstitialIsSafe: () => true }, './nativeAdsMode': adsMode,
   }, { VITE_MEDIAN_ADMOB_ENABLED: 'true', VITE_MEDIAN_ADMOB_MODE: 'android-test', PROD: true, DEV: false, ONLYFAST_ADS_DEPLOYMENT: 'production' }).nativeAds;
   const id = native.NATIVE_ADS_ROLLOUT_USER_ID;
   const settle = () => new Promise<void>(resolve => setImmediate(resolve));
@@ -1063,14 +1063,15 @@ test('actual controlled production singleton authorizes only the Android tester 
 async function initializationFixture() {
   const id = native.NATIVE_ADS_ROLLOUT_USER_ID;
   const calls: string[] = [];
-  const state = { height: 300, overlay: false, editing: false, layout: true, region: 'US' as 'US' | 'unknown', now: 1_000_000 };
+  const state = { height: 300, overlay: false, editing: false, layout: true, view: 'home', region: 'US' as 'US' | 'unknown', now: 1_000_000 };
   const host = Object.assign(new EventTarget(), {
     navigator: { userAgent: 'MedianAndroid Android' }, get innerHeight() { return state.height; },
     getComputedStyle: () => ({ display: 'block', visibility: 'visible', opacity: '1', pointerEvents: 'auto' }),
   });
   Object.defineProperty(host, 'innerHeight', { get: () => state.height });
   const page = Object.assign(new EventTarget(), {
-    visibilityState: 'visible', querySelector: () => state.layout ? {} : null,
+    visibilityState: 'visible', querySelector: (selector: string) => selector === '[data-native-banner-layout]' ? state.layout ? {} : null :
+      selector === '[data-house-ad-page]' ? { getAttribute: () => state.view } : null,
     querySelectorAll: () => state.overlay ? [{ closest: () => null, getClientRects: () => [{}] }] : [],
     activeElement: { matches: () => state.editing },
   });
@@ -1091,6 +1092,7 @@ async function initializationFixture() {
     bannerSafe: () => bannerSafety.nativeBannerIsSafe(host as unknown as Window, page as unknown as Document),
     bannerBlocker: () => bannerSafety.nativeBannerBlocker(host as unknown as Window, page as unknown as Document),
     consentScreenBlocker: () => bannerSafety.nativeConsentScreenBlocker(host as unknown as Window, page as unknown as Document),
+    screenDiagnostics: () => bannerSafety.nativeScreenDiagnostics(host as unknown as Window, page as unknown as Document),
     storage: () => ({ getItem: key => storage.get(key) ?? null, setItem: (key, value) => { storage.set(key, value); } }), now: () => state.now,
   });
   const ready = async () => {
@@ -1197,6 +1199,52 @@ test('initialization reports exact layout, editing, region and device failures i
     assert.equal(f.controller.getDiagnostics().deviceInitialization, 'authorization-failed');
     assert.equal(f.controller.getDiagnostics().deviceAllowed, false);
   } finally { f.controller.stop(); trusted.clearTrustedMembership(); }
+});
+
+test('missed keyboard hide across Home/Saved and Settings recovers from native info before consent, device verification and requests', async () => {
+  const f = await initializationFixture();
+  const frames = new Map<number, FrameRequestCallback>(); let nextFrame = 0; let mutate!: () => void;
+  const reads: ((value: unknown) => void)[] = [];
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'MutationObserver');
+  Object.defineProperty(globalThis, 'MutationObserver', { configurable: true, value: class {
+    constructor(callback: () => void) { mutate = callback; } observe() {} disconnect() {}
+  } });
+  Object.assign(f.page, { documentElement: {} });
+  Object.assign(f.host, {
+    requestAnimationFrame: (callback: FrameRequestCallback) => { frames.set(++nextFrame, callback); return nextFrame; },
+    cancelAnimationFrame: (key: number) => { frames.delete(key); },
+    median: { keyboard: { listen() {}, info: () => new Promise(resolve => reads.push(resolve)) } },
+  });
+  const flush = () => { const pending = [...frames.values()]; frames.clear(); pending.forEach(callback => callback(0)); };
+  const settle = async () => { await Promise.resolve(); await Promise.resolve(); flush(); };
+  let stop = () => {};
+  try {
+    f.state.height = 800; f.state.editing = true; trusted.setTrustedAuthorization(f.id, null, {});
+    f.controller.setUser(f.id); f.controller.setForeground(true); f.controller.setRouteSupported(true); f.controller.setPlacement(f.id, 'home');
+    stop = bannerSafety.watchNativeBannerSafety(f.controller, f.host as unknown as Window, f.page as unknown as Document);
+    flush(); reads[0]({ visible: true }); await settle();
+    f.state.editing = false; f.state.view = 'saved'; f.controller.setPlacement(f.id, 'saved');
+    assert.equal(f.controller.getDiagnostics().consent, 'idle');
+    assert.deepEqual(f.controller.getDiagnostics().lastScreenObservation?.blockers, ['native-keyboard-visible']);
+    const closeSettings = f.controller.suspend('settings'); f.state.overlay = true; mutate(); flush();
+    const before = f.controller.getDiagnostics().beforeSettingsObservation;
+    assert.equal(before?.placement, 'saved'); assert.deepEqual(before?.blockers, ['native-keyboard-visible']);
+    assert.equal(f.controller.getDiagnostics().currentScreen?.blocker, 'visible-overlay-or-scan');
+    reads[1]({ visible: false }); await settle();
+    assert.equal(f.controller.getDiagnostics().currentScreen?.staleKeyboardVisibilityCorrected, true);
+    assert.deepEqual(f.controller.getDiagnostics().beforeSettingsObservation, before, 'Settings polling cannot overwrite the underlying snapshot');
+    assert.ok(!f.calls.includes('consent'), 'native hidden does not permit initialization through Settings');
+    f.state.overlay = false; closeSettings(); mutate(); flush();
+    await f.ready();
+    assert.deepEqual(f.calls.filter(call => call !== 'disable'), ['consent', 'device', 'enable']);
+    assert.equal(f.controller.getDiagnostics().device, 'matched');
+    assert.equal(f.controller.getDiagnostics().consentInitialization, 'consent-completed');
+    f.controller.setPlacement(f.id, 'setup');
+    assert.equal(f.controller.completeManualSave(f.controller.beginManualSave(f.id), { persisted: true, queued: false, editing: false }), 'requested');
+    assert.equal(f.controller.getDiagnostics().interstitialCooldownRemainingMs, 600_000);
+    assert.equal(f.controller.getDiagnostics().adDisplayed, 'unknown');
+    assert.equal(f.controller.getHouseAds().bannerUser, null);
+  } finally { stop(); f.controller.stop(); trusted.clearTrustedMembership(); if (previous) Object.defineProperty(globalThis, 'MutationObserver', previous); else Reflect.deleteProperty(globalThis, 'MutationObserver'); }
 });
 
 test('live production advertising never exposes tester diagnostic controls', () => {

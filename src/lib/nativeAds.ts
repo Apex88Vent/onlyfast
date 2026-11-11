@@ -2,7 +2,7 @@ import { shouldShowAds } from './ads';
 import { isMedianUserAgent, nativePlatform } from './nativeEnvironment';
 import { getAdvertisingAuthorizationExpiry, invalidateAdvertisingMembership, getTrustedAdvertisingMembership } from './trustedMembership';
 import { supabase } from './supabase';
-import { nativeBannerIsSafe, nativeBannerBlocker, nativeConsentScreenBlocker, houseInterstitialIsSafe } from './nativeBannerSafety';
+import { nativeBannerIsSafe, nativeBannerBlocker, nativeConsentScreenBlocker, nativeScreenDiagnostics, houseInterstitialIsSafe } from './nativeBannerSafety';
 import { resolveNativeAdsMode, nativeAdsAccountEnabled, type NativeAdsMode } from './nativeAdsMode';
 
 // Verified commands: https://docs.median.co/docs/admob-native-ads
@@ -146,6 +146,7 @@ export interface NativeAdsDependencies {
   bannerSafe?(): boolean;
   bannerBlocker?(): string | null;
   consentScreenBlocker?(): string | null;
+  screenDiagnostics?(): ReturnType<typeof nativeScreenDiagnostics> | null;
   mode?(): NativeAdsMode;
   diagnostic?(value: ReturnType<NativeAdsController['getDiagnostics']>): void;
 }
@@ -157,6 +158,7 @@ export type PostSaveAdResult = 'house' | 'suppressed' | 'requested';
 export type NativeConsentStatus = 'idle' | 'pending' | 'unverified' | 'unavailable' | 'error';
 export type NativeAdPermission = 'allowed' | 'disallowed' | 'unknown';
 type AdRegion = 'US' | 'excluded' | 'unknown';
+type ScreenObservation = { placement: string; blockers: string[]; screen: ReturnType<typeof nativeScreenDiagnostics> | null };
 
 /** One native banner per WebView; no DOM ad containers or ad-unit overrides. */
 export class NativeAdsController {
@@ -186,6 +188,8 @@ export class NativeAdsController {
   private lastInterstitialRequestDispatched = false;
   private lastInterstitialSuppression: string | null = null;
   private lastScreenInitializationBlockers: string[] = [];
+  private lastScreenObservation: ScreenObservation | null = null;
+  private beforeSettingsObservation: ScreenObservation | null = null;
   private diagnosticListeners = new Set<(value: ReturnType<NativeAdsController['getDiagnostics']>) => void>();
 
   constructor(private readonly deps: NativeAdsDependencies) {}
@@ -224,6 +228,8 @@ export class NativeAdsController {
       this.lastInterstitialRequestDispatched = false;
       this.lastInterstitialSuppression = null;
       this.lastScreenInitializationBlockers = [];
+      this.lastScreenObservation = null;
+      this.beforeSettingsObservation = null;
       this.hideBanner();
       this.userId = userId;
     }
@@ -257,7 +263,8 @@ export class NativeAdsController {
     };
   }
 
-  suspend(): () => void {
+  suspend(reason: 'overlay' | 'settings' = 'overlay'): () => void {
+    if (reason === 'settings') this.beforeSettingsObservation = this.lastScreenObservation;
     const token = {};
     this.suspensions.add(token);
     this.noteActivity();
@@ -353,6 +360,9 @@ export class NativeAdsController {
       device, deviceAllowed,
       consentInitialization, deviceInitialization, initializationBlockers, deviceWaitingFor,
       lastScreenInitializationBlockers: [...this.lastScreenInitializationBlockers],
+      currentScreen: this.deps.screenDiagnostics?.() ?? null,
+      lastScreenObservation: this.lastScreenObservation,
+      beforeSettingsObservation: this.beforeSettingsObservation,
       nativeRequestState: this.bannerDispatches || this.interstitialDispatches ? 'native-request-dispatched' : 'not-dispatched',
       foreground: this.foreground,
       routeSupported: this.routeSupported,
@@ -545,6 +555,8 @@ export class NativeAdsController {
       // pauses initialization, rather than masking it with its own overlay.
       if (!this.suspensions.size && !initializationBlockers.includes('visible-overlay-or-scan')) {
         this.lastScreenInitializationBlockers = initializationBlockers;
+        this.lastScreenObservation = { placement: this.placement?.view ?? 'none', blockers: [...initializationBlockers],
+          screen: this.deps.screenDiagnostics?.() ?? null };
       }
       // Run UMP at an eligible, non-editing screen, before either native format.
       // Once per account/bridge attempt; Settings may explicitly retry errors or
@@ -811,6 +823,7 @@ export const nativeAds = new NativeAdsController({
   bannerSafe: () => typeof document !== 'undefined' && nativeBannerIsSafe(window, document),
   bannerBlocker: () => typeof document === 'undefined' ? 'authenticated-layout-unavailable' : nativeBannerBlocker(window, document),
   consentScreenBlocker: () => typeof document === 'undefined' ? 'authenticated-layout-unavailable' : nativeConsentScreenBlocker(window, document),
+  screenDiagnostics: () => typeof document === 'undefined' ? null : nativeScreenDiagnostics(window, document),
   houseInterstitialSafe: () => typeof document !== 'undefined' && houseInterstitialIsSafe(window, document),
 });
 

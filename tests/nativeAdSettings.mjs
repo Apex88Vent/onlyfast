@@ -204,6 +204,9 @@ test('actual Settings status stays live, reveals no IDs, remains suspended, and 
     assert.equal(value('Device initialization'), 'authorization-failed');
     assert.equal(value('Native request state'), 'not-dispatched');
     assert.match(value('Initialization waiting for'), /overlay-open/);
+    assert.match(value('Before Settings (last underlying screen)'), /^home:/);
+    assert.doesNotMatch(value('Before Settings (last underlying screen)'), /overlay-open/);
+    assert.match(text(status()[0]), /Current blockers include Settings itself/);
     assert.match(text(status()[0]), /Settings pauses native banners/);
     assert.doesNotMatch(JSON.stringify(view.toJSON()), /gaid|idfa|installationId|58a1db2f|4b9864ff|b852c516|result/);
     await act(async () => { device = true; deviceStatus = 'matched'; controller.refresh(); });
