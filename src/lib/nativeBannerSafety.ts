@@ -22,28 +22,34 @@ export function houseInterstitialIsSafe(host: Window, page: Document): boolean {
 }
 
 /** Median places the native banner BELOW the WebView, not over HTML content. */
-export function nativeBannerIsSafe(host: Window, page: Document): boolean {
-  if (!page.querySelector('[data-native-banner-layout]')) return false;
+function nativeScreenBlocker(host: Window, page: Document, banner: boolean): string | null {
+  if (!page.querySelector('[data-native-banner-layout]')) return 'authenticated-layout-unavailable';
   const blockers = page.querySelectorAll(overlaySelectors);
-  if (Array.from(blockers).some(element => visibleBlocker(host, element))) return false;
+  if (Array.from(blockers).some(element => visibleBlocker(host, element))) return 'visible-overlay-or-scan';
   const active = page.activeElement as HTMLElement | null;
   const viewport = host.visualViewport;
   const height = viewport?.height ?? host.innerHeight;
-  if (height < 320) return false;
+  if (banner && height < 320) return 'banner-viewport-too-small';
   const keyboard = keyboardStates.get(host);
-  if (keyboard?.visible === true) return false;
+  if (keyboard?.visible === true) return 'native-keyboard-visible';
   // Median's explicit hidden event wins over retained input focus / stale iOS
   // viewport geometry after tapping Done. This does not alter interstitials.
-  if (keyboard?.visible === false) return true;
+  if (keyboard?.visible === false) return null;
   // An overlay keyboard can shrink the visual viewport without resizing layout.
-  if (viewport && host.innerHeight - viewport.height - viewport.offsetTop > 150) return false;
-  if (keyboard && keyboard.width === host.innerWidth && keyboard.height - height > 150) return false;
+  if (viewport && host.innerHeight - viewport.height - viewport.offsetTop > 150) return 'keyboard-viewport-occluded';
+  if (keyboard && keyboard.width === host.innerWidth && keyboard.height - height > 150) return 'keyboard-viewport-occluded';
   const editing = active?.matches('input:not([type="button"]):not([type="submit"]):not([type="checkbox"]):not([type="radio"]), textarea, select') || active?.isContentEditable;
   // Without an installed monitor/usable geometry, fail conservatively. Focus
   // itself is not a permanent keyboard-visible signal on supported packages.
-  if (editing) return false;
-  return true;
+  if (editing) return 'editing-input-focused';
+  return null;
 }
+
+export const nativeBannerBlocker = (host: Window, page: Document) => nativeScreenBlocker(host, page, true);
+// UMP is a native form, not a banner. Keep editing/overlay/onboarding safeguards
+// without requiring banner-sized geometry before either format can initialize.
+export const nativeConsentScreenBlocker = (host: Window, page: Document) => nativeScreenBlocker(host, page, false);
+export const nativeBannerIsSafe = (host: Window, page: Document) => nativeBannerBlocker(host, page) === null;
 
 /** Banner-only refreshes; never suspend, re-ticket, or dispatch interstitials. */
 export function watchNativeBannerSafety(controller: { refresh(): void }, host: Window, page: Document, includeWeb = false): () => void {

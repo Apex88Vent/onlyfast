@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { nativeBannerIsSafe, watchNativeBannerSafety } from '../src/lib/nativeBannerSafety.ts';
+import { nativeBannerIsSafe, nativeBannerBlocker, nativeConsentScreenBlocker, watchNativeBannerSafety } from '../src/lib/nativeBannerSafety.ts';
 
 function fixture() {
   const state = { ready: true, blocked: false, input: false, editable: false, hidden: false };
@@ -34,6 +34,23 @@ test('native banner safety requires an authenticated layout, unobstructed viewpo
   f.viewport.height = 300; assert.equal(nativeBannerIsSafe(f.host, f.page), false);
   f.viewport.height = 600; assert.equal(nativeBannerIsSafe(f.host, f.page), false, 'overlay keyboard');
   f.viewport.height = 800; assert.equal(nativeBannerIsSafe(f.host, f.page), true);
+});
+
+test('native consent does not require banner space but retains layout, editing, keyboard and overlay safeguards', () => {
+  const f = fixture();
+  Object.assign(f.host, { innerHeight: 300 }); f.viewport.height = 300;
+  assert.equal(nativeBannerBlocker(f.host, f.page), 'banner-viewport-too-small');
+  assert.equal(nativeConsentScreenBlocker(f.host, f.page), null);
+  for (const [key, value, blocker] of [
+    ['ready', false, 'authenticated-layout-unavailable'], ['blocked', true, 'visible-overlay-or-scan'],
+    ['input', true, 'editing-input-focused'], ['editable', true, 'editing-input-focused'],
+  ] as const) {
+    const before = f.state[key]; f.state[key] = value;
+    assert.equal(nativeConsentScreenBlocker(f.host, f.page), blocker);
+    f.state[key] = before;
+  }
+  Object.assign(f.host, { innerHeight: 800 });
+  assert.equal(nativeConsentScreenBlocker(f.host, f.page), 'keyboard-viewport-occluded');
 });
 
 test('hidden dialogs do not suppress banners, and native keyboard dismissal restores them even when an input retains focus', async () => {

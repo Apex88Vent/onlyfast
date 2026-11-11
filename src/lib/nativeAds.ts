@@ -2,7 +2,7 @@ import { shouldShowAds } from './ads';
 import { isMedianUserAgent, nativePlatform } from './nativeEnvironment';
 import { getAdvertisingAuthorizationExpiry, invalidateAdvertisingMembership, getTrustedAdvertisingMembership } from './trustedMembership';
 import { supabase } from './supabase';
-import { nativeBannerIsSafe, houseInterstitialIsSafe } from './nativeBannerSafety';
+import { nativeBannerIsSafe, nativeBannerBlocker, nativeConsentScreenBlocker, houseInterstitialIsSafe } from './nativeBannerSafety';
 import { resolveNativeAdsMode, nativeAdsAccountEnabled, type NativeAdsMode } from './nativeAdsMode';
 
 // Verified commands: https://docs.median.co/docs/admob-native-ads
@@ -102,7 +102,8 @@ export class NativeAdTestDevice {
           // AdMob alone does not expose GAID through Median deviceInfo. Only an
           // OMITTED identifier may use the owner-confirmed Android session. Never
           // override a zeroed, malformed or different advertising identifier.
-          if (raw === undefined && platform === 'android' && this.verifyPhoneSession) {
+          if (raw === undefined && platform === 'android') {
+            if (!this.verifyPhoneSession) return 'phone-session-authorization-required';
             return await this.verifyPhoneSession() ? 'registered-phone-session' : 'phone-session-not-authorized';
           }
           const id = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
@@ -143,6 +144,8 @@ export interface NativeAdsDependencies {
   deviceStatus?(): string;
   resetDevice?(): void;
   bannerSafe?(): boolean;
+  bannerBlocker?(): string | null;
+  consentScreenBlocker?(): string | null;
   mode?(): NativeAdsMode;
   diagnostic?(value: ReturnType<NativeAdsController['getDiagnostics']>): void;
 }
@@ -182,6 +185,7 @@ export class NativeAdsController {
   private lastInterstitialTrigger: InterstitialTrigger | null = null;
   private lastInterstitialRequestDispatched = false;
   private lastInterstitialSuppression: string | null = null;
+  private lastScreenInitializationBlockers: string[] = [];
   private diagnosticListeners = new Set<(value: ReturnType<NativeAdsController['getDiagnostics']>) => void>();
 
   constructor(private readonly deps: NativeAdsDependencies) {}
@@ -219,6 +223,7 @@ export class NativeAdsController {
       this.lastInterstitialTrigger = null;
       this.lastInterstitialRequestDispatched = false;
       this.lastInterstitialSuppression = null;
+      this.lastScreenInitializationBlockers = [];
       this.hideBanner();
       this.userId = userId;
     }
@@ -308,6 +313,19 @@ export class NativeAdsController {
     const region = this.deps.adRegion?.() ?? 'unknown';
     const device = this.deps.deviceStatus?.() ?? 'not-configured';
     const deviceAllowed = this.deps.deviceAllowed?.(platform) ?? true;
+    const initializationBlockers = this.automaticConsentBlockers();
+    const consentCompleted = this.consentStatus === 'unverified' &&
+      this.consentAttempt?.bridge === bridge && this.consentAttempt?.generation === this.generation;
+    const consentInitialization = this.consentStatus === 'pending' ? 'consent-pending' : consentCompleted ? 'consent-completed' :
+      ['error', 'unavailable'].includes(this.consentStatus) ? 'consent-failed' :
+        this.userId ? 'waiting-for-prerequisites' : 'not-started';
+    const deviceInitialization = device === 'pending' ? 'authorization-pending' : deviceAllowed ? 'authorized' :
+      device !== 'idle' ? 'authorization-failed' : this.userId ? 'waiting-for-prerequisites' : 'not-started';
+    const deviceWaitingFor = device === 'idle' ? [
+      ...initializationBlockers,
+      ...(!consentCompleted ? [`native-consent-${this.consentStatus}`] : []),
+      ...(this.deps.nativeAdPermission && permission !== 'allowed' ? [`native-ad-permission-${permission}`] : []),
+    ] : [];
     const bannerBlockers = [
       ...(!enabled ? [this.deps.houseOnly ? 'house-only-mode' : 'advertising-disabled-for-account'] : []),
       ...(this.deps.nativeAdPermission && permission !== 'allowed' ? [`native-ad-permission-${permission}`] : []),
@@ -321,7 +339,7 @@ export class NativeAdsController {
       ...(!this.foreground ? ['not-foreground'] : []),
       ...(!this.routeSupported ? ['unsupported-route'] : []),
       ...(this.suspensions.size ? ['overlay-open'] : []),
-      ...(!(this.deps.bannerSafe?.() ?? true) ? ['banner-space-or-input-unsafe'] : []),
+      ...(!(this.deps.bannerSafe?.() ?? true) ? [this.deps.bannerBlocker?.() ?? 'banner-space-or-input-unsafe'] : []),
       ...(this.placement?.userId !== this.userId || !BANNER_VIEWS.includes(this.placement?.view)
         ? ['not-banner-placement'] : []),
       ...(this.consentStatus !== 'unverified' ? [`native-consent-${this.consentStatus}`] : []),
@@ -333,6 +351,9 @@ export class NativeAdsController {
       eligible, enabled, platform, bridgeAvailable, consentBridgeAvailable,
       interstitialBridgeAvailable: typeof bridge?.showInterstitialIfReady === 'function',
       device, deviceAllowed,
+      consentInitialization, deviceInitialization, initializationBlockers, deviceWaitingFor,
+      lastScreenInitializationBlockers: [...this.lastScreenInitializationBlockers],
+      nativeRequestState: this.bannerDispatches || this.interstitialDispatches ? 'native-request-dispatched' : 'not-dispatched',
       foreground: this.foreground,
       routeSupported: this.routeSupported,
       placement: this.placement?.view ?? 'none',
@@ -466,6 +487,24 @@ export class NativeAdsController {
 
   private regionAllowsCommands() { return !this.deps.adRegion || this.deps.adRegion() === 'US'; }
 
+  private automaticConsentBlockers(): string[] {
+    const screen = this.deps.consentScreenBlocker ? this.deps.consentScreenBlocker() :
+      this.deps.bannerSafe?.() === false ? 'banner-space-or-input-unsafe' : null;
+    return [
+      ...(!this.userId ? ['not-authenticated'] : []),
+      ...(this.deps.houseOnly || !this.deps.enabled(this.userId) ? ['advertising-disabled-for-account'] : []),
+      ...(!this.userId || !this.deps.eligible(this.userId) ? ['membership-not-verified-rookie'] : []),
+      ...(!this.platform() ? ['not-median-android-or-ios'] : []),
+      ...(typeof this.deps.bridge()?.request?.consent !== 'function' ? ['consent-bridge-unavailable'] : []),
+      ...(!this.foreground ? ['not-foreground'] : []),
+      ...(!this.routeSupported ? ['unsupported-route'] : []),
+      ...(this.suspensions.size ? ['overlay-open'] : []),
+      ...(this.placement?.userId !== this.userId || !BANNER_VIEWS.includes(this.placement?.view) ? ['not-initialization-placement'] : []),
+      ...(!this.regionAllowsCommands() ? [`ad-region-${this.deps.adRegion?.() ?? 'unknown'}`] : []),
+      ...(screen ? [screen] : []),
+    ];
+  }
+
   private allowed() {
     return !!this.userId && this.deps.enabled(this.userId) && this.platform() !== null && this.foreground &&
       (this.deps.deviceAllowed?.(this.platform()) ?? true) &&
@@ -501,12 +540,16 @@ export class NativeAdsController {
       const eligible = !!bridge && !!this.userId && this.deps.enabled(this.userId) && this.deps.eligible(this.userId) &&
         this.platform() !== null && this.foreground && this.routeSupported && this.suspensions.size === 0;
       if (eligible && this.deps.adRegion) this.deps.prepareRegion?.(() => this.refresh());
+      const initializationBlockers = this.automaticConsentBlockers();
+      // Preserve the last ordinary-screen observation when Settings itself
+      // pauses initialization, rather than masking it with its own overlay.
+      if (!this.suspensions.size && !initializationBlockers.includes('visible-overlay-or-scan')) {
+        this.lastScreenInitializationBlockers = initializationBlockers;
+      }
       // Run UMP at an eligible, non-editing screen, before either native format.
       // Once per account/bridge attempt; Settings may explicitly retry errors or
       // re-request the flow. Do not loop when a native form cannot be displayed.
-      if (eligible && this.regionAllowsCommands() &&
-          this.canRequestConsent() && this.placement?.userId === this.userId &&
-          (this.deps.bannerSafe?.() ?? true) && BANNER_VIEWS.includes(this.placement.view) &&
+      if (initializationBlockers.length === 0 && this.canRequestConsent() &&
           (!this.consentAttempt || this.consentAttempt.bridge !== bridge || this.consentAttempt.generation !== this.generation)) {
         void this.requestConsent();
       }
@@ -766,6 +809,8 @@ export const nativeAds = new NativeAdsController({
   storage: () => window.localStorage,
   now: Date.now,
   bannerSafe: () => typeof document !== 'undefined' && nativeBannerIsSafe(window, document),
+  bannerBlocker: () => typeof document === 'undefined' ? 'authenticated-layout-unavailable' : nativeBannerBlocker(window, document),
+  consentScreenBlocker: () => typeof document === 'undefined' ? 'authenticated-layout-unavailable' : nativeConsentScreenBlocker(window, document),
   houseInterstitialSafe: () => typeof document !== 'undefined' && houseInterstitialIsSafe(window, document),
 });
 

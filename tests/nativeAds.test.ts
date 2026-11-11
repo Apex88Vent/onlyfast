@@ -937,7 +937,7 @@ test('stock release calls documented commands on both platforms after native flo
       Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { userAgent: ua, maxTouchPoints: 5 } });
       const live = loadModule<typeof native>('../src/lib/nativeAds.ts', {
         './ads': ads, './nativeEnvironment': environment, './trustedMembership': trusted, './supabase': { supabase: {} },
-        './nativeBannerSafety': { nativeBannerIsSafe: () => true, houseInterstitialIsSafe: () => true }, './nativeAdsMode': adsMode,
+        './nativeBannerSafety': { nativeBannerIsSafe: () => true, nativeBannerBlocker: () => null, nativeConsentScreenBlocker: () => null, houseInterstitialIsSafe: () => true }, './nativeAdsMode': adsMode,
       }, { VITE_MEDIAN_ADMOB_ENABLED: 'true', VITE_MEDIAN_ADMOB_MODE: 'production', PROD: true, ONLYFAST_ADS_DEPLOYMENT: 'production' }).nativeAds;
       const id = 'another-authenticated-rookie';
       trusted.setTrustedAuthorization(id, null, {});
@@ -995,7 +995,7 @@ test('actual controlled production singleton authorizes only the Android tester 
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: deviceNavigator });
   const controlled = loadModule<typeof native>('../src/lib/nativeAds.ts', {
     './ads': ads, './nativeEnvironment': environment, './trustedMembership': trusted, './supabase': { supabase: {} },
-    './nativeBannerSafety': { nativeBannerIsSafe: () => true, houseInterstitialIsSafe: () => true }, './nativeAdsMode': adsMode,
+    './nativeBannerSafety': { nativeBannerIsSafe: () => true, nativeBannerBlocker: () => null, nativeConsentScreenBlocker: () => null, houseInterstitialIsSafe: () => true }, './nativeAdsMode': adsMode,
   }, { VITE_MEDIAN_ADMOB_ENABLED: 'true', VITE_MEDIAN_ADMOB_MODE: 'android-test', PROD: true, DEV: false, ONLYFAST_ADS_DEPLOYMENT: 'production' }).nativeAds;
   const id = native.NATIVE_ADS_ROLLOUT_USER_ID;
   const settle = () => new Promise<void>(resolve => setImmediate(resolve));
@@ -1058,6 +1058,145 @@ test('actual controlled production singleton authorizes only the Android tester 
     controlled.stop(); trusted.clearTrustedMembership();
     for (const [name, descriptor] of previous) { if (descriptor) Object.defineProperty(globalThis, name, descriptor); else Reflect.deleteProperty(globalThis, name); }
   }
+});
+
+async function initializationFixture() {
+  const id = native.NATIVE_ADS_ROLLOUT_USER_ID;
+  const calls: string[] = [];
+  const state = { height: 300, overlay: false, editing: false, layout: true, region: 'US' as 'US' | 'unknown', now: 1_000_000 };
+  const host = Object.assign(new EventTarget(), {
+    navigator: { userAgent: 'MedianAndroid Android' }, get innerHeight() { return state.height; },
+    getComputedStyle: () => ({ display: 'block', visibility: 'visible', opacity: '1', pointerEvents: 'auto' }),
+  });
+  Object.defineProperty(host, 'innerHeight', { get: () => state.height });
+  const page = Object.assign(new EventTarget(), {
+    visibilityState: 'visible', querySelector: () => state.layout ? {} : null,
+    querySelectorAll: () => state.overlay ? [{ closest: () => null, getClientRects: () => [{}] }] : [],
+    activeElement: { matches: () => state.editing },
+  });
+  const bridge = { banner: { enable: () => calls.push('enable'), disable: () => calls.push('disable') },
+    request: { consent: async () => { calls.push('consent'); return { result: false }; } },
+    showInterstitialIfReady: () => calls.push('interstitial') };
+  const deviceHost = { deviceInfo: async () => { calls.push('device'); return { platform: 'android', appId: 'app.onlyfast', gaid: testAdvertisingId }; } };
+  const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(testAdvertisingId))), b => b.toString(16).padStart(2, '0')).join('');
+  const gate = new native.NativeAdTestDevice({ android: [hash], ios: [] });
+  const storage = new Map<string, string>();
+  const controller = new native.NativeAdsController({
+    mode: () => 'android-test', enabled: uid => adsMode.nativeAdsAccountEnabled('android-test', uid, id, 'android'),
+    eligible: uid => trusted.getTrustedAdvertisingMembership(uid, Date.now(), false)?.membership_tier === 'rookie' && ads.shouldShowAds({ id: uid }),
+    userAgent: () => host.navigator.userAgent, bridge: () => bridge,
+    adRegion: () => state.region,
+    deviceAllowed: platform => gate.allowed(platform, deviceHost), deviceStatus: () => gate.getStatus(),
+    prepareDevice: (platform, changed) => gate.prepare(platform, deviceHost, changed), resetDevice: () => gate.reset(),
+    bannerSafe: () => bannerSafety.nativeBannerIsSafe(host as unknown as Window, page as unknown as Document),
+    bannerBlocker: () => bannerSafety.nativeBannerBlocker(host as unknown as Window, page as unknown as Document),
+    consentScreenBlocker: () => bannerSafety.nativeConsentScreenBlocker(host as unknown as Window, page as unknown as Document),
+    storage: () => ({ getItem: key => storage.get(key) ?? null, setItem: (key, value) => { storage.set(key, value); } }), now: () => state.now,
+  });
+  const ready = async () => {
+    await new Promise<void>(resolve => setImmediate(resolve));
+    if (gate.getStatus() === 'matched') return;
+    await new Promise<void>((resolve, reject) => {
+      let off = () => {};
+      const timer = setTimeout(() => { off(); reject(Error('Device verification did not complete')); }, 2000);
+      off = controller.subscribeDiagnostics(value => {
+        if (value.device === 'matched') { clearTimeout(timer); off(); resolve(); }
+      });
+    });
+  };
+  return { id, calls, state, host, page, controller, gate, ready };
+}
+
+test('authorized launch initializes UMP and the real device gate without banner geometry; both formats retain their safety and cooldown', async () => {
+  const f = await initializationFixture();
+  const stages = new Set<string>();
+  const off = f.controller.subscribeDiagnostics(value => { stages.add(value.consentInitialization); stages.add(value.deviceInitialization); });
+  try {
+    trusted.setTrustedAuthorization(f.id, null, {});
+    f.controller.setUser(f.id); f.controller.setForeground(true); f.controller.setRouteSupported(true); f.controller.setPlacement(f.id, 'home');
+    await f.ready();
+    for (const stage of ['not-started', 'consent-pending', 'authorization-pending', 'consent-completed', 'authorized']) assert.ok(stages.has(stage), stage);
+    assert.deepEqual(f.calls.filter(c => c !== 'disable'), ['consent', 'device']);
+    assert.equal(f.controller.getDiagnostics().consentInitialization, 'consent-completed');
+    assert.equal(f.controller.getDiagnostics().deviceInitialization, 'authorized');
+    assert.ok(f.controller.getDiagnostics().bannerBlockers.includes('banner-viewport-too-small'));
+    assert.ok(!f.calls.includes('enable'), 'small banner space does not authorize a banner');
+    f.controller.setPlacement(f.id, 'setup');
+    assert.equal(f.controller.completeManualSave(f.controller.beginManualSave(f.id), { persisted: true, queued: false, editing: false }), 'requested');
+    f.state.height = 800; f.controller.refresh();
+    assert.equal(f.calls.filter(c => c === 'enable').length, 1);
+    assert.equal(f.controller.getHouseAds().nativeBannerUser, f.id); assert.equal(f.controller.getHouseAds().bannerUser, null);
+    assert.equal(f.controller.completeSetupAssistDismissal(f.controller.beginSetupAssistDismissal(f.id)), 'suppressed');
+    assert.equal(f.controller.getDiagnostics().lastInterstitialSuppression, 'cooldown');
+    assert.equal(f.controller.getDiagnostics().interstitialCooldownRemainingMs, 600_000);
+    assert.equal(f.controller.getDiagnostics().adDisplayed, 'unknown');
+    assert.equal(f.controller.getDiagnostics().nativeRequestState, 'native-request-dispatched');
+  } finally { off(); f.controller.stop(); trusted.clearTrustedMembership(); }
+});
+
+test('startup membership arrival, Settings closure and native resume retry prerequisites without repeatedly requesting consent', async () => {
+  const f = await initializationFixture();
+  const before = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: f.host });
+  let authChanged = (_id: string | null) => {};
+  let stop = () => {};
+  try {
+    trusted.clearTrustedMembership(); f.state.height = 800; f.state.overlay = true;
+    stop = native.watchNativeAds(f.controller, { session: async () => f.id, onAuthChange: listener => { authChanged = listener; return () => {}; } }, f.host, f.page);
+    f.controller.setRouteSupported(true); f.controller.setPlacement(f.id, 'home');
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.ok(f.controller.getDiagnostics().initializationBlockers.includes('membership-not-verified-rookie'));
+    const closeSettings = f.controller.suspend();
+    trusted.setTrustedAuthorization(f.id, null, {}); // Real membership-updated listener, not a manual refresh.
+    assert.equal(f.controller.getDiagnostics().deviceInitialization, 'waiting-for-prerequisites');
+    assert.ok(f.controller.getDiagnostics().deviceWaitingFor.includes('native-consent-idle'));
+    assert.ok(!f.calls.includes('consent') && !f.calls.includes('device'));
+    closeSettings(); // React can release the suspension before removing its dialog.
+    assert.ok(f.controller.getDiagnostics().initializationBlockers.includes('visible-overlay-or-scan'));
+    f.state.overlay = false; f.controller.refresh(); // The installed DOM safety observer refreshes after dialog removal.
+    await f.ready(); assert.ok(f.calls.includes('enable'));
+    assert.equal(f.calls.filter(c => c === 'consent').length, 1);
+    f.page.visibilityState = 'hidden'; f.page.dispatchEvent(new Event('visibilitychange'));
+    assert.equal(f.gate.getStatus(), 'idle');
+    f.page.visibilityState = 'visible'; f.page.dispatchEvent(new Event('visibilitychange'));
+    assert.ok(f.controller.getDiagnostics().initializationBlockers.includes('membership-not-verified-rookie'));
+    trusted.setTrustedAuthorization(f.id, null, {}); await f.ready();
+    assert.equal(f.calls.filter(c => c === 'consent').length, 1, 'resume rechecks the device without another consent form');
+    assert.equal(f.calls.filter(c => c === 'device').length, 2);
+    authChanged('another-rookie'); trusted.setTrustedAuthorization('another-rookie', null, {});
+    f.controller.setPlacement('another-rookie', 'home');
+    assert.equal(f.controller.getDiagnostics().enabled, false);
+    assert.equal(f.controller.getDiagnostics().consent, 'idle');
+    assert.equal(f.controller.getDiagnostics().device, 'idle');
+    assert.equal(f.calls.filter(c => c === 'consent').length, 1);
+    assert.equal(f.controller.getHouseAds().bannerUser, 'another-rookie');
+  } finally { stop(); trusted.clearTrustedMembership(); if (before) Object.defineProperty(globalThis, 'window', before); else Reflect.deleteProperty(globalThis, 'window'); }
+});
+
+test('initialization reports exact layout, editing, region and device failures instead of treating idle as rejection', async () => {
+  const f = await initializationFixture();
+  try {
+    trusted.setTrustedAuthorization(f.id, null, {}); f.state.layout = false;
+    f.controller.setUser(f.id); f.controller.setForeground(true); f.controller.setRouteSupported(true); f.controller.setPlacement(f.id, 'home');
+    assert.ok(f.controller.getDiagnostics().initializationBlockers.includes('authenticated-layout-unavailable'));
+    f.state.layout = true; f.state.editing = true; f.controller.refresh();
+    assert.ok(f.controller.getDiagnostics().initializationBlockers.includes('editing-input-focused'));
+    f.state.editing = false; f.state.region = 'unknown'; f.controller.refresh();
+    assert.ok(f.controller.getDiagnostics().initializationBlockers.includes('ad-region-unknown'));
+    const release = f.controller.suspend();
+    assert.deepEqual(f.controller.getDiagnostics().lastScreenInitializationBlockers, ['ad-region-unknown']);
+    assert.ok(!f.calls.includes('consent') && !f.calls.includes('device'));
+    f.state.region = 'US'; release(); await f.ready();
+    assert.ok(f.calls.includes('consent') && f.calls.includes('device'));
+    assert.equal(f.controller.getDiagnostics().consentRequestCompleted, true);
+    // An actual unregistered response must fail, never become an approved phone session.
+    f.gate.reset();
+    f.gate.prepare('android', { deviceInfo: async () => ({ platform: 'android', appId: 'app.onlyfast' }) }, () => {});
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(f.gate.getStatus(), 'phone-session-authorization-required');
+    assert.equal(f.controller.getDiagnostics().deviceInitialization, 'authorization-failed');
+    assert.equal(f.controller.getDiagnostics().deviceAllowed, false);
+  } finally { f.controller.stop(); trusted.clearTrustedMembership(); }
 });
 
 test('live production advertising never exposes tester diagnostic controls', () => {

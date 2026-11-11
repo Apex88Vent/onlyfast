@@ -363,7 +363,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
                 <dt>Rookie eligible</dt><dd>{adDiagnostics.eligible ? 'Yes' : 'No'}</dd>
                 <dt>Median bridge available</dt><dd>{adDiagnostics.bridgeAvailable ? 'Yes' : 'No'}</dd>
                 <dt>Device verification</dt><dd className="break-words">{adDiagnostics.device}</dd>
+                <dt>Device initialization</dt><dd>{adDiagnostics.deviceInitialization}</dd>
+                <dt>Device waiting for</dt><dd className="break-words">{adDiagnostics.deviceWaitingFor.join(', ') || 'None'}</dd>
                 <dt>Native consent</dt><dd>{adDiagnostics.consent === 'unverified' ? 'Completed (permission unverified)' : adDiagnostics.consent}</dd>
+                <dt>Consent initialization</dt><dd>{adDiagnostics.consentInitialization}</dd>
+                <dt>Initialization waiting for</dt><dd className="break-words">{adDiagnostics.initializationBlockers.join(', ') || 'None'}</dd>
+                <dt>Last screen prerequisites</dt><dd className="break-words">{adDiagnostics.lastScreenInitializationBlockers.join(', ') || 'None'}</dd>
+                <dt>Native request state</dt><dd>{adDiagnostics.nativeRequestState}</dd>
                 <dt>Banner request sent</dt><dd>{adDiagnostics.bannerCommandDispatched ? 'Yes' : 'No'}</dd>
                 <dt>Last interstitial trigger</dt><dd>{adDiagnostics.lastInterstitialTrigger ?? 'None'}</dd>
                 <dt>Interstitial request sent</dt><dd>{adDiagnostics.lastInterstitialRequestDispatched ? 'Yes' : 'No'}</dd>
@@ -374,6 +380,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
               <p className="mt-2 text-xs text-[#6B7280] break-words">Banner blockers: {adDiagnostics.bannerBlockers.join(', ') || 'none'}.</p>
               {adDiagnostics.device === 'advertising-id-unavailable' && (
                 <p className="mt-2 text-xs text-[#6B7280]">Median did not return a usable advertising ID. This phone cannot be matched to its AdMob test-device registration, so ad requests remain blocked.</p>
+              )}
+              {adDiagnostics.device === 'phone-session-authorization-required' && (
+                <p className="mt-2 text-xs text-[#6B7280]">Median omitted the advertising ID and this account has no approved test-phone login session. Device authorization is required; native ad requests remain blocked.</p>
               )}
               {adDiagnostics.device === 'registered-phone-session' && (
                 <p className="mt-2 text-xs text-[#6B7280]">Authorized using your confirmed test phone’s verified login session because Median omitted its advertising ID. This does not confirm Google test mode. Signing out requires reauthorization.</p>

@@ -200,11 +200,16 @@ test('actual Settings status stays live, reveals no IDs, remains suspended, and 
     assert.equal(value('Advertising mode'), 'android-test');
     assert.equal(value('Median bridge available'), 'Yes'); assert.equal(value('Device verification'), 'advertising-id-unavailable');
     assert.equal(value('Native consent'), 'Completed (permission unverified)'); assert.equal(value('Banner request sent'), 'No');
+    assert.equal(value('Consent initialization'), 'consent-completed');
+    assert.equal(value('Device initialization'), 'authorization-failed');
+    assert.equal(value('Native request state'), 'not-dispatched');
+    assert.match(value('Initialization waiting for'), /overlay-open/);
     assert.match(text(status()[0]), /Settings pauses native banners/);
     assert.doesNotMatch(JSON.stringify(view.toJSON()), /gaid|idfa|installationId|58a1db2f|4b9864ff|b852c516|result/);
     await act(async () => { device = true; deviceStatus = 'matched'; controller.refresh(); });
     assert.equal(value('Device verification'), 'matched'); assert.equal(value('Banner request sent'), 'No');
     assert.ok(!calls.includes('enable'), 'Settings must continue suspending native banners');
+    assert.equal(value('Device initialization'), 'authorized');
     await act(async () => { view.update(React.createElement(Settings, { ...props, isOpen: false })); });
     assert.ok(calls.includes('enable'));
     controller.completeManualSave(controller.beginManualSave(id), { persisted: true, queued: false, editing: false });
