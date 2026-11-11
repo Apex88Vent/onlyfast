@@ -33,9 +33,9 @@ export function verifyReleaseEnvironment(env) {
   for (const key of ['VITE_SUPABASE_URL', 'VITE_database_URL']) {
     assert.ok(!env[key] || env[key] === 'https://thpyjvwtfvfxiufchrxn.supabase.co', `${key} must target production OnlyFast`);
   }
-  assert.ok(!env.VITE_MEDIAN_ADMOB_MODE || ['test', 'production'].includes(env.VITE_MEDIAN_ADMOB_MODE), 'Unknown AdMob mode');
+  assert.ok(!env.VITE_MEDIAN_ADMOB_MODE || ['test', 'android-test', 'production'].includes(env.VITE_MEDIAN_ADMOB_MODE), 'Unknown AdMob mode');
   assert.notEqual(env.VITE_MEDIAN_ADMOB_DIAGNOSTICS, 'true', 'Disable release diagnostic logging');
-  if (env.VITE_MEDIAN_ADMOB_ENABLED === 'true' && env.VITE_MEDIAN_ADMOB_MODE === 'production') {
+  if (env.VITE_MEDIAN_ADMOB_ENABLED === 'true' && ['android-test', 'production'].includes(env.VITE_MEDIAN_ADMOB_MODE)) {
     assert.equal(env.VERCEL_ENV, 'production', 'Live ads require production build provenance');
   }
   if (env.VITE_REVENUECAT_ENABLED === 'true') {

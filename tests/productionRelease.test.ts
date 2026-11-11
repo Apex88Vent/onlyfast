@@ -23,6 +23,9 @@ test('release environment rejects QA backend, diagnostic logging and missing or 
   assert.throws(() => verifyReleaseEnvironment({ VITE_SUPABASE_URL: 'http://127.0.0.1:54321' }), /production OnlyFast/);
   assert.throws(() => verifyReleaseEnvironment({ VITE_MEDIAN_ADMOB_DIAGNOSTICS: 'true' }), /diagnostic/);
   assert.throws(() => verifyReleaseEnvironment({ VITE_MEDIAN_ADMOB_ENABLED: 'true', VITE_MEDIAN_ADMOB_MODE: 'production', VERCEL_ENV: 'preview' }), /provenance/);
+  assert.doesNotThrow(() => verifyReleaseEnvironment({ VITE_MEDIAN_ADMOB_ENABLED: 'true', VITE_MEDIAN_ADMOB_MODE: 'android-test', VITE_MEDIAN_ADMOB_DIAGNOSTICS: 'false', VERCEL_ENV: 'production' }));
+  assert.throws(() => verifyReleaseEnvironment({ VITE_MEDIAN_ADMOB_ENABLED: 'true', VITE_MEDIAN_ADMOB_MODE: 'android-test', VERCEL_ENV: 'preview' }), /provenance/);
+  assert.throws(() => verifyReleaseEnvironment({ VITE_MEDIAN_ADMOB_MODE: 'unrestricted-test' }), /Unknown AdMob mode/);
   assert.throws(() => verifyReleaseEnvironment({ VITE_REVENUECAT_ENABLED: 'true' }), /Android/);
   assert.throws(() => verifyReleaseEnvironment({ VITE_REVENUECAT_ENABLED: 'true', VITE_REVENUECAT_ANDROID_API_KEY: 'goog_example', VITE_REVENUECAT_IOS_API_KEY: 'test_example' }), /iOS/);
 });

@@ -77,7 +77,7 @@ export async function verifyDatabaseSubscriptionUI(db, role, userId, normalId, p
       if (name === '@/lib/testAccount') return { resetTestAccountData: async () => false };
       if (['./SettingsModal', './AppMenu', '@/components/NativeSubscriptionControls'].includes(name)) return component(() => null);
       if (name === 'react-router-dom') return { useNavigate: () => () => {}, Link: ({ to, children, ...props }) => React.createElement('a', { href: to, ...props }, children) };
-      if (name === 'lucide-react') return { Check: () => null, Lock: () => null, ArrowUpRight: () => null };
+      if (name === 'lucide-react') return { Check: () => null, ChevronDown: () => null, Lock: () => null, ArrowUpRight: () => null };
       if (name.startsWith('@/lib/')) return load('lib/' + name.slice(6) + '.ts');
       if (name.startsWith('@/hooks/')) return load('hooks/' + name.slice(8) + '.ts');
       if (name.startsWith('./')) return load((file.startsWith('lib/') ? 'lib/' : 'components/') + name.slice(2) + (file.startsWith('lib/') ? '.ts' : '.tsx'));
