@@ -44,7 +44,12 @@ test('authorized test tiers persist, enforce real quotas/classes, and never writ
     await role('authenticated', a);
     assert.equal(await rpc('get_onlyfast_test_tier'), 'team', 'preserve legacy access until first selection');
     await role('postgres');
-    await verifyDatabaseSubscriptionUI(db, role, a, b);
+    for (const platform of ['web', 'android', 'ios']) {
+      await role('authenticated', a);
+      await rpc('set_onlyfast_test_tier', ['team']);
+      await role('postgres');
+      await verifyDatabaseSubscriptionUI(db, role, a, b, platform);
+    }
     await role('authenticated', a);
     for (const tier of ['rookie', 'pro', 'team', 'rookie', 'pro', 'rookie', 'team', 'rookie']) {
       assert.equal(await rpc('set_onlyfast_test_tier', [tier]), tier);

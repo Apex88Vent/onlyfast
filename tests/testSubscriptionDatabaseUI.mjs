@@ -12,8 +12,8 @@ const require = createRequire(import.meta.url);
 const text = node => typeof node === 'string' ? node : (node.children || []).map(text).join('');
 const component = value => ({ __esModule: true, default: value });
 
-export async function verifyDatabaseSubscriptionUI(db, role, userId, normalId) {
-  const names = ['window', 'document', 'localStorage', 'fetch'];
+export async function verifyDatabaseSubscriptionUI(db, role, userId, normalId, platform = 'web') {
+  const names = ['window', 'document', 'localStorage', 'fetch', 'navigator'];
   const original = names.map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]);
   const user = { id: userId, email: 'test@test.com', user_metadata: { nickname: 'Tester', membership_tier: 'team' } };
   let identity = userId;
@@ -48,6 +48,10 @@ export async function verifyDatabaseSubscriptionUI(db, role, userId, normalId) {
   };
   const doc = new EventTarget(); doc.body = { style: {} };
   Object.defineProperty(globalThis, 'window', { configurable: true, value: new EventTarget() });
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: {
+    userAgent: platform === 'ios' ? 'Mozilla/5.0 (iPhone) median' : platform === 'android' ? 'Mozilla/5.0 (Linux; Android 16) median' : 'Mozilla/5.0',
+    maxTouchPoints: platform === 'web' ? 0 : 5,
+  } });
   Object.defineProperty(globalThis, 'document', { configurable: true, value: doc });
   Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: key => key === 'onlyfast_membership' ? '{"membership_tier":"team"}' : null } });
   globalThis.fetch = async (url, options) => {
@@ -67,7 +71,7 @@ export async function verifyDatabaseSubscriptionUI(db, role, userId, normalId) {
       if (name === './supabase' || name === '@/lib/supabase') return { supabase: client, supabaseUrl: 'https://local.example.invalid', supabaseKey: 'public' };
       if (name.includes('trustedMembership')) return trusted;
       if (name === '@/lib/nativeAds') return { nativeAds: { suspend: () => () => {}, canViewDiagnostics: () => false }, NATIVE_ADS_ROLLOUT_USER_ID: 'different-user' };
-      if (name === '@/lib/paymentVisibility') return { hideExternalPayments: false, isMedianIOSApp: false };
+      if (name === '@/lib/paymentVisibility') return { hideExternalPayments: platform !== 'web', isMedianIOSApp: platform === 'ios' };
       if (name === '@/hooks/useBetaFeatures') return { useBetaFeatures: () => ({ hasBetaFeature: () => true, testerKind: 'experimental', loading: false }) };
       if (name === '@/lib/setupLibrary') return { setupClassLabel: value => value };
       if (name === '@/lib/testAccount') return { resetTestAccountData: async () => false };
@@ -110,7 +114,7 @@ export async function verifyDatabaseSubscriptionUI(db, role, userId, normalId) {
   };
   try {
     trusted.clearTrustedMembership(); await mount(); assertTier('team');
-    for (const tier of ['rookie', 'team', 'pro', 'rookie', 'pro']) {
+    for (const tier of ['rookie', 'pro', 'team', 'rookie', 'pro', 'team']) {
       const label = tier === 'rookie' ? 'Rookie' : tier === 'pro' ? 'Pro' : 'Team';
       const button = view.root.findAllByType('button').find(node => text(node).startsWith(label));
       assert.ok(button);

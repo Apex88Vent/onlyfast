@@ -87,11 +87,11 @@ for (const tier of ['pro', 'team']) test(`plan card ${tier} checks its product, 
   } finally { await act(async () => view.unmount()); }
 });
 
-for (const tier of ['rookie', 'pro', 'team']) test(`Median ${tier} test override never loads offerings, purchases, restores, or syncs RevenueCat`, async () => {
+for (const platform of ['android', 'ios']) for (const tier of ['rookie', 'pro', 'team']) test(`Median ${platform} ${tier} test override never loads offerings, purchases, restores, or syncs RevenueCat`, async () => {
   const status = { ...free(), testTier: tier, isPaid: tier !== 'rookie',
     label: tier === 'team' ? 'Teams' : tier === 'pro' ? 'Pro' : 'Free' };
   for (const onboardingTier of [undefined, 'pro', 'team']) {
-    const { f, Component } = setup(status, true);
+    const { f, Component } = setup(status, true, platform);
     const view = await mount(Component, f, { onboardingTier });
     try {
       assert.match(text(view.root), /Current test tier/);

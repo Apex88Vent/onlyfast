@@ -1,6 +1,8 @@
 # Test account still on Team — production audit, November 10, 2026
 
-**Production remains unresolved.** The previously implemented fix has not been deployed and its database migration has not been applied. This follow-up made targeted local corrections and verified the existing implementation against actual disposable PostgreSQL RPCs. It did not deploy, push, apply a hosted migration, or change the real account's data.
+**Released after this audit:** The production migration and isolated frontend release are now applied, and real-account web switching and logout/login have passed. See [the production release report](TEST_SUBSCRIPTION_PRODUCTION_RELEASE.md) for the source commit, migration-version mapping, integrity checks, and remaining Median device acceptance.
+
+At the time of the historical audit below, production remained unresolved: the previous fix and migration were not live. That investigation made only local corrections and read-only production checks.
 
 ## Live evidence
 
