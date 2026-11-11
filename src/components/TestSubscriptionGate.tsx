@@ -3,6 +3,8 @@ import { syncMembershipFromSubscription } from '@/lib/subscription';
 import { selectTestTier } from '@/lib/testSubscription';
 import { PLANS, type MembershipTier } from '@/lib/membership';
 import { supabase } from '@/lib/supabase';
+import { getTrustedTestTier } from '@/lib/trustedMembership';
+import { useMembershipRevision } from '@/hooks/useMembershipRevision';
 import MembershipComparison from './MembershipComparison';
 
 // Mount checkout controls only after the server has resolved this account.
@@ -10,7 +12,9 @@ export default function TestSubscriptionGate({ userId, onContinue, onBack, child
   userId?: string; onContinue: () => void | Promise<void>; onBack?: () => void; children: React.ReactNode;
 }) {
   const [loadedUser, setLoadedUser] = useState<string | null>(null);
-  const [tier, setTier] = useState<MembershipTier | null>(null);
+  const [isTester, setIsTester] = useState(false);
+  useMembershipRevision();
+  const tier = userId ? getTrustedTestTier(userId) : null;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
@@ -19,14 +23,14 @@ export default function TestSubscriptionGate({ userId, onContinue, onBack, child
   useEffect(() => {
     const generationRef = generation;
     const revision = ++generationRef.current;
-    setLoadedUser(null); setTier(null); setError('');
+    setLoadedUser(null); setIsTester(false); setError('');
     if (userId) void syncMembershipFromSubscription().then(async status => {
       const current = await supabase.auth.getSession();
       if (generation.current !== revision || current.data.session?.user.id !== userId) return;
       if (!status) throw new Error('Membership unavailable');
-      setTier(status.testTier ?? null); setLoadedUser(userId);
-    }).catch(() => {
-      if (generation.current === revision) setError('Could not load your membership. Please retry.');
+      setIsTester(!!status.testTier); setLoadedUser(userId);
+    }).catch(e => {
+      if (generation.current === revision) setError(e instanceof Error ? e.message : 'Could not load your membership. Please retry.');
     });
     return () => { generationRef.current++; };
   }, [userId, retry]);
@@ -38,7 +42,6 @@ export default function TestSubscriptionGate({ userId, onContinue, onBack, child
     try {
       if (next) await selectTestTier(userId, next);
       else await onContinue();
-      if (generation.current === revision && next) setTier(next);
     } catch (e) {
       if (generation.current === revision) setError(e instanceof Error ? e.message : 'Could not save your test tier.');
     } finally {
@@ -48,9 +51,9 @@ export default function TestSubscriptionGate({ userId, onContinue, onBack, child
   };
 
   if (!userId) return <>{children}</>;
-  if (loadedUser !== userId) return <div role="status" className="text-center p-6">
-    {error || 'Checking membership…'}
-    {error && <button className="block mx-auto mt-3 underline" onClick={() => setRetry(value => value + 1)}>Retry</button>}
+  if (loadedUser !== userId || (isTester && !tier)) return <div role="status" className="text-center p-6">
+    {error || (isTester ? 'Your test tier could not be confirmed. Please retry.' : 'Checking membership…')}
+    {(error || isTester) && <button className="block mx-auto mt-3 underline" onClick={() => setRetry(value => value + 1)}>Retry</button>}
   </div>;
   if (!tier) return <>{children}</>;
 

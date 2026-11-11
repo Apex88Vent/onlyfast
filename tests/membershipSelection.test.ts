@@ -45,7 +45,7 @@ test('native-disabled membership shows all plans, free continuation, accurate li
   assert.match(html, />Continue Free<\/button>/);
   assert.equal((html.match(/<button[^>]*disabled[^>]*>Subscription unavailable<\/button>/g) || []).length, 2);
   assert.doesNotMatch(html, /Coming Soon/);
-  assert.match(html, /Free Forever/); assert.match(html, /Localized store prices, subscription terms and any eligible introductory offer/);
+  assert.match(html, /Free Forever/); assert.match(html, /localized price and choose Pro or Teams in the store paywall/);
   assert.match(html, /role="table" aria-label="OnlyFast membership features"/);
   assert.match(html, /Locked/); assert.match(html, /Included/);
   assert.equal(limits.rookie.setupAssistsPerRaceWeekend, 1);
@@ -53,13 +53,15 @@ test('native-disabled membership shows all plans, free continuation, accurate li
   assert.equal(limits.rookie.maxRaceWeekendSetups, 2);
   assert.equal(limits.pro.maxCars, 1); assert.equal(limits.team.maxCars, 'unlimited');
   assert.doesNotMatch(html, /\$5|\$8/);
-  assert.match(html, /Store pricing/);
+  assert.doesNotMatch(html, /Store pricing/);
+  assert.match(html, /Monthly subscription/);
 });
 
 test('reviewed activation removes native Coming Soon and uses the stock paywall for both paid plans', () => {
   const { html } = renderPlans(true, false, true);
   assert.doesNotMatch(html, /Coming Soon|\$5|\$8/);
-  assert.equal((html.match(/View Pro and Teams subscriptions/g) || []).length, 2);
+  assert.match(html, /View Pro store price/);
+  assert.match(html, /View Teams store price/);
   assert.match(html, />Continue Free<\/button>/);
 });
 test('web membership retains separate Pro and Teams checkout choices', () => {
@@ -75,9 +77,9 @@ test('web onboarding offers plan selection without advertising Coming Soon or lo
   assert.match(html, />Continue Free<\/button>/);
 });
 
-test('native onboarding displays reference prices, stock choices, monthly terms and working legal routes', () => {
+test('native onboarding uses localized paywall prices, stock choices, monthly terms and working legal routes', () => {
   const { html } = renderPlans(true, false, true, true);
-  assert.match(html, /\$5/); assert.match(html, /\$8/);
+  assert.doesNotMatch(html, /\$5|\$8|Store pricing/);
   assert.match(html, /Choose Pro/); assert.match(html, /Choose Teams/);
   assert.match(html, /actual localized price and billing terms/);
   assert.match(html, /renew monthly/);
@@ -102,5 +104,30 @@ test('simultaneous verified paid callbacks share one onboarding completion reque
       assert.equal(requests, 1);
       finish(); await Promise.all([first, second]);
     });
+  } finally { await act(async () => view.unmount()); }
+});
+
+test('tapping either native plan card forwards once to its accessible plan action', async () => {
+  const { create, act } = require('react-test-renderer');
+  const { Component } = renderPlans(true, false, true);
+  let view: any;
+  await act(async () => { view = create(React.createElement(Component, { userId: 'user', onComplete: () => {} })); });
+  try {
+    const cards = view.root.findAllByType('div').filter((node: any) => typeof node.props.onClick === 'function');
+    assert.equal(cards.length, 2);
+    for (const card of cards) {
+      let clicked = 0;
+      const event = {
+        target: { closest: () => null },
+        currentTarget: { querySelector: (selector: string) => {
+          assert.equal(selector, '[data-plan-action]');
+          return { click: () => { clicked++; } };
+        } },
+      };
+      card.props.onClick(event);
+      assert.equal(clicked, 1);
+      card.props.onClick({ ...event, target: { closest: () => ({}) } });
+      assert.equal(clicked, 1, 'The real button/link handles its own click without a duplicate');
+    }
   } finally { await act(async () => view.unmount()); }
 });

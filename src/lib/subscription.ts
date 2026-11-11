@@ -38,6 +38,14 @@ export interface AccountStatus {
 
 const ACTIVE_STATUSES = ['active', 'trialing'];
 
+export const TEST_TIER_SETUP_REQUIRED = 'Test subscription switching is unavailable because the required server update has not been applied. No change was confirmed. Please contact OnlyFast support.';
+
+export function testTierServiceError(error: { code?: string; message?: string } | null): Error {
+  if (['PGRST202', '42883', '42703'].includes(error?.code || '')) return new Error(TEST_TIER_SETUP_REQUIRED);
+  if (error?.code === '42501') return new Error('This account is not authorized to select a test subscription. No tier was saved.');
+  return new Error('Test tier could not be saved or confirmed. Please refresh and retry.');
+}
+
 /** Does the (plan,status) pair represent an active paid subscription? */
 export function isActivePaidRow(row: UserSubscriptionRow | null): boolean {
   if (!row) return false;
@@ -150,7 +158,14 @@ export async function syncMembershipFromSubscription(): Promise<AccountStatus | 
   if (latest.session?.user.id !== user.id) return null;
   if (revision !== refreshRevision) return syncMembershipFromSubscription();
   if (verified.error || verified.data.user?.id !== user.id) throw new Error('Could not verify membership identity');
-  if (testOverride.error) throw testOverride.error;
+  if (testOverride.error) {
+    if (['PGRST202', '42883', '42703'].includes(testOverride.error.code)) {
+      // A server without the required schema cannot confirm a cached test tier.
+      if (getTrustedTestTier(user.id)) clearTrustedMembership();
+      throw testTierServiceError(testOverride.error);
+    }
+    throw testOverride.error;
+  }
   const testTier = testOverride.data;
   if (testTier !== null && !['rookie', 'pro', 'team'].includes(testTier)) throw new Error('Invalid test membership');
   setTrustedAuthorization(user.id, row, verified.data.user.app_metadata || {}, testTier);

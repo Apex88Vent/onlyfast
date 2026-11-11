@@ -11,7 +11,7 @@ const require = createRequire(import.meta.url);
 const text = (node: any): string => typeof node === 'string' ? node : (node.children || []).map(text).join('');
 function fixture() {
   const state = { id: 'tester', allowed: true, selected: 'team', writes: [] as any[], events: 0,
-    rpcError: false, fetchGate: null as Promise<void> | null, readGate: null as Promise<void> | null };
+    rpcError: false as boolean | { code: string; message: string }, readGate: null as Promise<void> | null };
   const row = { user_id: 'tester', plan: 'teams', status: 'active', subscription_source: 'revenuecat', revenuecat_expires_at: '2035-01-01' };
   const client = { auth: {
     getSession: async () => ({ data: { session: state.id ? { user: { id: state.id }, access_token: 'jwt-' + state.id } : null } }),
@@ -22,7 +22,7 @@ function fixture() {
       const data = state.allowed ? state.selected : null;
       const gate = state.readGate; state.readGate = null;
       if (gate) await gate;
-      return { data, error: state.rpcError ? new Error('unavailable') : null };
+      return { data, error: typeof state.rpcError === 'object' ? state.rpcError : state.rpcError ? new Error('unavailable') : null };
     } };
   const cache = new Map<string, any>();
   function load(file: string): any {
@@ -35,6 +35,7 @@ function fixture() {
     new Function('require', 'module', 'exports', js)((name: string) => {
       if (name === './supabase' || name === '@/lib/supabase') return { supabase: client, supabaseUrl: 'https://local.example.invalid', supabaseKey: 'public-key' };
       if (name.includes('trustedMembership')) return trusted;
+      if (name.startsWith('@/hooks/')) return load('hooks/' + name.slice('@/hooks/'.length) + '.ts');
       if (name.startsWith('@/lib/')) return load('lib/' + name.slice('@/lib/'.length) + '.ts');
       if (name.startsWith('./')) return load((file.startsWith('lib/') ? 'lib/' : 'components/') + name.slice(2) + (file.startsWith('lib/') ? '.ts' : '.tsx'));
       return require(name);
@@ -134,4 +135,33 @@ test('an older in-flight read cannot overwrite a newly selected test tier', asyn
   await subscription.syncMembershipFromSubscription();
   release(); await old;
   assert.equal(trusted.getTrustedTestTier(), 'rookie');
+});
+
+test('missing test-tier migration is explicit and cannot silently retain a cached Team override', async () => {
+  const { state, load } = fixture();
+  const client = load('lib/subscription.ts');
+  await client.syncMembershipFromSubscription();
+  assert.equal(trusted.getTrustedTestTier(), 'team');
+  for (const code of ['PGRST202', '42883', '42703']) {
+    assert.match(client.testTierServiceError({ code }).message, /required server update has not been applied/);
+  }
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ code: 'PGRST202' }), { status: 404 });
+  try {
+    await assert.rejects(load('lib/testSubscription.ts').selectTestTier('tester', 'rookie'), /required server update has not been applied/);
+    assert.equal(state.selected, 'team', 'no success or optimistic Rookie when a write fails');
+    state.rpcError = { code: 'PGRST202', message: 'Function not found' };
+    await assert.rejects(client.syncMembershipFromSubscription(), /required server update has not been applied/);
+    assert.equal(trusted.getTrustedTestTier(), null, 'an incompatible backend cannot confirm cached Team');
+    const Gate = load('components/TestSubscriptionGate.tsx').default;
+    let view: any;
+    await act(async () => { view = create(React.createElement(Gate, { userId: 'tester', onContinue() {} }, 'Normal checkout')); });
+    assert.match(text(view.root), /required server update has not been applied/);
+    assert.doesNotMatch(text(view.root), /Normal checkout|Current test tier/);
+    await act(async () => view.unmount());
+    state.rpcError = false;
+    globalThis.fetch = async () => new Response('"rookie"');
+    await assert.rejects(load('lib/testSubscription.ts').selectTestTier('tester', 'rookie'), /could not be confirmed/);
+    assert.equal(trusted.getTrustedTestTier(), 'team', 'a successful HTTP response cannot substitute for authoritative readback');
+  } finally { globalThis.fetch = originalFetch; }
 });

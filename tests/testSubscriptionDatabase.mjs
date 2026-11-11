@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 import { stagingSequence } from '../scripts/prepare-staging-database.mjs';
+import { verifyDatabaseSubscriptionUI } from './testSubscriptionDatabaseUI.mjs';
 
 test('authorized test tiers persist, enforce real quotas/classes, and never write billing', async () => {
   const db = new PGlite();
@@ -42,6 +43,9 @@ test('authorized test tiers persist, enforce real quotas/classes, and never writ
     const saved = (await db.query("insert into public.race_setups(user_id,setup_name,setup_type,race_class,notes) values($1,'Keep me','base_template','Dwarf Cars','original') returning *", [a])).rows[0];
     await role('authenticated', a);
     assert.equal(await rpc('get_onlyfast_test_tier'), 'team', 'preserve legacy access until first selection');
+    await role('postgres');
+    await verifyDatabaseSubscriptionUI(db, role, a, b);
+    await role('authenticated', a);
     for (const tier of ['rookie', 'pro', 'team', 'rookie', 'pro', 'rookie', 'team', 'rookie']) {
       assert.equal(await rpc('set_onlyfast_test_tier', [tier]), tier);
       assert.equal(await rpc('onlyfast_subscription_tier', [a]), tier);

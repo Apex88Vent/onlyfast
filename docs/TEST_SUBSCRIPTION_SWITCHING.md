@@ -1,5 +1,7 @@
 # Test subscription switching — local fix, awaiting staging/device acceptance
 
+**Production follow-up:** The live audit confirmed that `onlyfast.app` still serves pre-fix commit `62c48ffd` and the active database lacks the test-tier migration/column/RPCs. The account is still forced to Team there. See [the live audit and exact rollout sequence](TEST_SUBSCRIPTION_LIVE_AUDIT.md). Passing local tests is not production resolution.
+
 Implemented November 10, 2026. No commit, push, deployment, hosted migration, purchase, or production data write was performed for this task.
 
 ## Cause

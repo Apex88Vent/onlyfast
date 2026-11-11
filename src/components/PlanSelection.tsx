@@ -86,7 +86,7 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userI
                 <h3 className={`text-xl font-bold ${isRecommended ? 'text-[#00A8E8]' : 'text-[#1A1B23]'}`}>
                   {plan.tier === 'team' ? 'Teams' : plan.displayName}
                 </h3>
-                <p className="text-3xl font-extrabold text-[#1A1B23] mt-2">
+                <p className={`${hideExternalPayments && plan.tier !== 'rookie' ? 'text-xl' : 'text-3xl'} font-extrabold text-[#1A1B23] mt-2`}>
                   {plan.tier === 'rookie' ? 'FREE' : hideExternalPayments ? 'Monthly subscription' : plan.priceDisplay.split('/')[0]}
                   {plan.tier !== 'rookie' && !hideExternalPayments && (
                     <span className="text-base font-medium text-[#6B7280]"> / month</span>

@@ -5,13 +5,14 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import ts from 'typescript';
 import { NativePurchaseError, NativeOfferingError, NATIVE_MONTHLY_PACKAGES } from '../src/lib/nativePurchaseController.ts';
+import { nativeSubscriptionManagementUrl } from '../src/lib/nativeEnvironment.ts';
 const require = createRequire(process.env.REACT_TEST_RENDERER_MODULE);
 const React = require('react');
 const { create, act } = require(process.env.REACT_TEST_RENDERER_MODULE);
 const text = node => typeof node === 'string' ? node : (node.children || []).map(text).join('');
 const free = () => ({ label: 'Free', plan: 'free', isPaid: false, isAdmin: false, row: null });
-function setup(status, enabled = false) {
-  const f = { status, enabled, storeCalls: [], syncCalls: 0, identity: 'tester', error: null, verified: 0 };
+function setup(status, enabled = false, platform = 'android') {
+  const f = { status, enabled, platform, storeCalls: [], syncCalls: 0, identity: 'tester', error: null, verified: 0 };
   globalThis.window = new EventTarget();
   function compile(file) {
     const code = ts.transpileModule(readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8'), {
@@ -28,6 +29,7 @@ function setup(status, enabled = false) {
     if (name === '@/lib/subscription') return { syncMembershipFromSubscription: async () => f.status,
       fetchUserSubscription: async () => f.status.row, deriveAccountStatus: () => f.status };
     if (name === '@/lib/nativePurchaseController') return { NativePurchaseError, NativeOfferingError, NATIVE_MONTHLY_PACKAGES };
+    if (name === '@/lib/nativeEnvironment') return { nativePlatform: () => f.platform, nativeSubscriptionManagementUrl };
     if (name === '@/lib/nativePurchases') return { nativePurchasesEnabled: enabled,
       nativePurchases: { setUser: async id => { f.storeCalls.push(['identify', id]); },
         checkOffering: async (id, identifier) => { (f.offeringCalls ||= []).push([id, identifier]); if (f.offeringError) throw f.offeringError; },
@@ -42,6 +44,48 @@ const paid = (store, plan = 'pro') => ({ label: plan === 'teams' ? 'Teams' : 'Pr
     revenuecat_expires_at: new Date(Date.now() + 60000).toISOString() } });
 async function mount(Component, f, props = {}) { let view; await act(async () => { view = create(React.createElement(Component, { userId: 'tester', onVerified: () => { f.verified++; }, ...props })); }); return view; }
 async function click(view, label) { const button = view.root.findAllByType('button').find(b => text(b) === label); assert.ok(button); await act(async () => { await button.props.onClick(); }); }
+
+for (const platform of ['android', 'ios', null]) for (const store of ['app_store', 'play_store']) {
+  test(`${platform || 'unknown'} device management ignores the ${store} entitlement, including on paid cards`, async () => {
+    const { f, Component } = setup(paid(store), false, platform);
+    const view = await mount(Component, f, { purchaseOnly: true, planTier: 'team' });
+    try {
+      const links = view.root.findAllByType('a');
+      if (platform) {
+        assert.equal(links.length, 1);
+        assert.equal(links[0].props.href, nativeSubscriptionManagementUrl(platform));
+        assert.equal(links[0].props['data-plan-action'], true);
+      } else {
+        assert.equal(links.length, 0);
+        assert.match(text(view.root), /Could not identify this device/);
+      }
+      assert.deepEqual(f.storeCalls, []);
+      assert.equal(f.syncCalls, 0);
+      assert.deepEqual(f.offeringCalls || [], []);
+    } finally { await act(async () => view.unmount()); }
+  });
+}
+
+for (const tier of ['pro', 'team']) test(`plan card ${tier} checks its product, retries failures and opens the stock paywall`, async () => {
+  const { f, Component } = setup(free(), true);
+  f.offeringError = Error('Store plans could not be loaded. Please retry.');
+  const label = `View ${tier === 'team' ? 'Teams' : 'Pro'} store price`;
+  const view = await mount(Component, f, { purchaseOnly: true, planTier: tier, purchaseLabel: label });
+  try {
+    assert.match(text(view.root), /Store plans could not be loaded/);
+    assert.equal(view.root.findAllByType('button').find(b => b.props['data-plan-action']).props.disabled, true);
+    f.offeringError = null;
+    await click(view, 'Retry loading plans');
+    const button = view.root.findAllByType('button').find(b => text(b) === label);
+    assert.equal(button.props.disabled, false);
+    assert.equal(button.props['data-plan-action'], true);
+    await click(view, label);
+    assert.equal(f.selectedPackage, NATIVE_MONTHLY_PACKAGES[tier]);
+    assert.equal(f.storeCalls.filter(c => c[0] === 'purchase').length, 1);
+    assert.equal(f.syncCalls, 1);
+    assert.equal(f.verified, 0, 'Opening/completing a paywall alone cannot grant access');
+  } finally { await act(async () => view.unmount()); }
+});
 
 for (const tier of ['rookie', 'pro', 'team']) test(`Median ${tier} test override never loads offerings, purchases, restores, or syncs RevenueCat`, async () => {
   const status = { ...free(), testTier: tier, isPaid: tier !== 'rookie',
@@ -71,8 +115,7 @@ for (const status of [free(), paid('stripe'), paid('play_store'), paid('app_stor
       assert.deepEqual(f.storeCalls, []);
       assert.equal(f.syncCalls, status.row?.subscription_source === 'revenuecat' ? 1 : 0);
       if (status.row?.subscription_source === 'revenuecat') {
-        assert.equal(view.root.findByType('a').props.href, status.row.revenuecat_store === 'app_store'
-          ? 'https://apps.apple.com/account/subscriptions' : 'https://play.google.com/store/account/subscriptions');
+        assert.equal(view.root.findByType('a').props.href, 'https://play.google.com/store/account/subscriptions');
       }
     } finally { await act(async () => view.unmount()); }
   });
