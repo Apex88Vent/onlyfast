@@ -6,6 +6,7 @@ import test from 'node:test';
 import ts from 'typescript';
 import * as adsMode from '../src/lib/nativeAdsMode.ts';
 import { HOUSE_BOUNDARIES } from '../src/lib/houseAdMidpoint.ts';
+import * as nativeEnvironment from '../src/lib/nativeEnvironment.ts';
 
 const qaRequire = createRequire(process.env.REACT_TEST_RENDERER_MODULE);
 const React = qaRequire('react');
@@ -169,6 +170,7 @@ test('actual Settings status stays live, reveals no IDs, remains suspended, and 
   });
   const user = { id, email: 'rookie@test.com', user_metadata: {} };
   const Settings = compile('components/SettingsModal.tsx', {
+    '@/lib/nativeEnvironment': nativeEnvironment,
     '@/lib/nativeAds': { nativeAds: controller, NATIVE_ADS_ROLLOUT_USER_ID: id },
     '@/components/NativeSubscriptionControls': { __esModule: true, default: () => null },
     '@/lib/supabase': { supabase: { auth: { getSession: async () => ({ data: { session: { user: { id: currentId } } } }) } } },
@@ -199,7 +201,7 @@ test('actual Settings status stays live, reveals no IDs, remains suspended, and 
     assert.equal(value('Median bridge available'), 'Yes'); assert.equal(value('Device verification'), 'advertising-id-unavailable');
     assert.equal(value('Native consent'), 'Completed (permission unverified)'); assert.equal(value('Banner request sent'), 'No');
     assert.match(text(status()[0]), /Settings pauses native banners/);
-    assert.doesNotMatch(JSON.stringify(view.toJSON()), /gaid|idfa|installationId|58a1db2f|b852c516|result/);
+    assert.doesNotMatch(JSON.stringify(view.toJSON()), /gaid|idfa|installationId|58a1db2f|4b9864ff|b852c516|result/);
     await act(async () => { device = true; deviceStatus = 'matched'; controller.refresh(); });
     assert.equal(value('Device verification'), 'matched'); assert.equal(value('Banner request sent'), 'No');
     assert.ok(!calls.includes('enable'), 'Settings must continue suspending native banners');

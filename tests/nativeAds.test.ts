@@ -661,7 +661,8 @@ test('actual manual-save hook preserves web fallback and avoids native/house sta
 test('rollout account selection uses the resolved Auth UUID; all other accounts retain house fallback', async () => {
   assert.equal(native.nativeAdsRolloutEnabled('true', native.NATIVE_ADS_ROLLOUT_USER_ID), true);
   for (const value of [undefined, 'false', false, true]) assert.equal(native.nativeAdsRolloutEnabled(value, native.NATIVE_ADS_ROLLOUT_USER_ID), false);
-  for (const userId of ['a', 'other-rookie', 'rookie@test.com', null]) {
+  assert.equal(native.NATIVE_ADS_ROLLOUT_USER_ID, '4b9864ff-2195-4be0-83a4-39308446577e');
+  for (const userId of ['a', 'other-rookie', 'test@test.com', 'rookie@test.com', '58a1db2f-8d4d-412e-afe5-abadf57f6ae1', null]) {
     assert.equal(native.nativeAdsRolloutEnabled('true', userId), false);
     const f = await fixture(new Map(), false, { rollout: true });
     f.controller.setUser(userId); f.controller.setPlacement(userId, 'home');

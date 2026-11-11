@@ -88,6 +88,21 @@ test('real PostgreSQL migrations preserve both providers, deduplicate, order and
     assert.equal((await row(a)).status, 'active', 'native sweep preserves the current Stripe status');
     await assert.rejects(apply(b, { ...snapshot('pro', 5000), entitlement_ids: 'not-an-array' }, 'invalid_event'));
     assert.equal((await db.query(`select count(*)::int as count from public.revenuecat_webhook_events where event_id='invalid_event'`)).rows[0].count, 0, 'failed updates roll back event deduplication');
+    // Exercise real provider projection/expiration SQL, not a client tier cache.
+    let lifecycleOffset = 20_000;
+    for (const plan of ['pro', 'teams', 'pro', 'free', 'pro', 'free', 'teams', 'free', 'teams']) {
+      lifecycleOffset += 1000;
+      await apply(b, snapshot(plan, lifecycleOffset), `lifecycle_${lifecycleOffset}`);
+      const current = await row(b);
+      assert.equal(current.plan, plan);
+      assert.equal(current.status, plan === 'free' ? 'expired' : 'active');
+    }
+    await db.exec('select public.onlyfast_expire_revenuecat()');
+    assert.equal((await row(b)).plan, 'teams', 'canceling renewal cannot revoke a still-paid-through provider snapshot');
+    await db.query(`update public.user_subscriptions set revenuecat_expires_at=now()-interval '1 second' where user_id=$1`, [b]);
+    await db.exec('select public.onlyfast_expire_revenuecat()');
+    assert.equal((await row(b)).plan, 'free', 'confirmed expiration returns the provider projection to Rookie');
+    assert.equal((await row(a)).plan, 'teams', 'another valid provider entitlement remains paid');
     await db.exec('grant select on public.user_subscriptions to authenticated; set role authenticated;');
     await db.query(`select set_config('request.jwt.claim.sub', $1, false)`, [a]);
     assert.equal((await db.query('select user_id from public.user_subscriptions')).rows.length, 1, 'RLS only exposes the current account');

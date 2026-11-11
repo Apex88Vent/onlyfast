@@ -8,13 +8,15 @@ export default function NativeSubscriptionControls({ userId, purchaseOnly = fals
 }) {
   const { account, busy, message, loadError, run, offering, offeringError, retryOffering } = useNativeSubscription(userId, { onVerified, onboardingTier, planTier });
   const platform = nativePlatform(navigator.userAgent, navigator.maxTouchPoints);
-  const managementUrl = nativeSubscriptionManagementUrl(platform);
+  const recordedStore = account?.row?.subscription_source === 'revenuecat' ? account.row.revenuecat_store || 'unknown' : undefined;
+  const stripePaid = account?.isPaid && account.row?.subscription_source === 'stripe';
+  const managementUrl = nativeSubscriptionManagementUrl(platform, stripePaid ? 'stripe' : recordedStore);
   const otherStore = (platform === 'android' && account?.row?.revenuecat_store === 'app_store') ||
     (platform === 'ios' && account?.row?.revenuecat_store === 'play_store');
-  const management = managementUrl ? <a data-plan-action={account?.isPaid ? true : undefined}
+  const management = stripePaid ? <p className="text-xs text-[#6B7280]">This subscription was purchased on the web. Open OnlyFast account Settings in a browser to manage or cancel it through the secure billing portal.</p> : managementUrl ? <a data-plan-action={account?.isPaid ? true : undefined}
     href={managementUrl} target="_blank" rel="noopener noreferrer"
     className="inline-block text-sm font-semibold text-[#00A8E8] underline">Manage store subscription</a> :
-    <p role="status" className="text-xs text-[#6B7280]">Could not identify this device's store. Reopen OnlyFast, or open subscription management in your store app.</p>;
+    <p role="status" className="text-xs text-[#6B7280]">Could not identify the subscription store. Refresh your subscription, or manage it in the store where you purchased.</p>;
 
   if (account?.testTier) return <div className="space-y-3 text-center">
     <p className="text-sm font-semibold">Current test tier: {account.testTier === 'team' ? 'Team' : account.testTier === 'pro' ? 'Pro' : 'Rookie'}</p>
@@ -66,7 +68,8 @@ export default function NativeSubscriptionControls({ userId, purchaseOnly = fals
       {planTier && !account?.isPaid && offeringError && <p role="status" className="text-sm text-[#6B7280]">{offeringError}</p>}
       {planTier && !account?.isPaid && offering === 'unavailable' && <button disabled={busy} onClick={retryOffering} className="text-sm font-semibold text-[#00A8E8] underline disabled:opacity-50">Retry loading plans</button>}
       {(!purchaseOnly || (account?.isPaid && account.row?.subscription_source === 'revenuecat')) && management}
-      {otherStore && <p className="text-xs text-[#6B7280]">Your recorded subscription was purchased through {account?.row?.revenuecat_store === 'app_store' ? 'Apple' : 'Google Play'}. This device opens {platform === 'android' ? 'Google Play' : 'Apple'} subscriptions. To change the recorded subscription, use the original store account. Your OnlyFast access is unchanged.</p>}
+      {otherStore && <p className="text-xs text-[#6B7280]">Your recorded subscription was purchased through {account?.row?.revenuecat_store === 'app_store' ? 'Apple' : 'Google Play'}. The management link opens that store. Use the original store account to change it.</p>}
+      {account?.isPaid && <p className="text-xs text-[#6B7280]">Canceling renewal normally keeps paid access through the paid-through period. Rookie begins after confirmed expiration unless another valid entitlement applies. Paid plan changes follow the provider's effective date.</p>}
       {!purchaseOnly && <div className="flex flex-wrap justify-center gap-4">
         <button disabled={!nativePurchasesEnabled || busy} onClick={() => void run('restore')} className="text-sm font-semibold text-[#00A8E8] underline disabled:opacity-50">Restore Purchases</button>
         <button disabled={busy} onClick={() => void run('refresh')} className="text-sm text-[#6B7280] underline disabled:opacity-50">Refresh subscription</button>

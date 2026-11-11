@@ -21,9 +21,12 @@ export function isMedianIOS(userAgent: string, maxTouchPoints = 0): boolean {
   return isMedianUserAgent(userAgent) && nativePlatform(userAgent, maxTouchPoints) === 'ios';
 }
 
-// Management follows this device, never the store on an old/sandbox entitlement.
-// Unknown wrappers must not silently fall back to Apple.
-export function nativeSubscriptionManagementUrl(platform: 'ios' | 'android' | null): string | null {
+// A verified subscription belongs to its purchase store, including across devices.
+// Without a recorded store, use the known platform; never guess for an unknown host.
+export function nativeSubscriptionManagementUrl(platform: 'ios' | 'android' | null, recordedStore?: string | null): string | null {
+  if (recordedStore === 'app_store') return 'https://apps.apple.com/account/subscriptions';
+  if (recordedStore === 'play_store') return 'https://play.google.com/store/account/subscriptions';
+  if (recordedStore) return null;
   if (platform === 'android') return 'https://play.google.com/store/account/subscriptions';
   if (platform === 'ios') return 'https://apps.apple.com/account/subscriptions';
   return null;

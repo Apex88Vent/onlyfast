@@ -46,19 +46,14 @@ async function mount(Component, f, props = {}) { let view; await act(async () =>
 async function click(view, label) { const button = view.root.findAllByType('button').find(b => text(b) === label); assert.ok(button); await act(async () => { await button.props.onClick(); }); }
 
 for (const platform of ['android', 'ios', null]) for (const store of ['app_store', 'play_store']) {
-  test(`${platform || 'unknown'} device management ignores the ${store} entitlement, including on paid cards`, async () => {
+  test(`${platform || 'unknown'} device management follows the verified ${store} purchase, including on paid cards`, async () => {
     const { f, Component } = setup(paid(store), false, platform);
     const view = await mount(Component, f, { purchaseOnly: true, planTier: 'team' });
     try {
       const links = view.root.findAllByType('a');
-      if (platform) {
-        assert.equal(links.length, 1);
-        assert.equal(links[0].props.href, nativeSubscriptionManagementUrl(platform));
-        assert.equal(links[0].props['data-plan-action'], true);
-      } else {
-        assert.equal(links.length, 0);
-        assert.match(text(view.root), /Could not identify this device/);
-      }
+      assert.equal(links.length, 1);
+      assert.equal(links[0].props.href, nativeSubscriptionManagementUrl(platform, store));
+      assert.equal(links[0].props['data-plan-action'], true);
       assert.deepEqual(f.storeCalls, []);
       assert.equal(f.syncCalls, 0);
       assert.deepEqual(f.offeringCalls || [], []);
@@ -115,7 +110,7 @@ for (const status of [free(), paid('stripe'), paid('play_store'), paid('app_stor
       assert.deepEqual(f.storeCalls, []);
       assert.equal(f.syncCalls, status.row?.subscription_source === 'revenuecat' ? 1 : 0);
       if (status.row?.subscription_source === 'revenuecat') {
-        assert.equal(view.root.findByType('a').props.href, 'https://play.google.com/store/account/subscriptions');
+        assert.equal(view.root.findByType('a').props.href, nativeSubscriptionManagementUrl('android', status.row.revenuecat_store));
       }
     } finally { await act(async () => view.unmount()); }
   });

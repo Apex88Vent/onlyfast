@@ -21,6 +21,7 @@ const corsHeaders = {
 // Stripe remains authoritative for rows it owns. Future RevenueCat handling
 // should not downgrade active/trialing rows with subscription_source='stripe'.
 const SUBSCRIPTION_SOURCE_STRIPE = 'stripe';
+const STRIPE_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing', 'canceled', 'past_due', 'unpaid', 'incomplete', 'incomplete_expired', 'paused']);
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -107,10 +108,12 @@ async function resolveSubscriptionDetails(stripeSecretKey: string, subscriptionI
       customerId: null,
       metadataPlan: 'free' as const,
       metadataUserId: null,
+      periodEnd: null,
     };
   }
 
   const subscription = await stripeGet(`subscriptions/${encodeURIComponent(subscriptionId)}`, stripeSecretKey);
+  if (!STRIPE_SUBSCRIPTION_STATUSES.has(subscription?.status)) throw new Error('Stripe subscription status is unavailable.');
   const item = subscription?.items?.data?.[0];
   const priceId = item?.price?.id || subscription?.plan?.id || null;
 
@@ -120,6 +123,7 @@ async function resolveSubscriptionDetails(stripeSecretKey: string, subscriptionI
     customerId: typeof subscription?.customer === 'string' ? subscription.customer : subscription?.customer?.id || null,
     metadataPlan: normalizePlan(subscription?.metadata?.plan),
     metadataUserId: subscription?.metadata?.user_id || subscription?.metadata?.supabase_user_id || null,
+    periodEnd: stripePeriodEnd(subscription),
   };
 }
 
@@ -147,12 +151,21 @@ async function handleCheckoutSessionCompleted(event: any, admin: any, stripeSecr
     stripe_subscription_id: subscriptionId,
     stripe_price_id: details.priceId,
     stripe_checkout_session_id: session.id,
+    current_period_end: details.periodEnd,
     updated_at: new Date().toISOString(),
   }, { onConflict: 'user_id' });
   if (error) throw error;
 }
 
-async function upsertSubscriptionFromStripeSubscription(subscription: any, admin: any, statusOverride?: string | null) {
+type StripeSubscription = {
+  id?: string; customer?: string | { id?: string }; status?: string;
+  current_period_end?: number | null; plan?: { id?: string };
+  metadata?: { plan?: string; user_id?: string; supabase_user_id?: string };
+  items?: { data?: Array<{ price?: { id?: string }; current_period_end?: number | null }> };
+};
+
+async function upsertSubscriptionFromStripeSubscription(subscription: StripeSubscription, admin: ReturnType<typeof createClient>) {
+  if (!subscription.status || !STRIPE_SUBSCRIPTION_STATUSES.has(subscription.status)) throw new Error('Stripe subscription status is unavailable.');
   const subscriptionId = subscription.id || null;
   const customerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id || null;
   const item = subscription?.items?.data?.[0];
@@ -191,18 +204,33 @@ async function upsertSubscriptionFromStripeSubscription(subscription: any, admin
   const { error } = await admin.from('user_subscriptions').upsert({
     user_id: userId,
     plan,
-    status: statusOverride || subscription.status || null,
+    status: subscription.status || null,
     subscription_source: SUBSCRIPTION_SOURCE_STRIPE,
     stripe_customer_id: customerId,
     stripe_subscription_id: subscriptionId,
     stripe_price_id: priceId,
+    // Stripe Basil+ moved billing periods onto subscription items. Keep older
+    // API payloads supported without using a stale database date to revoke access.
+    current_period_end: stripePeriodEnd(subscription),
     updated_at: new Date().toISOString(),
   }, { onConflict: 'user_id' });
   if (error) throw error;
 }
 
-async function handleSubscriptionChanged(event: any, admin: any) {
-  await upsertSubscriptionFromStripeSubscription(event?.data?.object || {}, admin);
+function stripePeriodEnd(subscription: StripeSubscription): string | null {
+  const seconds = subscription?.items?.data?.[0]?.current_period_end ?? subscription?.current_period_end;
+  return typeof seconds === 'number' && Number.isSafeInteger(seconds) && seconds > 0 && seconds <= 8_640_000_000_000
+    ? new Date(seconds * 1000).toISOString() : null;
+}
+
+async function handleSubscriptionChanged(event: { data?: { object?: { id?: unknown } } }, admin: ReturnType<typeof createClient>, stripeSecretKey: string) {
+  const id = event?.data?.object?.id;
+  if (typeof id !== 'string' || !id.startsWith('sub_')) throw new Error('Subscription event missing its subscription ID.');
+  // Signed webhook deliveries can arrive out of order. Reconcile the current
+  // provider state instead of restoring an old active/trialing event snapshot.
+  const current = await stripeGet(`subscriptions/${encodeURIComponent(id)}`, stripeSecretKey);
+  if (current?.id !== id) throw new Error('Stripe returned a different subscription.');
+  await upsertSubscriptionFromStripeSubscription(current, admin);
 }
 
 async function handleInvoicePaymentEvent(event: any, admin: any, stripeSecretKey: string) {
@@ -215,12 +243,9 @@ async function handleInvoicePaymentEvent(event: any, admin: any, stripeSecretKey
   }
 
   const subscription = await stripeGet(`subscriptions/${encodeURIComponent(subscriptionId)}`, stripeSecretKey);
-  const statusOverride =
-    event.type === 'invoice.payment_failed'
-      ? 'past_due'
-      : subscription?.status || 'active';
-
-  await upsertSubscriptionFromStripeSubscription(subscription, admin, statusOverride);
+  // A delayed failure notification must not revoke a subscription that Stripe
+  // now reports renewed/active. Billing status comes from the fetched subscription.
+  await upsertSubscriptionFromStripeSubscription(subscription, admin);
 }
 
 Deno.serve(async (req: Request) => {
@@ -256,7 +281,7 @@ Deno.serve(async (req: Request) => {
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted':
-        await handleSubscriptionChanged(event, admin);
+        await handleSubscriptionChanged(event, admin, stripeSecretKey);
         break;
       case 'invoice.payment_failed':
       case 'invoice.payment_succeeded':

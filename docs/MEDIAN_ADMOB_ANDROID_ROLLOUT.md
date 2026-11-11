@@ -1,5 +1,8 @@
 # Controlled Android AdMob production test — November 10, 2026
 
+Current account/billing findings: see [the subscription audit](ADMOB_TEST_ACCOUNT_SUBSCRIPTION_AUDIT.md).
+Do not activate this rollout while the new tester's Stripe conflict or device authorization is unresolved.
+
 This configuration tests the existing installed Median Android app at the existing
 https://onlyfast.app website. No alternate website, app, SDK, ad unit or native build
 was created. Deployment and production variables have not been changed.
@@ -22,8 +25,8 @@ origins fail closed. Do not use `production` for this controlled rollout: that e
 future release mode has broader eligibility. Development-only console commands remain
 excluded from production builds, including the controlled test build.
 
-Only `rookie@test.com`'s existing resolved Auth UUID
-`58a1db2f-8d4d-412e-afe5-abadf57f6ae1` may pass account selection, and only on Median
+Only `test@test.com`'s existing resolved Auth UUID
+`4b9864ff-2195-4be0-83a4-39308446577e` may pass account selection, and only on Median
 Android. An email comparison or editable metadata cannot authorize advertising. The
 current authenticated identity must also have fresh trusted server-owned Rookie
 membership. Pro/Team/admin/promotional/ambassador/ad-free grants, unknown membership
@@ -34,8 +37,9 @@ override: selecting Rookie in a separate test subscription selector cannot autho
 native ads for an actually paid/admin/promotional account. The existing selector and
 subscription entitlement behavior were not changed by this advertising check.
 
-The existing platform-specific Google test-device hashes and Android-only, separately
-approved signed-session fallback remain mandatory. This mode does not take the broad
+The existing platform-specific Google test-device hashes remain mandatory. The former
+account's signed-session authorization was removed; a new session is not automatically
+authorized. This mode does not take the broad
 production mode's test-device exemption. Missing/zeroed/mismatched IDs, wrong package,
 unknown sessions and unregistered phones cannot dispatch ads. iOS cannot activate in
 this Android test mode. No device/session allowlists were expanded.
@@ -68,16 +72,16 @@ subscription changes were added. Ordinary Rookie manual-save house fallback rema
    Registration could not be re-read in this pass because browser inspection timed out.
 2. Review/commit the existing integration fixes together with these controlled-mode
    changes. Set only the activation values in the table above for Vercel **production**.
-   Keep automatic Git deployment disabled. After registration/configuration approval,
+   Do not push or deploy during the pending billing investigation. After registration/configuration approval,
    manually build/deploy this exact reviewed source to the existing project, retaining
    the previous production deployment as rollback. No deployment occurred in this task.
    Vite variables are embedded at build time; changing them alone does not activate an
    already-built deployment. Confirm the deployment serves `onlyfast.app` and the region
    endpoint reports US before device acceptance.
-3. Open the existing Android app. Keep the previously authorized login session; do not
-   sign out merely to test. Authenticate as the existing Rookie tester if necessary,
-   but a new login may need explicit phone-session reauthorization when Median omits
-   GAID. Do not substitute an installation ID or bypass a failed device check.
+3. Open the existing Android app as `test@test.com`. If Median omits GAID, this new
+   account/login needs separate confirmed phone-session authorization. The former
+   rookie@test.com session cannot authorize it. Do not substitute an installation ID
+   or bypass a failed device or underlying paid-membership check.
 4. Remain on Home and complete any native privacy prompt. Open Settings → AdMob test
    status: expect `android-test`, eligible Yes, bridge Yes, device `matched` or
    `registered-phone-session`, and native consent completed (permission unverified).

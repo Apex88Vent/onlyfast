@@ -15,7 +15,7 @@ export interface MedianAdmobBridge {
 
 export const INTERSTITIAL_COOLDOWN_MS = 600_000;
 // Resolved read-only from production Auth, not an email or editable metadata claim.
-export const NATIVE_ADS_ROLLOUT_USER_ID = '58a1db2f-8d4d-412e-afe5-abadf57f6ae1';
+export const NATIVE_ADS_ROLLOUT_USER_ID = '4b9864ff-2195-4be0-83a4-39308446577e';
 export function nativeAdsRolloutEnabled(value: unknown, userId: string | null): boolean {
   return nativeAdsFeatureEnabled(value) && userId === NATIVE_ADS_ROLLOUT_USER_ID;
 }
@@ -34,9 +34,9 @@ async function identifierHash(value: string) {
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
-// Owner confirmed this existing Samsung login belongs to the registered test phone.
-// This is session authorization, NOT GAID verification or proof of Google test mode.
-const registeredPhoneSessionHash = '758fd88999bde05e6b0e0056ecf55ebc9d9651b8ff208651877141ab7773ab76';
+// The previous authorization belonged to the removed rookie@test.com login.
+// A new account/session needs separate confirmation on the registered phone.
+const registeredPhoneSessionHash: string | null = null;
 type SessionAuth = Pick<typeof supabase.auth, 'getSession' | 'getUser'>;
 export async function verifyNativeAdPhoneSession(auth: SessionAuth, userId: string, expectedHash: string): Promise<boolean> {
   try {
@@ -680,7 +680,7 @@ export class NativeAdsController {
 type NativeAdsWindow = Window & { median?: DeviceHost & { admob?: MedianAdmobBridge }; median_library_ready?: () => void };
 
 const testDevice = new NativeAdTestDevice(registeredDeviceHashes,
-  () => verifyNativeAdPhoneSession(supabase.auth, NATIVE_ADS_ROLLOUT_USER_ID, registeredPhoneSessionHash));
+  registeredPhoneSessionHash ? () => verifyNativeAdPhoneSession(supabase.auth, NATIVE_ADS_ROLLOUT_USER_ID, registeredPhoneSessionHash) : undefined);
 let lastDiagnostic = '';
 const currentAdsMode = () => resolveNativeAdsMode({
   enabled: import.meta.env.VITE_MEDIAN_ADMOB_ENABLED,

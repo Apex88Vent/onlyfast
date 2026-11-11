@@ -9,6 +9,7 @@ import {
   fetchUserSubscription,
 } from '@/lib/subscription';
 import { hideExternalPayments, isMedianIOSApp, nativeBillingMessage } from '@/lib/paymentVisibility';
+import { nativeSubscriptionManagementUrl } from '@/lib/nativeEnvironment';
 import { useBetaFeatures } from '@/hooks/useBetaFeatures';
 import { BETA_FEATURES } from '@/lib/betaFeatures';
 import { Link } from 'react-router-dom';
@@ -488,6 +489,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
                       {account?.row?.subscription_source === 'revenuecat' && (
                         <p className="mt-2 text-xs text-[#6B7280]">
                           Manage or cancel this subscription in the Apple App Store or Google Play account where you purchased it.
+                          {nativeSubscriptionManagementUrl(null, account.row.revenuecat_store || 'unknown') && <>{' '}
+                            <a href={nativeSubscriptionManagementUrl(null, account.row.revenuecat_store || 'unknown')!} target="_blank" rel="noopener noreferrer" className="font-semibold text-[#00A8E8] underline">Manage store subscription</a>
+                          </>}
+                          {' '}Canceling renewal normally retains paid access until expiration; it does not immediately switch you to Rookie.
                         </p>
                       )}
 

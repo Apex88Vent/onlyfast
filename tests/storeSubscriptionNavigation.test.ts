@@ -20,3 +20,12 @@ test('native URL flags cannot select Apple for an unidentified platform', () => 
   assert.equal(nativeSubscriptionManagementUrl(nativePlatform(ua)), null);
   assert.equal(isNativeAppContext('', 'Mozilla Chrome'), false);
 });
+
+test('verified purchase store controls management across devices and web, without guessing unknown providers', () => {
+  for (const platform of ['android', 'ios', null] as const) {
+    assert.equal(nativeSubscriptionManagementUrl(platform, 'app_store'), 'https://apps.apple.com/account/subscriptions');
+    assert.equal(nativeSubscriptionManagementUrl(platform, 'play_store'), 'https://play.google.com/store/account/subscriptions');
+    assert.equal(nativeSubscriptionManagementUrl(platform, 'stripe'), null);
+    assert.equal(nativeSubscriptionManagementUrl(platform, 'unknown'), null);
+  }
+});
