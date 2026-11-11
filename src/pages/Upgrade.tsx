@@ -40,15 +40,14 @@ const Upgrade: React.FC = () => {
   if (!user) return <div className="min-h-screen flex flex-col items-center justify-center bg-[#F5F5F7] px-4 text-center">
     <img src="/onlyfast-logo.png" alt="OnlyFast" className="h-12 mb-5" />
     <h1 className="text-2xl font-bold text-[#1A1B23]">Sign in to choose your plan</h1>
-    <p className="text-[#6B7280] my-4">Choose Rookie for free, Pro, or Teams.</p>
+    <p className="text-[#6B7280] my-4">Choose Teams, Pro, or Rookie for free.</p>
     <button onClick={() => setAuthModalOpen(true)} className="bg-[#00A8E8] text-white px-6 py-3 rounded-xl font-semibold">Sign in / Register</button>
     <button onClick={() => safeBack(navigate)} className="mt-4 text-[#6B7280]">Back to app</button>
     <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
   </div>;
 
-  return <main className="min-h-screen bg-[#F5F5F7] py-10 px-4">
+  return <main className="membership-page min-h-screen bg-[#F5F5F7]">
     <div className="max-w-6xl mx-auto">
-      <img src="/onlyfast-logo.png" alt="OnlyFast" className="h-16 mx-auto mb-8" />
       <PlanSelection key={user.id} userId={user.id} allowWebCheckout onComplete={continueFree} onPaidComplete={() => navigate('/', { replace: true })} onBack={() => safeBack(navigate)} />
       {hideExternalPayments && <div className="max-w-xl mx-auto mt-6 rounded-xl bg-white border p-4">
         <NativeSubscriptionControls key={user.id} userId={user.id} hidePurchase />

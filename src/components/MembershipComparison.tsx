@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, Lock } from 'lucide-react';
+import { Check, ChevronDown, Lock } from 'lucide-react';
 import { PLANS, tierLimits, type TierLimits } from '@/lib/membership';
 
 // Display is derived from the same configuration used by the feature gates.
@@ -19,11 +19,13 @@ const comparisonFeatures: { label: string; key: keyof TierLimits; kind?: 'ads' |
 ];
 
 export default function MembershipComparison() {
-  return <section aria-labelledby="comparison-heading" className="mt-8 rounded-2xl border border-[#E5E7EB] bg-white p-4 sm:p-6">
-    <h2 id="comparison-heading" className="text-xl font-bold text-[#1A1B23]">Compare your plans</h2>
+  return <details className="membership-comparison group">
+    <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded text-lg font-bold text-[#0F172A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0085B7] [&::-webkit-details-marker]:hidden">
+      Compare All Features<ChevronDown aria-hidden="true" className="h-5 w-5 shrink-0 group-open:rotate-180" />
+    </summary>
     <p className="mt-1 mb-4 text-sm text-[#6B7280]">Saved setups remain viewable, including after Rookie’s editing window ends.</p>
     <div role="table" aria-label="OnlyFast membership features">
-      <div role="row" className="hidden sm:grid sm:grid-cols-[2fr_1fr_1fr_1fr] gap-2 py-3 font-bold text-[#1A1B23]">
+      <div role="row" className="sr-only sm:not-sr-only sm:grid sm:grid-cols-[2fr_1fr_1fr_1fr] gap-2 py-3 font-bold text-[#1A1B23]">
         <span role="columnheader">Feature</span>
         {PLANS.map(plan => <span role="columnheader" key={plan.tier}>{plan.displayName}</span>)}
       </div>
@@ -37,7 +39,7 @@ export default function MembershipComparison() {
             value === 'unlimited' ? 'Unlimited' : `${value}${feature.kind === 'weekend' ? ' / weekend' : ''}`;
           return <div role="cell" key={plan.tier} className="min-w-0 text-[#4B5563]">
             <span className="block text-xs font-semibold text-[#6B7280] sm:hidden">{plan.displayName}</span>
-            <span className="inline-flex items-center gap-1 mt-1 sm:mt-0">
+            <span className="inline-flex flex-wrap items-center gap-1 mt-1 sm:mt-0 break-words">
               {text === 'Locked' ? <Lock aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-[#9CA3AF]" /> :
                 text === 'Included' ? <Check aria-hidden="true" className="h-4 w-4 shrink-0 text-[#00A8E8]" /> : null}
               {text}
@@ -47,5 +49,7 @@ export default function MembershipComparison() {
       </div>)}
     </div>
     <p className="mt-4 text-xs text-[#6B7280]">Rookie and Pro use one active car/class at a time. The existing vehicle change rules still apply. Teams covers all supported disciplines; upcoming disciplines remain unavailable.</p>
-  </section>;
+    <p className="mt-2 text-xs text-[#6B7280]">Rookie includes ads, two timing uploads per month and one Setup Assist per race weekend. Its two race weekend saves lock for editing after 48 hours; saved setups remain viewable.</p>
+    <p className="mt-2 text-xs text-[#6B7280]">Setup export, leaderboard uploads and badges, and advanced profiles are locked on Rookie. Pro and Teams unlock them, with no 48-hour editing lock.</p>
+  </details>;
 }

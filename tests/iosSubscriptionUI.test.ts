@@ -124,7 +124,7 @@ for (const environment of environments) {
       assert.match(subscription, /View Plans and included features/);
       assert.match(upgrade, /Choose Your OnlyFast Plan Rookie Pro Teams Continue Free/);
       if (label !== 'Admin') {
-        assert.match(subscription, environment.native ? /Existing native subscription controls/ : /Upgrade Subscription/);
+        assert.match(subscription, environment.native ? /Existing native subscription controls/ : label === 'Teams' ? /View Subscription/ : label === 'Pro' ? /Upgrade to Teams/ : /Upgrade Subscription/);
       }
       if (environment.native) assert.doesNotMatch(upgrade, /Existing Stripe checkout/);
 

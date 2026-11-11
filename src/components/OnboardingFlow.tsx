@@ -143,14 +143,16 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error, user
 
 
   return (
-    <div className="min-h-screen bg-[#F5F5F7] flex items-center justify-center px-4 py-8 sm:py-12" role="main">
-      <div className="w-full max-w-4xl" id="main-content">
-        {/* Logo - displayed at 1.5x (h-[120px] -> h-[180px]); w-auto keeps aspect ratio */}
-        <div className="text-center mb-7 sm:mb-9">
+    <div className={`min-h-screen flex items-center justify-center ${step === 4 ? 'membership-page bg-[#F5F5F7]' : 'bg-[#F5F5F7] px-4 py-8 sm:py-12'}`} role="main">
+      <div className={`w-full ${step === 4 ? 'relative max-w-6xl' : 'max-w-4xl'}`} id="main-content">
+        {/* Keep the existing brand header compact on the plan selection step. */}
+        <div className={step === 4 ? 'membership-brand' : 'text-center mb-7 sm:mb-9'}>
           <img
             src="/onlyfast-logo.png"
             alt="OnlyFast Setup Assist"
-            className="h-28 sm:h-36 w-auto mx-auto mb-2"
+            width="1250"
+            height="455"
+            className={step === 4 ? 'w-60 max-w-full h-auto mx-auto mb-2' : 'h-28 sm:h-36 w-auto mx-auto mb-2'}
           />
 
           <p className="text-[#6B7280] text-base sm:text-lg">Race Smarter. Finish Faster.</p>

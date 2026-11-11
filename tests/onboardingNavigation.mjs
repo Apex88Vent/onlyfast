@@ -46,6 +46,7 @@ function compile(file, modules = {}) {
       preload: () => Promise.resolve(),
     }) };
     if (name.startsWith('react/')) return qaRequire(name);
+    if (name === './MembershipPlanCard') return { __esModule: true, default: compile('components/MembershipPlanCard.tsx') };
     if (name === 'lucide-react') return new Proxy({}, { get: () => icon });
     if (name === '@/hooks/useBetaFeatures') return { useBetaFeatures: () => ({ ...fixture.access, loading: fixture.betaLoading, hasBetaFeature: () => false }) };
     if (name === '@/lib/classConfigs') return configs;

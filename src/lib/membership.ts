@@ -75,51 +75,56 @@ export interface PlanMeta {
   recommended?: boolean;
   description: string;
   synopsis: string[];
+  supportingText?: string;
 }
 
 export const PLANS: PlanMeta[] = [
+  {
+    tier: 'team',
+    displayName: 'Teams',
+    priceDisplay: '$8/month',
+    buttonText: 'Go Unlimited',
+    description: 'One membership. Every car in your garage.',
+    synopsis: [
+      'Everything in Pro',
+      'Unlimited cars & classes',
+      'Multiple racing disciplines',
+      'Full tracking across your entire garage',
+    ],
+    supportingText: 'Just $3 more per month than Pro.',
+  },
+  {
+    tier: 'pro',
+    displayName: 'Pro',
+    priceDisplay: '$5/month',
+    badge: 'Best for Solo Racers',
+    buttonText: 'Unlock Pro',
+    recommended: true,
+    description: 'Everything you need to race smarter.',
+    synopsis: [
+      'Unlimited setups & race weekend tracking',
+      'Unlimited timing uploads',
+      'Unlimited Setup Assist',
+      'No ads',
+      'Export your setups',
+      'Full leaderboard participation',
+    ],
+  },
   {
     tier: 'rookie',
     displayName: 'Rookie',
     priceDisplay: 'FREE',
     badge: 'Free Forever',
     buttonText: 'Continue Free',
-    description: 'Everything you need to get started with OnlyFast and track your race weekends.',
+    description: 'Start tracking your race weekends for free.',
     synopsis: [
-      '1 car, 1 base setup',
-      '2 race weekend setups (lock after 48h)',
-      '2 timing uploads / month; 1 Setup Assist / race weekend',
-      'View leaderboards (ads enabled)',
+      'One active car/class',
+      'One base setup',
+      'Two race weekend saves',
+      'Limited timing uploads and Setup Assist',
+      'Leaderboard viewing',
     ],
-  },
-  {
-    tier: 'pro',
-    displayName: 'Pro',
-    priceDisplay: '$5/month',
-    badge: 'Most Popular',
-    buttonText: 'Choose Pro',
-    recommended: true,
-    description: 'Unlock the full OnlyFast experience for your race car.',
-    synopsis: [
-      'No ads — built for one car',
-      'Unlimited base & race weekend setups',
-      'Unlimited timing uploads & setup assists',
-      'No 48-hour editing lock; setup exports',
-      'Leaderboard uploads, badges & advanced profile',
-    ],
-  },
-  {
-    tier: 'team',
-    displayName: 'Teams',
-    priceDisplay: '$8/month',
-    buttonText: 'Choose Teams',
-    description: 'Everything in Pro, with the freedom to manage unlimited cars and classes.',
-    synopsis: [
-      'Everything in Pro, no ads',
-      'Unlimited cars & classes',
-      'Unlimited tracking across all cars/classes',
-      'Full leaderboard participation everywhere',
-    ],
+    supportingText: 'No payment information required.',
   },
 ];
 

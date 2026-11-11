@@ -1004,7 +1004,13 @@ test('actual controlled production singleton authorizes only the Android tester 
     trusted.clearTrustedMembership(); controlled.setForeground(true); controlled.setRouteSupported(true);
     controlled.setUser(id); controlled.setPlacement(id, 'home');
     await settle(); assert.ok(!calls.includes('enable') && !calls.includes('consent'), 'unknown membership cannot authorize the tester');
-    trusted.setTrustedAuthorization(id, null, {}); controlled.refresh(); await settle();
+    const recordedTrial = { ...paid('pro'), status: 'trialing', current_period_end: '2026-07-06T19:30:43Z' };
+    trusted.setTrustedAuthorization(id, recordedTrial, {}, 'rookie'); controlled.refresh(); await settle();
+    assert.equal(controlled.getDiagnostics().eligible, false, 'a past date and simulated Rookie selection cannot override an unconfirmed Stripe trial');
+    assert.ok(!calls.includes('enable') && !calls.includes('interstitial'));
+    // Mirror the provider-confirmed canceled state; never fabricate an ad grant.
+    trusted.setTrustedAuthorization(id, { ...recordedTrial, status: 'canceled' }, {}, 'rookie'); controlled.refresh(); await settle();
+    assert.equal(controlled.getDiagnostics().eligible, true, 'provider-confirmed cancellation removes the stale paid exclusion');
     assert.equal(controlled.getDiagnostics().mode, 'android-test');
     assert.equal(controlled.getDiagnostics().device, 'matched');
     assert.equal(calls.filter(call => call === 'enable').length, 1);

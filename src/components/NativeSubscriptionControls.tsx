@@ -47,6 +47,9 @@ export default function NativeSubscriptionControls({ userId, purchaseOnly = fals
   </div>;
 
   return <div className="space-y-3 text-center" aria-busy={busy}>
+    {purchaseOnly && account?.isPaid && <p role="status" className="text-sm font-semibold text-[#0F172A]">
+      {account.isAdmin ? 'Your admin access includes all features.' : account.plan === (planTier === 'team' ? 'teams' : 'pro') ? `Current plan: ${account.label}. Your membership is active.` : account.plan === 'teams' ? 'Included in your active Teams membership.' : 'To upgrade from Pro to Teams, manage your plan through your current provider.'}
+    </p>}
     {!purchaseOnly && <p className="text-sm font-semibold text-[#1A1B23]">
       {account ? `Current plan: ${account.label === 'Free' ? 'Rookie' : account.label}` :
         loadError ? 'Could not load your subscription.' : 'Loading subscription…'}

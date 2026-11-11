@@ -1,7 +1,8 @@
 # Controlled Android AdMob production test — November 10, 2026
 
 Current account/billing findings: see [the subscription audit](ADMOB_TEST_ACCOUNT_SUBSCRIPTION_AUDIT.md).
-Do not activate this rollout while the new tester's Stripe conflict or device authorization is unresolved.
+The Stripe mirror conflict is now resolved; see [the reconciliation report](ADMOB_TESTER_RECONCILIATION.md).
+Device authorization and the production master flag still gate native requests.
 
 This configuration tests the existing installed Median Android app at the existing
 https://onlyfast.app website. No alternate website, app, SDK, ad unit or native build

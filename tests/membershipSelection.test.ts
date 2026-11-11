@@ -39,7 +39,6 @@ function renderPlans(native: boolean, allowWebCheckout = false, enabled = false,
 test('native-disabled membership shows all plans, free continuation, accurate limits, accessible locks', () => {
   const { html, limits } = renderPlans(true);
   assert.match(html, /Choose Your OnlyFast Plan/);
-  assert.match(html, /Start racing for free, or unlock more features with Pro and Teams/);
   for (const plan of ['Rookie', 'Pro', 'Teams']) assert.match(html, new RegExp('>' + plan + '<'));
   assert.doesNotMatch(html.match(/<button[^>]*>Continue Free<\/button>/)?.[0] || 'missing', /\sdisabled(?:=|>)/);
   assert.match(html, />Continue Free<\/button>/);
@@ -52,35 +51,40 @@ test('native-disabled membership shows all plans, free continuation, accurate li
   assert.match(html, /1 \/ weekend/);
   assert.equal(limits.rookie.maxRaceWeekendSetups, 2);
   assert.equal(limits.pro.maxCars, 1); assert.equal(limits.team.maxCars, 'unlimited');
-  assert.doesNotMatch(html, /\$5|\$8/);
+  assert.match(html, /\$5/); assert.match(html, /\$8/);
+  assert.match(html, /prices shown in USD/);
   assert.doesNotMatch(html, /Store pricing/);
-  assert.match(html, /Monthly subscription/);
+  assert.match(html, /Compare All Features/);
+  assert.match(html, /<details/);
+  assert.match(html, /Best for Solo Racers/);
+  assert.doesNotMatch(html, /Most Popular/);
+  assert.deepEqual([...html.matchAll(/data-plan="([^"]+)"/g)].map(match => match[1]), ['team', 'pro', 'rookie']);
 });
 
 test('reviewed activation removes native Coming Soon and uses the stock paywall for both paid plans', () => {
   const { html } = renderPlans(true, false, true);
-  assert.doesNotMatch(html, /Coming Soon|\$5|\$8/);
-  assert.match(html, /View Pro store price/);
-  assert.match(html, /View Teams store price/);
+  assert.doesNotMatch(html, /Coming Soon/);
+  assert.match(html, /Unlock Pro/);
+  assert.match(html, /Go Unlimited/);
   assert.match(html, />Continue Free<\/button>/);
 });
 test('web membership retains separate Pro and Teams checkout choices', () => {
   const { html } = renderPlans(false, true);
-  assert.match(html, /Choose Pro/); assert.match(html, /Choose Teams/);
+  assert.match(html, /Unlock Pro/); assert.match(html, /Go Unlimited/);
   assert.doesNotMatch(html, /Coming Soon/);
   assert.match(html, /\$5/); assert.match(html, /\$8/);
 });
 test('web onboarding offers plan selection without advertising Coming Soon or loading Stripe', () => {
   const { html } = renderPlans(false, false, false, true);
   assert.doesNotMatch(html, /Coming Soon|stripe-buy-button/);
-  assert.match(html, />Choose Pro<|>Choose Teams</);
+  assert.match(html, />Unlock Pro<|>Go Unlimited</);
   assert.match(html, />Continue Free<\/button>/);
 });
 
 test('native onboarding uses localized paywall prices, stock choices, monthly terms and working legal routes', () => {
   const { html } = renderPlans(true, false, true, true);
-  assert.doesNotMatch(html, /\$5|\$8|Store pricing/);
-  assert.match(html, /Choose Pro/); assert.match(html, /Choose Teams/);
+  assert.match(html, /prices shown in USD/);
+  assert.match(html, /Unlock Pro/); assert.match(html, /Go Unlimited/);
   assert.match(html, /actual localized price and billing terms/);
   assert.match(html, /renew monthly/);
   for (const path of ['/privacy-policy', '/terms-of-service']) assert.match(html, new RegExp(`href="${path}"`));
@@ -96,7 +100,7 @@ test('simultaneous verified paid callbacks share one onboarding completion reque
   let view: any;
   await act(async () => { view = create(React.createElement(Component, { userId: 'user', onboarding: true, onComplete: async () => { requests++; await saved; } })); });
   try {
-    const paid = view.root.findAllByType('button').filter((b: any) => ['Choose Pro', 'Choose Teams'].includes(b.children.join('')));
+    const paid = view.root.findAllByType('button').filter((b: any) => ['Unlock Pro', 'Go Unlimited'].includes(b.children.join('')));
     assert.equal(paid.length, 2);
     await act(async () => {
       const first = paid[0].props.onClick();
@@ -113,7 +117,7 @@ test('tapping either native plan card forwards once to its accessible plan actio
   let view: any;
   await act(async () => { view = create(React.createElement(Component, { userId: 'user', onComplete: () => {} })); });
   try {
-    const cards = view.root.findAllByType('div').filter((node: any) => typeof node.props.onClick === 'function');
+    const cards = view.root.findAllByType('article').filter((node: any) => typeof node.props.onClick === 'function');
     assert.equal(cards.length, 2);
     for (const card of cards) {
       let clicked = 0;

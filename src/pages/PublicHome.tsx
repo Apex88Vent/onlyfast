@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { PLANS } from '@/lib/membership';
+import MembershipPlanCard from '@/components/MembershipPlanCard';
 import './public-home.css';
 
 const storeLinks = {
@@ -267,50 +268,20 @@ export default function PublicHome() {
           <div className="of-container">
             <div className="of-section-heading">
               <div>
-                <p className="of-eyebrow">02 / FIND YOUR PACE</p>
+                <p className="of-eyebrow">MEMBERSHIP</p>
                 <h2 id="of-pricing-title">
-                  YOUR RACING.
-                  <br />
-                  YOUR PLAN.
+                  CHOOSE YOUR PLAN.
                 </h2>
               </div>
               <p>
                 Start with the essentials. Get more room for your race car, or manage every car and
-                class with Team.
+                class with Teams.
               </p>
             </div>
-            <div className="of-plan-grid">
-              {PLANS.map((plan) => (
-                <article
-                  className={`of-plan ${plan.recommended ? 'of-plan-featured' : ''}`}
-                  key={plan.tier}
-                >
-                  <div className="of-plan-heading">
-                    <h3>{plan.tier.toUpperCase()}</h3>
-                    {plan.recommended && <span>MOST POPULAR</span>}
-                  </div>
-                  <p className="of-plan-price">
-                    {plan.tier === 'rookie' ? 'Free' : plan.priceDisplay.split('/')[0]}
-                    {plan.tier !== 'rookie' && <span>/month</span>}
-                  </p>
-                  <p className="of-plan-description">{plan.description}</p>
-                  <Link
-                    className={`of-button ${plan.recommended ? 'of-button-primary' : 'of-button-light'}`}
-                    to={plan.tier === 'rookie' ? '/app' : '/upgrade'}
-                  >
-                    {plan.tier === 'rookie' ? 'Start with Rookie' : 'View membership options'}
-                    <ArrowRight size={16} aria-hidden="true" />
-                  </Link>
-                  <ul>
-                    {plan.synopsis.map((line) => (
-                      <li key={line}>
-                        <Check size={16} aria-hidden="true" />
-                        <span>{line}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </article>
-              ))}
+            <div className="membership-plans">
+              {PLANS.map(plan => <MembershipPlanCard key={plan.tier} plan={plan}>
+                <Link data-plan-action to={plan.tier === 'rookie' ? '/app' : '/upgrade'}>{plan.buttonText}</Link>
+              </MembershipPlanCard>)}
             </div>
             <p className="of-pricing-note">
               Monthly membership pricing in USD. Store prices and available offers are shown in the

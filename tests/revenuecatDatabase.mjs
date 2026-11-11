@@ -103,6 +103,17 @@ test('real PostgreSQL migrations preserve both providers, deduplicate, order and
     await db.exec('select public.onlyfast_expire_revenuecat()');
     assert.equal((await row(b)).plan, 'free', 'confirmed expiration returns the provider projection to Rookie');
     assert.equal((await row(a)).plan, 'teams', 'another valid provider entitlement remains paid');
+    const tester = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    await db.query('insert into auth.users values ($1)', [tester]);
+    await db.query(`insert into public.user_subscriptions(user_id,plan,status,subscription_source,stripe_customer_id,current_period_end)
+      values ($1,'pro','trialing','stripe','cus_test_fixture',now()-interval '30 days')`, [tester]);
+    assert.equal((await row(tester)).status, 'trialing', 'an old date alone cannot revoke a provider-owned entitlement');
+    await db.query(`update public.user_subscriptions set status='canceled',subscription_source='stripe'
+      where user_id=$1 and status='trialing'`, [tester]);
+    const reconciled = await row(tester);
+    assert.equal(reconciled.status, 'canceled'); assert.equal(reconciled.stripe_status, 'canceled');
+    assert.equal(reconciled.stripe_plan, 'pro', 'reconciliation preserves historical product data');
+    assert.equal((await row(a)).status, 'active', 'reconciling the tester cannot modify a genuine active customer');
     await db.exec('grant select on public.user_subscriptions to authenticated; set role authenticated;');
     await db.query(`select set_config('request.jwt.claim.sub', $1, false)`, [a]);
     assert.equal((await db.query('select user_id from public.user_subscriptions')).rows.length, 1, 'RLS only exposes the current account');

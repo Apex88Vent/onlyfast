@@ -1,5 +1,12 @@
 # AdMob tester and subscription lifecycle audit — November 10, 2026
 
+**Follow-up:** Stripe was subsequently connected and verified the tester's sole
+subscription was canceled/ended July 6. After reporting that finding, the tester's
+Supabase status mirror was conditionally reconciled through its existing server-side
+provider projection. No Stripe billing change was made. See
+[the reconciliation report](ADMOB_TESTER_RECONCILIATION.md) for current eligibility.
+The initial read-only findings below are retained as the before-state.
+
 Primary main checkout; starting commit `d9aabc80`. Live investigation was read-only.
 No subscription, Auth grant, test-tier selection, customer purchase, RevenueCat setting,
 production flag, price, product ID, saved setup or native package was modified.

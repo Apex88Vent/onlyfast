@@ -6,10 +6,11 @@ import { supabase } from '@/lib/supabase';
 import { getTrustedTestTier } from '@/lib/trustedMembership';
 import { useMembershipRevision } from '@/hooks/useMembershipRevision';
 import MembershipComparison from './MembershipComparison';
+import MembershipPlanCard from './MembershipPlanCard';
 
 // Mount checkout controls only after the server has resolved this account.
-export default function TestSubscriptionGate({ userId, onContinue, onBack, children }: {
-  userId?: string; onContinue: () => void | Promise<void>; onBack?: () => void; children: React.ReactNode;
+export default function TestSubscriptionGate({ userId, onContinue, onBack, children, showBrand = true }: {
+  userId?: string; onContinue: () => void | Promise<void>; onBack?: () => void; children: React.ReactNode; showBrand?: boolean;
 }) {
   const [loadedUser, setLoadedUser] = useState<string | null>(null);
   const [isTester, setIsTester] = useState(false);
@@ -58,15 +59,18 @@ export default function TestSubscriptionGate({ userId, onContinue, onBack, child
   if (!tier) return <>{children}</>;
 
   return <section aria-label="Test subscription selection" className="space-y-5">
+    {showBrand && <div className="membership-brand"><img src="/onlyfast-logo.png" alt="OnlyFast" width="1250" height="455" /><p>Race Smarter. Finish Faster.</p></div>}
     {onBack && <button onClick={onBack} disabled={busy} className="text-[#6B7280] underline">Back</button>}
     <h2 className="text-2xl font-bold text-[#1A1B23]">Test subscription</h2>
     <p className="text-[#6B7280]">Choose a tier for this authorized test account. No payment required. Your selection stays saved when you sign out.</p>
     <p role="status" className="font-semibold">Current test tier: {tier === 'team' ? 'Team' : tier === 'pro' ? 'Pro' : 'Rookie'}</p>
-    <div className="grid gap-4 md:grid-cols-3" aria-busy={busy}>
-      {PLANS.map(plan => <button key={plan.tier} disabled={busy} aria-pressed={tier === plan.tier}
-        onClick={() => void run(plan.tier)} className="rounded-xl border-2 border-[#00A8E8] bg-white p-5 text-[#1A1B23] font-semibold disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-[#00A8E8]">
-        {plan.tier === 'team' ? 'Team' : plan.displayName}{tier === plan.tier ? ' — Selected' : ''}
-      </button>)}
+    <div className="membership-plans" aria-busy={busy}>
+      {PLANS.map(plan => <MembershipPlanCard key={plan.tier} plan={plan}>
+        <button data-plan-action disabled={busy} aria-pressed={tier === plan.tier}
+          onClick={() => void run(plan.tier)}>
+          {plan.displayName}{tier === plan.tier ? ' — Selected' : ' — Select test tier'}
+        </button>
+      </MembershipPlanCard>)}
     </div>
     {error && <p role="alert" className="text-red-600">{error}</p>}
     <button onClick={() => void run()} disabled={busy} className="rounded-xl bg-[#00A8E8] px-6 py-3 font-semibold text-white disabled:opacity-50">{busy ? 'Saving…' : 'Continue'}</button>

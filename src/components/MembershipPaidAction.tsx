@@ -25,7 +25,7 @@ export default function MembershipPaidAction({ userId, tier, onVerified, checkou
 
   if (hideExternalPayments) return <NativeSubscriptionControls userId={userId} purchaseOnly onVerified={onVerified}
     planTier={tier} onboardingTier={onboarding ? tier : undefined}
-    purchaseLabel={onboarding ? `Choose ${tier === 'team' ? 'Teams' : 'Pro'}` : `View ${tier === 'team' ? 'Teams' : 'Pro'} store price`} />;
+    purchaseLabel={tier === 'team' ? 'Go Unlimited' : 'Unlock Pro'} />;
 
   const choose = async () => {
     if (pending.current) return;
@@ -46,12 +46,12 @@ export default function MembershipPaidAction({ userId, tier, onVerified, checkou
 
   return <div className="space-y-3">
     {account?.isPaid ? <>
-      <p className="text-sm text-[#6B7280]">Your membership already includes paid access. Manage plan changes in Account Settings through your current provider.</p>
+      <p className="text-sm text-[#6B7280]">{account.isAdmin ? 'Your admin access includes all features.' : account.plan === (tier === 'team' ? 'teams' : 'pro') ? `Current plan: ${account.label}. Your membership is active.` : account.plan === 'teams' ? 'Included in your active Teams membership.' : 'Your Pro membership is active. Teams adds unlimited cars and classes.'} Manage plan changes in Account Settings through your current provider.</p>
       {onboarding && <button disabled={busy} onClick={() => void choose()} className="w-full rounded-xl bg-[#00A8E8] text-white py-3 font-semibold disabled:opacity-50">{busy ? 'Please wait…' : 'Continue with current membership'}</button>}
     </> : checkoutSelected && !allowWebCheckout ? <p role="status" className="text-sm text-[#6B7280]">Store subscriptions are available in the OnlyFast Android and iOS apps. Continue with Rookie here, or open the mobile app to subscribe.</p> : checkoutSelected ?
       <StripeBuyButton plan={tier === 'team' ? 'teams' : 'pro'} clientReferenceId={userId} /> :
-      <button disabled={busy || !account} onClick={() => void choose()} className="w-full rounded-xl bg-[#00A8E8] text-white py-3 font-semibold disabled:opacity-50">
-        {tier === 'pro' ? 'Choose Pro' : 'Choose Teams'}
+      <button data-plan-action disabled={busy || !account} onClick={() => void choose()} className="w-full rounded-xl bg-[#00A8E8] text-white py-3 font-semibold disabled:opacity-50">
+        {tier === 'pro' ? 'Unlock Pro' : 'Go Unlimited'}
       </button>}
     {message && <p role="status" className="text-sm text-[#6B7280]">{message}</p>}
   </div>;
