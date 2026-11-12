@@ -153,6 +153,16 @@ all remaining test files in a second step; neither group omits or skips tests.
 This isolates diagnostics and contention. The external shutdown cause remains
 unconfirmed until a hosted run completes successfully.
 
+Subsequent instrumentation isolated a concrete cost in the deliberately
+corrupted-migration check: `assert.deepEqual` constructed a huge Buffer/SQL diff
+before its rejection could be caught. That path alone took approximately 17
+seconds locally. `prepare-native-sandbox.mjs` now uses `Buffer.equals()` plus a
+concise drift assertion. Every byte is still checked, and the unchanged drift
+regression still rejects modified SQL. The preparation test fell to about 183 ms
+locally, with all ten tests in that file completing in about one second. This
+also avoids putting complete SQL buffer dumps into errors. Hosted CI must still
+verify the fix; the previous runner shutdown itself is not proof of its cause.
+
 Local Phase 1B validation: **579 tests passed, zero failed/skipped**; application
 and node/Vite TypeScript checks passed; normal optimized application and preview
 builds passed (the normal application retains its existing large-chunk warning). Native

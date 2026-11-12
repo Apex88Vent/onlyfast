@@ -17,8 +17,10 @@ export async function prepareNativeSandbox(workspace, apiUrl = 'http://127.0.0.1
   const sequence = await stagingSequence();
   assert.deepEqual(manifest.entries, sequence.entries.map(({ sql, ...e }) => e));
   for (const entry of sequence.entries) {
-    assert.deepEqual(await readFile(path.join(root, 'supabase/migrations', entry.file)), entry.sql,
-      `Staging migration drift: ${entry.file}`);
+    const actual = await readFile(path.join(root, 'supabase/migrations', entry.file));
+    // Compare every byte without constructing an enormous SQL/Buffer diff on
+    // rejection. The drift regression intentionally exercises this error path.
+    assert.ok(actual.equals(entry.sql), `Staging migration drift: ${entry.file}`);
   }
   const status = JSON.parse(await readFile(path.join(root, 'local-status.json'), 'utf8'));
   assert.equal(new URL(status.API_URL).origin, 'http://127.0.0.1:54321');
