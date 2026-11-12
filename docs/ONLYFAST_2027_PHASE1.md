@@ -2,6 +2,23 @@
 
 November 12, 2026. Development preview only. Production release is prohibited.
 
+## Verified preview
+
+- [Development URL](https://onlyfast-git-develop-onlyfast-2027-apex88vents-projects.vercel.app/upgrade)
+- [Verified deployment](https://onlyfast-20kimy8a3-apex88vents-projects.vercel.app/upgrade):
+  `dpl_Dh34XTwqPETw2SqUQBBiL5CXfD3W`, source commit `c9e0b223`, Vite,
+  Preview target (`target: null` in the Vercel API), `READY`.
+- Build duration: approximately 79 seconds, from Vercel building/ready timestamps.
+- Authenticated browser verification returned HTTP 200, rendered all three
+  cards, exercised Factory's class permission example, and found no page errors
+  or mobile horizontal overflow. Deployed CSP includes `connect-src 'none'`;
+  `X-Robots-Tag` is `noindex, nofollow`.
+- Vercel's existing authentication protection remains enabled. The owner can
+  use the development URL while signed into Vercel. A temporary authorized
+  sharing link was used for verification; it is not persisted here.
+- Remote main still points to `46f7552a`; latest production deployment remains
+  `dpl_8NFvGedoKHaMQXRpbqmqgAy11yte`. No production deployment was triggered.
+
 ## Branch and recovery
 
 - Development branch: `develop/onlyfast-2027`, created in the primary checkout from
@@ -151,6 +168,13 @@ New cards have no purchase action and never fabricate success. A separate review
 pull requests to main/development. It runs tests, both TypeScript checks and the
 preview build; it contains no deployment or database credentials. No workflow
 existed in the inspected production checkout.
+
+The first hosted run, [43266261365](https://github.com/Apex88Vent/onlyfast/actions/runs/43266261365),
+received a runner shutdown signal during the final native sandbox test. It
+reported 575 passed and one interrupted test file, then cancellation; subsequent
+type/build steps were skipped. This is distinct from the complete local run of
+576 passed. Do not describe that hosted run as passing. Check the latest branch
+run before requiring its `validate` status for merges.
 
 ## Blockers and operator steps
 
