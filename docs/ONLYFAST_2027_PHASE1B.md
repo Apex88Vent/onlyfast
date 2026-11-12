@@ -160,8 +160,15 @@ seconds locally. `prepare-native-sandbox.mjs` now uses `Buffer.equals()` plus a
 concise drift assertion. Every byte is still checked, and the unchanged drift
 regression still rejects modified SQL. The preparation test fell to about 183 ms
 locally, with all ten tests in that file completing in about one second. This
-also avoids putting complete SQL buffer dumps into errors. Hosted CI must still
-verify the fix; the previous runner shutdown itself is not proof of its cause.
+also avoids putting complete SQL buffer dumps into errors. The previous runner
+shutdown itself is not proof of its underlying infrastructure cause.
+
+**Hosted verification passed:** [run 43327349137](https://github.com/Apex88Vent/onlyfast/actions/runs/43327349137),
+source commit `1ed756ca`, completed successfully. Native sandbox tests, all
+remaining application/database tests, both TypeScript checks and the optimized
+preview build passed. The new validation completed without a runner shutdown.
+The corresponding Vercel Preview deployment `dpl_9hGxRL3bivBkzu6XLckQVEDQbFrU`
+is READY. The application remains an inspector with backend connections disabled.
 
 Local Phase 1B validation: **579 tests passed, zero failed/skipped**; application
 and node/Vite TypeScript checks passed; normal optimized application and preview
@@ -203,7 +210,7 @@ archive columns, automatic deletion or premature slot-recovery change is made.
    testing AI provider secrets if real OCR/Setup Assist calls are required; never
    copy production secrets. No RevenueCat, Stripe, App Store or Google Play
    purchasing should be enabled for this test-tier workflow.
-6. Verify the fresh hosted CI run before calling the pipeline reliable. No merge
-   or automatic production migration/deployment is part of this task.
+6. Keep the now-passing validation required for development review. No merge or
+   automatic production migration/deployment is part of this task.
 
 The existing stash of billing, advertising and analytics work is retained.
