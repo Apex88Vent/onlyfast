@@ -24,8 +24,18 @@ jobs:
           node-version: '24.18.0'
           cache: npm
       - run: npm ci
-      - name: Automated and disposable database permission tests
-        run: node --experimental-strip-types --test --test-concurrency=2 tests/*.test.ts
+      - name: Native sandbox preparation and safety tests
+        run: node --experimental-strip-types --test tests/nativeSandbox.test.ts
+      - name: Remaining application and disposable database permission tests
+        shell: bash
+        run: |
+          test_files=()
+          for test_file in tests/*.test.ts; do
+            if [[ "$test_file" != "tests/nativeSandbox.test.ts" ]]; then
+              test_files+=("$test_file")
+            fi
+          done
+          node --experimental-strip-types --test --test-concurrency=2 "${test_files[@]}"
       - run: npx tsc --noEmit -p tsconfig.app.json
       - run: npx tsc --noEmit -p tsconfig.node.json
       - run: npm run build -- --mode onlyfast-2027

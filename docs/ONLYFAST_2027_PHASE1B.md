@@ -145,6 +145,14 @@ both TypeScript checks and the preview build, with read-only GitHub permissions
 and no database secrets or migration commands. Hosted reliability must be
 confirmed by the new run; it is not inferred from local success.
 
+Hosted run [43326199306](https://github.com/Apex88Vent/onlyfast/actions/runs/43326199306)
+also received a runner shutdown signal about 30 seconds into testing despite
+the pinned runtime. That mitigation did not fix the hosted interruption. The
+workflow now runs the slow native sandbox preparation file in its own step and
+all remaining test files in a second step; neither group omits or skips tests.
+This isolates diagnostics and contention. The external shutdown cause remains
+unconfirmed until a hosted run completes successfully.
+
 Local Phase 1B validation: **579 tests passed, zero failed/skipped**; application
 and node/Vite TypeScript checks passed; normal optimized application and preview
 builds passed (the normal application retains its existing large-chunk warning). Native
