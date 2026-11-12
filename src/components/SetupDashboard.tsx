@@ -68,6 +68,7 @@ import {
   readMembership,
   checkSavePermission,
   isRaceWeekendEditLocked,
+  getSetupPermissions,
 } from '@/lib/membership';
 import RookieHouseAdPage from './RookieHouseAdPage';
 import { nativeAds } from '@/lib/nativeAds';
@@ -254,6 +255,7 @@ interface UnifiedSavedMeta {
   ids: Partial<Record<SetupType, string>>;
   raceScheduleId?: string;
   raceWeekendId?: string;
+  createdAt?: string;
 }
 
 interface QueriedWeekendSessions {
@@ -475,6 +477,10 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   const trackCategory = EXPANDED_CLASS_CONFIGS[currentSetup.raceClass || selectedCar]?.category;
   const carNumber = readCarNumber(user, carNumberOverride);
   const effectiveTier = getEffectiveTier(readMembership(user?.user_metadata || {}));
+  const [lockClock, setLockClock] = useState(Date.now());
+  useEffect(() => { if (effectiveTier !== 'sportsman') return; const timer = setInterval(() => setLockClock(Date.now()), 30000); return () => clearInterval(timer); }, [effectiveTier]);
+  const sportsmanReadOnly = effectiveTier === 'sportsman' && !!savedMeta.name &&
+    (!savedMeta.createdAt || !Number.isFinite(Date.parse(savedMeta.createdAt)) || getSetupPermissions(effectiveTier, savedMeta.createdAt, false, lockClock).locked);
   const currentClassSaveRestricted = classLocksEnabled &&
     (currentSetup.raceClass || selectedCar).trim().toLowerCase() !== selectedCar.trim().toLowerCase();
 
@@ -1243,8 +1249,9 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     // those accounts bypass every check below automatically. Real users keep
     // their normal Rookie/Pro/Team restrictions.
     // -------------------------------------------------------------------
+    if (sportsmanReadOnly) { setSaveMessage('This Sportsman setup is read-only. Values, notes and results remain accessible.'); return null; }
     const tier = effectiveTier;
-    if (tier !== 'team') {
+    if (tier !== 'team' && tier !== 'factory') {
       try {
         // Pull a lightweight snapshot of the user's existing race-weekend rows
         // so we can count saves / car types and check the 48h edit lock.
@@ -1259,7 +1266,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
           existingRows = data || [];
         }
 
-        existingRows = existingRows.filter((r: any) => !classLocksEnabled ||
+        existingRows = existingRows.filter((r: any) => tier === 'sportsman' || !classLocksEnabled ||
           String(r.race_class || '').trim().toLowerCase() === selectedCar.trim().toLowerCase());
         const rows = (existingRows || []).filter(
           (r: any) => (r.setup_type || 'base') !== 'base_template'
@@ -1403,7 +1410,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
         }
       }
 
-      setSavedMeta({ name, ids: { ...savedMeta.ids, ...newIds }, raceScheduleId: savedMeta.raceScheduleId, raceWeekendId });
+      setSavedMeta({ name, ids: { ...savedMeta.ids, ...newIds }, raceScheduleId: savedMeta.raceScheduleId, raceWeekendId, createdAt: savedMeta.createdAt || new Date().toISOString() });
       const rememberedId = newIds[activeTab] || savedMeta.ids[activeTab] || Object.values(newIds)[0] || Object.values(savedMeta.ids)[0];
       if (rememberedId) {
         try { localStorage.setItem(lastOpenedSetupKey(user.id), String(rememberedId)); } catch {}
@@ -1643,9 +1650,11 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     const newLabels: Partial<Record<SetupType, string>> = {};
     const newOrders: Partial<Record<SetupType, number>> = {};
     const loadedSavedSessions: Partial<Record<SetupType, boolean>> = {};
+    let earliestCreatedAt: string | undefined;
 
     const loadSiblingRow = (row: any) => {
       if (!isValidSavedRaceSession(row as RaceWeekendSessionRow)) return;
+      if (row.created_at && (!earliestCreatedAt || row.created_at < earliestCreatedAt)) earliestCreatedAt = row.created_at;
       const t = ALL_SLOTS.includes(row.setup_type as SetupType) ? (row.setup_type as SetupType) : 'base';
       if (!ALL_SLOTS.includes(t)) return;
       if (newIds[t]) return; // prefer clicked/first-loaded row per slot
@@ -1706,8 +1715,15 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       });
     }
 
+    if (effectiveTier === 'sportsman') {
+      // Use the immutable server clock even when the earliest session was deleted.
+      // An unavailable testing RPC leaves Sportsman read-only, never unlocked.
+      const { data, error } = await supabase.rpc('get_onlyfast_2027_setup_edit_state', { p_setup_id: setup.id });
+      earliestCreatedAt = !error && typeof data?.created_at === 'string' && Number.isFinite(Date.parse(data.created_at))
+        ? data.created_at : undefined;
+    }
     setSetups(newSetups);
-    setSavedMeta({ name, ids: newIds, raceScheduleId, raceWeekendId: setup.race_weekend_id || undefined });
+    setSavedMeta({ name, ids: newIds, raceScheduleId, raceWeekendId: setup.race_weekend_id || undefined, createdAt: earliestCreatedAt });
     setTimingDataBySessionId({});
     setSessionLabels(newLabels);
     setSessionOrders(newOrders);
@@ -3284,6 +3300,8 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
                 </div>
               )}
 
+              {sportsmanReadOnly && <p role="status" className="rounded-xl bg-blue-50 border p-3 text-sm">Read-only Sportsman setup. All values, notes and session results remain visible.</p>}
+              <fieldset disabled={sportsmanReadOnly} className="min-w-0 space-y-6" aria-label="Saved setup information">
               <TrackInfoSection
                 trackName={currentSetup.trackName}
                 raceDate={currentSetup.raceDate}
@@ -3361,6 +3379,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
                 onlyfastSessionId={selectedSessionId}
                 onlyLapsTelemetryEnabled={onlyLapsLinkingEnabled}
               />
+              </fieldset>
 
 
             </div>
@@ -3409,7 +3428,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
 
               <button
                 onClick={handleSaveClick}
-                disabled={saving}
+                disabled={saving || sportsmanReadOnly}
                 className="bg-[#00A8E8] hover:bg-[#0090c7] text-white px-6 py-2.5 rounded-lg font-semibold transition-colors disabled:opacity-50 flex items-center gap-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
                 aria-busy={saving}
               >

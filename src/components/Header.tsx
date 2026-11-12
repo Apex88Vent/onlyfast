@@ -43,6 +43,8 @@ const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBac
   const membership = user ? getTrustedMembership(user.id) : null;
   const planLabel = !membership ? null
     : membership.has_admin_full_access ? 'Admin'
+    : membership.membership_tier === 'sportsman' ? 'Sportsman'
+    : membership.membership_tier === 'factory' ? 'Factory'
     : membership.membership_tier === 'team' ? 'Team'
     : membership.membership_tier === 'pro' ? 'Pro'
     : 'Rookie';

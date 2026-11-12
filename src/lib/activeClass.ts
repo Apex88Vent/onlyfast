@@ -2,7 +2,7 @@ import { supabase, supabaseUrl, supabaseKey } from '@/lib/supabase';
 
 export interface ActiveClassState {
   active_class: string | null;
-  tier: 'rookie' | 'pro' | 'team' | 'admin' | null;
+  tier: 'rookie' | 'pro' | 'team' | 'sportsman' | 'factory' | 'admin' | null;
   last_class_change_at: string | null;
   next_eligible_at: string | null;
   can_change: boolean;

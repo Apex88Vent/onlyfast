@@ -10,3 +10,5 @@ interface ImportMetaEnv {
   /** Temporary console-only rollout diagnostics, scoped to the resolved Rookie test user ID. */
   readonly VITE_MEDIAN_ADMOB_DIAGNOSTICS?: string;
 }
+
+interface ImportMetaEnv { readonly ONLYFAST_2027_PREVIEW: boolean; }

@@ -7,7 +7,7 @@ import {
   readMembership,
 } from '@/lib/membership';
 
-export type SubscriptionPlan = 'free' | 'pro' | 'teams';
+export type SubscriptionPlan = 'free' | 'pro' | 'teams' | 'sportsman' | 'factory';
 
 export interface UserSubscriptionRow {
   user_id: string;
@@ -25,7 +25,7 @@ export interface UserSubscriptionRow {
 export interface AccountStatus {
   testTier?: MembershipTier | null;
   /** Display label for the account. */
-  label: 'Free' | 'Pro' | 'Teams' | 'Admin';
+  label: 'Free' | 'Pro' | 'Teams' | 'Sportsman' | 'Factory' | 'Admin';
   /** Normalized plan from Stripe (ignores admin override). */
   plan: SubscriptionPlan;
   /** Whether the user effectively has paid access (admin override included). */
@@ -104,8 +104,8 @@ export function deriveAccountStatus(
   const testTier = getTrustedTestTier(row?.user_id);
   if (testTier) {
     return {
-      label: testTier === 'rookie' ? 'Free' : testTier === 'pro' ? 'Pro' : 'Teams',
-      plan: testTier === 'rookie' ? 'free' : testTier === 'team' ? 'teams' : 'pro',
+      label: testTier === 'sportsman' ? 'Sportsman' : testTier === 'factory' ? 'Factory' : testTier === 'rookie' ? 'Free' : testTier === 'pro' ? 'Pro' : 'Teams',
+      plan: testTier === 'rookie' ? 'free' : testTier === 'team' ? 'teams' : testTier,
       isPaid: testTier !== 'rookie', isAdmin: false, row, testTier,
     };
   }
@@ -167,7 +167,7 @@ export async function syncMembershipFromSubscription(): Promise<AccountStatus | 
     throw testOverride.error;
   }
   const testTier = testOverride.data;
-  if (testTier !== null && !['rookie', 'pro', 'team'].includes(testTier)) throw new Error('Invalid test membership');
+  if (testTier !== null && !['rookie', 'pro', 'team', 'sportsman', 'factory'].includes(testTier)) throw new Error('Invalid test membership');
   setTrustedAuthorization(user.id, row, verified.data.user.app_metadata || {}, testTier);
   return deriveAccountStatus(row);
 }

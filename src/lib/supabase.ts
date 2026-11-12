@@ -51,14 +51,16 @@ const envKey =
 if (import.meta.env.MODE === 'native-sandbox') {
   assertLocalSandboxConfiguration(import.meta.env.MODE, env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY);
 }
-const supabaseUrl = envUrl || FALLBACK_URL;
-const supabaseKey = envKey || FALLBACK_KEY;
+// No isolated hosted backend exists yet. Ignore inherited credentials.
+const phase2027 = import.meta.env.ONLYFAST_2027_PREVIEW === true;
+const supabaseUrl = phase2027 ? 'https://onlyfast-2027.invalid' : envUrl || FALLBACK_URL;
+const supabaseKey = phase2027 ? 'preview-disabled-public-key' : envKey || FALLBACK_KEY;
 
 // Runtime diagnostics — surface a single, friendly notice in the console when
 // env vars aren't set, but only treat it as an *error* when we have no usable
 // credentials at all. Using fallbacks is fine for this project, so we emit an
 // informational message instead of a scary red error.
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && !phase2027) {
   const w = window as unknown as { __dbDiagLogged?: boolean };
   if (!w.__dbDiagLogged) {
     w.__dbDiagLogged = true;
@@ -111,7 +113,10 @@ if (typeof window !== 'undefined') {
   }
 }
 
-const supabase = createClient(supabaseUrl, supabaseKey, import.meta.env.MODE === 'native-sandbox'
+const supabase = createClient(supabaseUrl, supabaseKey, phase2027
+  ? { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'onlyfast-2027-disabled' },
+      global: { fetch: async () => { throw new Error('Isolated 2027 backend is not configured. No request was sent.'); } } }
+  : import.meta.env.MODE === 'native-sandbox'
   ? { auth: { storageKey: 'onlyfast-native-sandbox-auth' } } : undefined);
 
 export { supabase, supabaseUrl, supabaseKey };

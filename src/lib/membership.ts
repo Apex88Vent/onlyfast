@@ -4,11 +4,15 @@
 import { supabase, supabaseUrl, supabaseKey } from '@/lib/supabase';
 import { getTrustedMembership } from './trustedMembership';
 
-export type MembershipTier = 'rookie' | 'pro' | 'team';
+export type LegacyMembershipTier = 'rookie' | 'pro' | 'team';
+export type MembershipTier = LegacyMembershipTier | 'sportsman' | 'factory';
 
 export type LimitValue = number | 'unlimited';
 
 export interface TierLimits {
+  onlyLapsEnabled: boolean;
+  telemetryEnabled: boolean;
+  telemetrySetupAssistEnabled: boolean;
   adsEnabled: boolean;
   maxCars: LimitValue;
   maxBaseSetups: LimitValue;
@@ -26,6 +30,7 @@ export interface TierLimits {
 
 export const tierLimits: Record<MembershipTier, TierLimits> = {
   rookie: {
+    onlyLapsEnabled: false, telemetryEnabled: false, telemetrySetupAssistEnabled: false,
     adsEnabled: true,
     maxCars: 1,
     maxBaseSetups: 1,
@@ -39,6 +44,7 @@ export const tierLimits: Record<MembershipTier, TierLimits> = {
     advancedProfile: false,
   },
   pro: {
+    onlyLapsEnabled: true, telemetryEnabled: true, telemetrySetupAssistEnabled: true,
     adsEnabled: false,
     maxCars: 1,
     maxBaseSetups: 'unlimited',
@@ -52,6 +58,7 @@ export const tierLimits: Record<MembershipTier, TierLimits> = {
     advancedProfile: true,
   },
   team: {
+    onlyLapsEnabled: true, telemetryEnabled: true, telemetrySetupAssistEnabled: true,
     adsEnabled: false,
     maxCars: 'unlimited',
     maxBaseSetups: 'unlimited',
@@ -63,6 +70,18 @@ export const tierLimits: Record<MembershipTier, TierLimits> = {
     leaderboardUpload: true,
     leaderboardBadges: true,
     advancedProfile: true,
+  },
+  sportsman: {
+    adsEnabled: false, maxCars: 1, maxBaseSetups: 2, maxRaceWeekendSetups: 5,
+    raceWeekendSetupLockHours: 48, timingUploadsPerMonth: 2, setupAssistsPerRaceWeekend: 1,
+    onlyLapsEnabled: false, telemetryEnabled: false, telemetrySetupAssistEnabled: false,
+    setupExport: false, leaderboardUpload: false, leaderboardBadges: false, advancedProfile: false,
+  },
+  factory: {
+    adsEnabled: false, maxCars: 'unlimited', maxBaseSetups: 'unlimited', maxRaceWeekendSetups: 'unlimited',
+    raceWeekendSetupLockHours: null, timingUploadsPerMonth: 'unlimited', setupAssistsPerRaceWeekend: 'unlimited',
+    onlyLapsEnabled: true, telemetryEnabled: true, telemetrySetupAssistEnabled: true,
+    setupExport: true, leaderboardUpload: true, leaderboardBadges: true, advancedProfile: true,
   },
 };
 
@@ -78,7 +97,7 @@ export interface PlanMeta {
   supportingText?: string;
 }
 
-export const PLANS: PlanMeta[] = [
+export const PLANS: (PlanMeta & { tier: LegacyMembershipTier })[] = [
   {
     tier: 'team',
     displayName: 'Teams',
@@ -420,7 +439,7 @@ export function checkSavePermission(ctx: SavePermissionContext): SavePermission 
         return {
           allowed: false,
           reason: 'base_setup_limit',
-          upgradeText: `Rookie accounts can save ${limits.maxBaseSetups} base setup. Upgrade to Pro for unlimited base setups.`,
+          upgradeText: `${ctx.tier === 'sportsman' ? 'Sportsman' : 'Rookie'} accounts can save ${limits.maxBaseSetups} base setups. Upgrade to Pro for unlimited base setups.`,
         };
       }
     }
@@ -429,7 +448,7 @@ export function checkSavePermission(ctx: SavePermissionContext): SavePermission 
         return {
           allowed: false,
           reason: 'race_weekend_limit',
-          upgradeText: `Rookie accounts can keep ${limits.maxRaceWeekendSetups} race weekend saves. Upgrade to Pro for unlimited race weekends.`,
+          upgradeText: `${ctx.tier === 'sportsman' ? 'Sportsman' : 'Rookie'} accounts can keep ${limits.maxRaceWeekendSetups} race weekend saves. Upgrade to Pro for unlimited race weekends.`,
         };
       }
     }
@@ -503,4 +522,12 @@ export function checkSetupAssistPermission(
   }
 
   return { allowed: true, reason: '', upgradeText: '' };
+}
+
+/** A clock lock never removes read access. Ownership/class checks are separate. */
+export function getSetupPermissions(tier: MembershipTier, createdAt: string | null, isBase = false, now = Date.now()) {
+  const hours = tierLimits[tier].raceWeekendSetupLockHours;
+  const timestamp = createdAt ? Date.parse(createdAt) : NaN;
+  const locked = !isBase && hours !== null && Number.isFinite(timestamp) && now - timestamp >= hours * 3600000;
+  return { canView: true, canEdit: !locked, locked };
 }

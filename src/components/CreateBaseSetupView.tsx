@@ -249,11 +249,17 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
     // base template for a *different* car type. Experimental full-access / admin resolve to
     // 'team' here → unlimited, so they pass automatically.
     const tier = getEffectiveTier(readMembership(user.user_metadata || {}));
-    if (tier !== 'team') {
+    if (tier !== 'team' && tier !== 'factory') {
       const newCarType = template.raceClass || selectedCar || '';
       // Gather all existing car types across every saved row for this user.
       let existingCarTypes: string[] = [];
+      let baseCount = templates.filter(t => String(t.race_class || "").trim().toLowerCase() === selectedCar.trim().toLowerCase()).length;
       try {
+        if (tier === 'sportsman') {
+          const { data, error } = await supabase.rpc('list_user_setup_summaries');
+          if (error || !Array.isArray(data)) throw error || new Error('Setup summary unavailable');
+          baseCount = data.filter((row: any) => row.setup_type === 'base_template' || String(row.setup_name || '').startsWith('[BASE TEMPLATE]')).length;
+        }
         const { data: allRows } = await supabase
           .from('race_setups')
           .select('race_class')
@@ -278,7 +284,7 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
         kind: 'base_template',
         isExistingSave: !!editingId,
         existingRaceWeekendCount: 0,
-        existingBaseSetupCount: templates.filter(t => String(t.race_class || '').trim().toLowerCase() === selectedCar.trim().toLowerCase()).length,
+        existingBaseSetupCount: baseCount,
         existingCarTypes,
         newCarType,
       });

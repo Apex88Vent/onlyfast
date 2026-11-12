@@ -1,0 +1,28 @@
+name: OnlyFast 2027 validation
+on:
+  push:
+    branches: [develop/onlyfast-2027]
+  pull_request:
+    branches: [main, develop/onlyfast-2027]
+permissions:
+  contents: read
+concurrency:
+  group: onlyfast-2027-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npx tsc --noEmit -p tsconfig.app.json
+      - run: npx tsc --noEmit -p tsconfig.node.json
+      - run: npm run build -- --mode onlyfast-2027
+      # No deployments, secrets, database connections or billing credentials.

@@ -38,7 +38,7 @@
   background: #dbeaf6; color: #0f172a; font-size: 1.1875rem; line-height: 1.35; font-weight: 700;
   text-align: center; text-decoration: none; white-space: normal;
 }
-.membership-card--team [data-plan-action] { background: #052b50; color: #fff; border-color: #052b50; }
+.membership-card--team [data-plan-action], .membership-card--factory [data-plan-action] { background: #052b50; color: #fff; border-color: #052b50; }
 /* This existing blue shade meets large bold text contrast with the mockup's white CTA copy. */
 .membership-card--pro [data-plan-action] { background: #009bd8; color: #fff; border-color: #009bd8; box-shadow: 0 2px 6px #00a8e818; }
 .membership-card [data-plan-action]:hover:not(:disabled) { filter: brightness(.96); }

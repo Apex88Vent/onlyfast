@@ -543,7 +543,7 @@ const AppLayout: React.FC = () => {
             landingRequest={landingRequest}
             onSignInClick={() => setAuthModalOpen(true)}
             onChangeClass={openClassChange}
-            classLocksEnabled={!(unlimitedClasses ?? (effectiveTier === 'team'))}
+            classLocksEnabled={!(unlimitedClasses ?? ((effectiveTier === 'team' || effectiveTier === 'factory')))}
             onUpgrade={openTeamsUpgrade}
           />
           </CustomCarGate>

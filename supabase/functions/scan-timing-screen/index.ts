@@ -94,7 +94,7 @@ function json(body: Record<string, unknown>, status = 200): Response {
   });
 }
 
-type MembershipTier = 'rookie' | 'pro' | 'team';
+type MembershipTier = 'rookie' | 'pro' | 'team' | 'sportsman' | 'factory';
 
 interface AuthContext {
   user: any;

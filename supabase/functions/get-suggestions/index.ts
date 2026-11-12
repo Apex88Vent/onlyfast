@@ -41,7 +41,7 @@ export const corsHeaders = {
 };
 
 interface SetupShape { [key: string]: unknown }
-type MembershipTier = 'rookie' | 'pro' | 'team';
+type MembershipTier = 'rookie' | 'pro' | 'team' | 'sportsman' | 'factory';
 interface AuthContext {
   user: any;
   admin: any;

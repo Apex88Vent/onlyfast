@@ -3,12 +3,12 @@ export interface AuthorizationClient {
   rpc(name: string, args: Record<string, unknown>): PromiseLike<{ data: unknown; error: { message: string } | null }>;
 }
 
-export type MembershipTier = 'rookie' | 'pro' | 'team';
+export type MembershipTier = 'rookie' | 'pro' | 'team' | 'sportsman' | 'factory';
 
 export async function resolveServerMembership(admin: AuthorizationClient, user: { id: string; email?: string }): Promise<MembershipTier> {
   const { data, error } = await admin.rpc('onlyfast_membership_for_user', { p_user_id: user.id });
   if (error) throw new Error('Membership verification is unavailable. Please try again.');
-  if (!['rookie', 'pro', 'team', 'admin'].includes(String(data))) throw new Error('Invalid membership authorization');
+  if (!['rookie', 'pro', 'team', 'sportsman', 'factory', 'admin'].includes(String(data))) throw new Error('Invalid membership authorization');
   // Preserve the existing server-configured endpoint administrator exemption.
   return data === 'admin' || endpointAdmin(user) ? 'team' : data as MembershipTier;
 }
