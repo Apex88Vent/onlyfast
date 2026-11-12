@@ -27,7 +27,9 @@ test('2027 tiers preserve legacy quotas, classes, ads, AI limits and future inte
     assert.equal(limits.telemetryEnabled, limits.onlyLapsEnabled);
     assert.equal(limits.telemetrySetupAssistEnabled, limits.onlyLapsEnabled);
   }
-  assert.equal(tierLimits.sportsman.timingUploadsPerMonth, tierLimits.rookie.timingUploadsPerMonth);
+  assert.equal(tierLimits.sportsman.timingUploadsPerMonth, null);
+  assert.equal(tierLimits.sportsman.timingUploadsPerRaceWeekend, 2);
+  assert.equal(tierLimits.rookie.timingUploadsPerMonth, 2);
   assert.equal(checkSetupAssistPermission('sportsman', 1).allowed, false);
   assert.equal(checkSetupAssistPermission('factory', 1000).allowed, true);
 });

@@ -18,7 +18,9 @@ export interface TierLimits {
   maxBaseSetups: LimitValue;
   maxRaceWeekendSetups: LimitValue;
   raceWeekendSetupLockHours: number | null;
-  timingUploadsPerMonth: LimitValue;
+  /** null means this tier uses a different quota period. */
+  timingUploadsPerMonth: LimitValue | null;
+  timingUploadsPerRaceWeekend: LimitValue | null;
   // Number of OnlyFast Setup Assists allowed PER race weekend save (not monthly).
   // Rookie = 1 per race weekend; Pro/Team = 'unlimited'.
   setupAssistsPerRaceWeekend: LimitValue;
@@ -37,6 +39,7 @@ export const tierLimits: Record<MembershipTier, TierLimits> = {
     maxRaceWeekendSetups: 2,
     raceWeekendSetupLockHours: 48,
     timingUploadsPerMonth: 2,
+    timingUploadsPerRaceWeekend: null,
     setupAssistsPerRaceWeekend: 1,
     setupExport: false,
     leaderboardUpload: false,
@@ -51,6 +54,7 @@ export const tierLimits: Record<MembershipTier, TierLimits> = {
     maxRaceWeekendSetups: 'unlimited',
     raceWeekendSetupLockHours: null,
     timingUploadsPerMonth: 'unlimited',
+    timingUploadsPerRaceWeekend: 'unlimited',
     setupAssistsPerRaceWeekend: 'unlimited',
     setupExport: true,
     leaderboardUpload: true,
@@ -65,6 +69,7 @@ export const tierLimits: Record<MembershipTier, TierLimits> = {
     maxRaceWeekendSetups: 'unlimited',
     raceWeekendSetupLockHours: null,
     timingUploadsPerMonth: 'unlimited',
+    timingUploadsPerRaceWeekend: 'unlimited',
     setupAssistsPerRaceWeekend: 'unlimited',
     setupExport: true,
     leaderboardUpload: true,
@@ -73,13 +78,13 @@ export const tierLimits: Record<MembershipTier, TierLimits> = {
   },
   sportsman: {
     adsEnabled: false, maxCars: 1, maxBaseSetups: 2, maxRaceWeekendSetups: 5,
-    raceWeekendSetupLockHours: 48, timingUploadsPerMonth: 2, setupAssistsPerRaceWeekend: 1,
+    raceWeekendSetupLockHours: 48, timingUploadsPerMonth: null, timingUploadsPerRaceWeekend: 2, setupAssistsPerRaceWeekend: 1,
     onlyLapsEnabled: false, telemetryEnabled: false, telemetrySetupAssistEnabled: false,
     setupExport: false, leaderboardUpload: false, leaderboardBadges: false, advancedProfile: false,
   },
   factory: {
     adsEnabled: false, maxCars: 'unlimited', maxBaseSetups: 'unlimited', maxRaceWeekendSetups: 'unlimited',
-    raceWeekendSetupLockHours: null, timingUploadsPerMonth: 'unlimited', setupAssistsPerRaceWeekend: 'unlimited',
+    raceWeekendSetupLockHours: null, timingUploadsPerMonth: 'unlimited', timingUploadsPerRaceWeekend: 'unlimited', setupAssistsPerRaceWeekend: 'unlimited',
     onlyLapsEnabled: true, telemetryEnabled: true, telemetrySetupAssistEnabled: true,
     setupExport: true, leaderboardUpload: true, leaderboardBadges: true, advancedProfile: true,
   },

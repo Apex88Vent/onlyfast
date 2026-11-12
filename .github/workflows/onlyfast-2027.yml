@@ -12,16 +12,20 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          # Match the runtime used for the complete local verification. The
+          # interrupted runs used 24.22.2 and stopped inside the sandbox test.
+          node-version: '24.18.0'
           cache: npm
       - run: npm ci
-      - run: npm test
+      - name: Automated and disposable database permission tests
+        run: node --experimental-strip-types --test --test-concurrency=2 tests/*.test.ts
       - run: npx tsc --noEmit -p tsconfig.app.json
       - run: npx tsc --noEmit -p tsconfig.node.json
       - run: npm run build -- --mode onlyfast-2027

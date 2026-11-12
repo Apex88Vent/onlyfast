@@ -224,11 +224,13 @@ serve(async (req: Request): Promise<Response> => {
   // ── Config ──────────────────────────────────────────────────────────────
   let reservation: UsageReservation | null = null;
   try {
-  await resolveEffectiveTier(auth.admin, auth.user);
+  const tier = await resolveEffectiveTier(auth.admin, auth.user);
   const usage = await reserveUsage(auth.admin, auth.user, 'timing', body);
   if (usage.status === 'complete') return json(usage.response, 200);
   if (usage.status === 'limit') return json({
-    success: false, stage: 'timing-limit', error: 'Rookie accounts include 2 timing scans per month. Upgrade to Pro for unlimited timing scans.', code: 'timing_scan_limit',
+    success: false, stage: 'timing-limit', error: tier === 'sportsman'
+      ? 'Sportsman includes 2 timing scans per race weekend. Upgrade to Pro for unlimited timing scans.'
+      : 'Rookie accounts include 2 timing scans per month. Upgrade to Pro for unlimited timing scans.', code: 'timing_scan_limit',
   }, 429);
   if (!usage.reservation) return json({ success: false, stage: 'timing-limit', error: 'This request is already processing or its ID belongs to a different request. Please retry shortly.' }, 409);
   reservation = usage.reservation;

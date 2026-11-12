@@ -47,7 +47,9 @@ export async function reserveUsage(admin: AuthorizationClient, user: { id: strin
   const fingerprint = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
   const { data, error } = await admin.rpc('onlyfast_reserve_usage', {
     p_user_id: user.id, p_feature: feature, p_request_id: requestId, p_fingerprint: fingerprint,
-    p_setup_id: feature === 'assist' ? body.onlyfast_session_id || body.onlyfastSessionId || null : null,
+    // The testing policy resolves Sportsman timing quotas from this persisted
+    // owned session. The legacy monthly timing policy ignores the optional ID.
+    p_setup_id: body.onlyfast_session_id || body.onlyfastSessionId || (feature === 'timing' ? body.sessionId || body.session_id : null) || null,
     p_admin_override: endpointAdmin(user),
   });
   if (error) throw new Error('Could not authorize this saved session or usage. Please try again.');

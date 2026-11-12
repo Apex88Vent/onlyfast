@@ -1,5 +1,8 @@
 # OnlyFast 2027 Phase 1
 
+> Phase 1B supersedes Sportsman's timing-scan period with two scans per race
+> weekend, not per month. See [Phase 1B status](ONLYFAST_2027_PHASE1B.md).
+
 November 12, 2026. Development preview only. Production release is prohibited.
 
 ## Verified preview

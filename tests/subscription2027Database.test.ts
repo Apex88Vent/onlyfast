@@ -35,13 +35,15 @@ test('2027 PostgreSQL: trusted overrides, Sportsman quotas/locks/read access, cl
     await assert.rejects(db.exec(sql), /ISOLATED_2027_TEST_DATABASE_REQUIRED/); await db.exec('rollback');
     await db.query("select set_config('onlyfast.testing_project_ref','thpyjvwtfvfxiufchrxn',false)");
     await assert.rejects(db.exec(sql), /ISOLATED_2027_TEST_DATABASE_REQUIRED/); await db.exec('rollback');
-    await db.query("select set_config('onlyfast.testing_project_ref','abcdefghijklmnopqrst',false)");
+    await db.query("select set_config('onlyfast.testing_project_ref','mfzajhnfonrfuiwxgvhe',false)");
     await db.exec(sql);
     const policy = await loadMembershipPolicy();
     for (const [tier, limits] of Object.entries<any>(policy.tierLimits)) {
       const row = (await db.query<any>('select * from onlyfast_private.subscription_2027_limits where tier=$1', [tier])).rows[0];
       assert.equal(row.max_base, limits.maxBaseSetups === 'unlimited' ? null : limits.maxBaseSetups);
       assert.equal(row.max_regular, limits.maxRaceWeekendSetups === 'unlimited' ? null : limits.maxRaceWeekendSetups);
+      assert.equal(row.timing_per_month, typeof limits.timingUploadsPerMonth === 'number' ? limits.timingUploadsPerMonth : null);
+      assert.equal(row.timing_per_weekend, typeof limits.timingUploadsPerRaceWeekend === 'number' ? limits.timingUploadsPerRaceWeekend : null);
       assert.equal(row.onlylaps, limits.onlyLapsEnabled); assert.equal(row.ads, limits.adsEnabled);
     }
     for (const id of [tester, normal]) {
@@ -92,17 +94,55 @@ test('2027 PostgreSQL: trusted overrides, Sportsman quotas/locks/read access, cl
     await assert.rejects(db.query("insert into public.race_setups(user_id,setup_name,setup_type,race_class) values($1,'Wrong class','base','Modified')", [tester]), /VEHICLE|policy/);
     await rpc('set_onlyfast_test_tier', ['sportsman']);
     await role('service_role');
+    const consumed: string[] = [];
     for (let i = 0; i < 3; i++) {
       const id = randomUUID();
-      const result = await rpc('onlyfast_reserve_usage', [tester, 'timing', id, 'a'.repeat(64), null, false]);
+      consumed.push(id);
+      const result = await rpc('onlyfast_reserve_usage', [tester, 'timing', id, 'a'.repeat(64), saved[0].id, false]);
       assert.equal(result.status, i < 2 ? 'reserved' : 'limit');
       if (result.token) await rpc('onlyfast_finish_usage', [tester, 'timing', id, result.token, { ok: true }]);
     }
+    // A different stable weekend starts a new allowance; unused scans never move.
+    const second = await rpc('onlyfast_reserve_usage', [tester, 'timing', randomUUID(), 'a'.repeat(64), saved[1].id, false]);
+    assert.equal(second.status, 'reserved');
+    assert.equal((await rpc('onlyfast_reserve_usage', [tester, 'timing', consumed[0], 'a'.repeat(64), saved[0].id, false])).status, 'complete', 'retry does not consume another scan');
+    assert.equal((await rpc('onlyfast_reserve_usage', [tester, 'timing', consumed[0], 'a'.repeat(64), saved[1].id, false])).status, 'conflict', 'request ID cannot be replayed for a different weekend');
+    assert.equal((await rpc('onlyfast_reserve_usage', [tester, 'timing', randomUUID(), 'a'.repeat(64), saved[1].id, false])).status, 'reserved');
+    assert.equal((await rpc('onlyfast_reserve_usage', [tester, 'timing', randomUUID(), 'a'.repeat(64), saved[1].id, false])).status, 'limit', 'in-flight requests reserve both available slots');
+    await assert.rejects(rpc('onlyfast_reserve_usage', [tester, 'timing', randomUUID(), 'a'.repeat(64), normal, false]), /USAGE_SETUP_OWNER_REQUIRED/);
+    await assert.rejects(rpc('onlyfast_reserve_usage', [tester, 'timing', randomUUID(), 'a'.repeat(64), null, false]), /USAGE_SETUP_OWNER_REQUIRED/);
+    assert.equal((await db.query('select * from public.timing_scan_usage')).rows.length, 0, 'Sportsman does not use the legacy monthly counter');
     for (let i = 0; i < 2; i++) {
       const id = randomUUID();
       const result = await rpc('onlyfast_reserve_usage', [tester, 'assist', id, 'b'.repeat(64), saved[0].id, false]);
       assert.equal(result.status, i === 0 ? 'reserved' : 'limit');
       if (result.token) await rpc('onlyfast_finish_usage', [tester, 'assist', id, result.token, { ok: true }]);
+    }
+    for (const tier of ['pro', 'factory']) {
+      await role('authenticated', tester); await rpc('set_onlyfast_test_tier', [tier]);
+      await role('service_role');
+      for (let i = 0; i < 4; i++) assert.equal((await rpc('onlyfast_reserve_usage', [tester, 'timing', randomUUID(), 'a'.repeat(64), saved[0].id, false])).status, 'reserved', tier + ' timing is unlimited');
+    }
+    // Renaming/dating a session and deleting/recreating its known aliases cannot
+    // mint a new weekend identity, clock or allowance.
+    await role('authenticated', tester); await rpc('set_onlyfast_test_tier', ['pro']);
+    await db.query("update public.race_setups set setup_name='Renamed weekend',track_name='Stable Speedway',race_date='2026-11-12' where id=$1", [saved[0].id]);
+    assert.equal((await db.query<any>('select race_weekend_id from public.race_setups where id=$1', [saved[0].id])).rows[0].race_weekend_id, saved[0].race_weekend_id);
+    await rpc('set_onlyfast_test_tier', ['sportsman']);
+    await role('service_role');
+    assert.equal((await rpc('onlyfast_reserve_usage', [tester, 'timing', randomUUID(), 'a'.repeat(64), saved[0].id, false])).status, 'limit');
+    await role('authenticated', tester);
+    await db.query('delete from public.race_setups where id=$1', [saved[0].id]);
+    await assert.rejects(insert('Weekend 0'), /SPORTSMAN_SETUP_EDIT_LOCKED/);
+    await assert.rejects(db.query("insert into public.race_setups(user_id,setup_name,setup_type,race_class,track_name,race_date) values($1,'Renamed weekend','base','Dwarf Cars','Stable Speedway','2026-11-12')", [tester]), /SPORTSMAN_SETUP_EDIT_LOCKED/);
+    // Existing Rookie timing retains its monthly scope and gets no carryover
+    // from Sportsman's independent per-weekend counter.
+    await rpc('set_onlyfast_test_tier', ['rookie']); await role('service_role');
+    for (let i = 0; i < 3; i++) {
+      const id = randomUUID();
+      const result = await rpc('onlyfast_reserve_usage', [tester, 'timing', id, 'c'.repeat(64), null, false]);
+      assert.equal(result.status, i < 2 ? 'reserved' : 'limit');
+      if (result.token) await rpc('onlyfast_finish_usage', [tester, 'timing', id, result.token, { ok: true }]);
     }
     await role('anon'); await assert.rejects(rpc('set_onlyfast_test_tier', ['factory']), /permission denied/);
     await role('authenticated', tester);
