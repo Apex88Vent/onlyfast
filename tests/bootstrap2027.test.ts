@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
+import { readFile } from 'node:fs/promises';
 import { bootstrap2027Sequence, TESTING_PROJECT_REF } from '../scripts/prepare-2027-bootstrap.mjs';
 
 test('2027 schema-only bootstrap rejects other projects and rebuilds the whole reviewed testing schema', async () => {
@@ -19,6 +20,11 @@ test('2027 schema-only bootstrap rejects other projects and rebuilds the whole r
     for (const entry of sequence.entries) await db.exec(entry.sql
       .replace(/^create extension if not exists pgcrypto(?: with schema extensions)?;\r?$/gmi, '')
       .replace(/^create extension if not exists pg_cron with schema pg_catalog;\r?$/gmi, ''));
+    await db.exec(await readFile(new URL('../supabase/testing-2027/phase1c-api-hardening.sql', import.meta.url), 'utf8'));
+    const grants = (await db.query<any>(`select
+      has_function_privilege('anon','public.onlyfast_canonical_race_class(text)','EXECUTE') as anon_canonical,
+      has_function_privilege('authenticated','public.onlyfast_guard_development_setup_class()','EXECUTE') as browser_trigger`)).rows[0];
+    assert.deepEqual(grants, { anon_canonical: false, browser_trigger: false });
     assert.equal((await db.query<any>('select count(*) n from auth.users')).rows[0].n, 0, 'no customer records or synthetic credentials are seeded');
     assert.equal((await db.query<any>('select count(*) n from public.race_setups')).rows[0].n, 0);
     assert.equal((await db.query<any>('select count(*) n from public.user_subscriptions')).rows[0].n, 0);

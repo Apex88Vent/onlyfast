@@ -9,7 +9,7 @@ import * as trusted from '../src/lib/trustedMembership.ts';
 
 const require = createRequire(import.meta.url);
 const text = (node: any): string => typeof node === 'string' ? node : (node.children || []).map(text).join('');
-function fixture() {
+function fixture(testing2027 = false) {
   const state = { id: 'tester', allowed: true, selected: 'team', writes: [] as any[], events: 0,
     rpcError: false as boolean | { code: string; message: string }, readGate: null as Promise<void> | null };
   const row = { user_id: 'tester', plan: 'teams', status: 'active', subscription_source: 'revenuecat', revenuecat_expires_at: '2035-01-01' };
@@ -27,19 +27,19 @@ function fixture() {
   const cache = new Map<string, any>();
   function load(file: string): any {
     if (cache.has(file)) return cache.get(file);
-    const js = ts.transpileModule(readFileSync(new URL('../src/' + file, import.meta.url), 'utf8'), {
+    const js = ts.transpileModule(readFileSync(new URL('../src/' + file, import.meta.url), 'utf8').replaceAll('import.meta.env', 'testEnv'), {
       compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
     }).outputText;
     const module = { exports: {} };
     cache.set(file, module.exports);
-    new Function('require', 'module', 'exports', js)((name: string) => {
+    new Function('require', 'module', 'exports', 'testEnv', js)((name: string) => {
       if (name === './supabase' || name === '@/lib/supabase') return { supabase: client, supabaseUrl: 'https://local.example.invalid', supabaseKey: 'public-key' };
       if (name.includes('trustedMembership')) return trusted;
       if (name.startsWith('@/hooks/')) return load('hooks/' + name.slice('@/hooks/'.length) + '.ts');
       if (name.startsWith('@/lib/')) return load('lib/' + name.slice('@/lib/'.length) + '.ts');
       if (name.startsWith('./')) return load((file.startsWith('lib/') ? 'lib/' : 'components/') + name.slice(2) + (file.startsWith('lib/') ? '.ts' : '.tsx'));
       return require(name);
-    }, module, module.exports);
+    }, module, module.exports, { ONLYFAST_2027_PREVIEW: testing2027 });
     return module.exports;
   }
   globalThis.window = new EventTarget() as any;
@@ -102,6 +102,32 @@ test('normal accounts keep the existing checkout and authorization failures expo
     assert.doesNotMatch(text(view.root), /Current test tier/);
     await act(async () => view.unmount());
   }
+});
+
+test('2027 selector switches Sportsman, Pro and Factory and never mounts checkout for unprivileged accounts', async () => {
+  const originalFetch = globalThis.fetch;
+  const { state, load } = fixture(true);
+  state.selected = 'sportsman';
+  globalThis.fetch = async (_url, options) => {
+    state.selected = JSON.parse(String(options?.body)).p_tier;
+    return new Response(JSON.stringify(state.selected));
+  };
+  const Gate = load('components/TestSubscriptionGate.tsx').default;
+  let view: any;
+  try {
+    await act(async () => { view = create(React.createElement(Gate, { userId: 'tester', onContinue() {} }, 'Forbidden checkout')); });
+    for (const label of ['Factory', 'Sportsman', 'Pro']) {
+      const button = view.root.findAllByType('button').find((b: any) => text(b).startsWith(label));
+      await act(async () => { await button.props.onClick(); });
+      assert.match(text(view.root), new RegExp('Current test tier: ' + label));
+      assert.doesNotMatch(text(view.root), /Forbidden checkout|Rookie|Teams|\$7.99/);
+    }
+    await act(async () => view.unmount());
+    state.allowed = false;
+    await act(async () => { view = create(React.createElement(Gate, { userId: 'tester', onContinue() {} }, 'Forbidden checkout')); });
+    assert.match(text(view.root), /requires an authorized synthetic test account/);
+    assert.doesNotMatch(text(view.root), /Forbidden checkout|Select test tier/);
+  } finally { await act(async () => view?.unmount()); globalThis.fetch = originalFetch; }
 });
 
 test('tier writes stay bound to the initiating JWT and cannot grant the next account access', async () => {

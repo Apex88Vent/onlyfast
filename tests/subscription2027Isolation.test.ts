@@ -40,5 +40,7 @@ test('preview ignores inherited production credentials and cannot initialize a n
   assert.equal(config.buildCommand, 'vite build --mode onlyfast-2027');
   assert.equal(config.git.deploymentEnabled.main, true);
   assert.equal(config.git.deploymentEnabled['develop/onlyfast-2027'], true);
-  assert.match(config.headers[0].headers.find((h: any) => h.key === 'Content-Security-Policy').value, /connect-src 'none'/);
+  const csp = config.headers[0].headers.find((h: any) => h.key === 'Content-Security-Policy').value;
+  assert.match(csp, /connect-src 'self' https:\/\/mfzajhnfonrfuiwxgvhe.supabase.co wss:\/\/mfzajhnfonrfuiwxgvhe.supabase.co;/);
+  assert.doesNotMatch(csp, /thpyjvwtfvfxiufchrxn|https:\/\/\*/);
 });

@@ -1,7 +1,24 @@
-// Prepared activation checks. This module does not enable the functional app.
+// The testing application must verify these guards before mounting providers.
 export const ONLYFAST_TEST_PROJECT = 'mfzajhnfonrfuiwxgvhe';
 export const ONLYFAST_TEST_ORGANIZATION = 'wxswxtsewczfijycqnwi';
 export const ONLYFAST_TEST_SCHEMA = 'phase1b-v1';
+
+export function testingConnectionInput(env: Record<string, unknown>) {
+  return {
+    deployment: String(env.ONLYFAST_DEPLOYMENT_TARGET || ''),
+    branch: String(env.ONLYFAST_DEPLOYMENT_BRANCH || ''),
+    url: String(env.VITE_ONLYFAST_2027_SUPABASE_URL || ''),
+    publishableKey: String(env.VITE_ONLYFAST_2027_SUPABASE_PUBLISHABLE_KEY || ''),
+  };
+}
+
+export function testingFetch(origin: string, fetcher: typeof fetch = fetch): typeof fetch {
+  return (input, init) => {
+    const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+    if (url.origin !== origin) throw new Error('2027_REQUEST_OUTSIDE_TEST_PROJECT_DENIED');
+    return fetcher(input, init);
+  };
+}
 
 export function validateTestingConnection(input: {
   deployment: string; branch: string; url: string; publishableKey: string;

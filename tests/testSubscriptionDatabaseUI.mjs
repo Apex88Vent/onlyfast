@@ -64,7 +64,7 @@ export async function verifyDatabaseSubscriptionUI(db, role, userId, normalId, p
   function load(file) {
     if (cache.has(file)) return cache.get(file);
     const module = { exports: {} }; cache.set(file, module.exports);
-    const js = ts.transpileModule(readFileSync(new URL('../src/' + file, import.meta.url), 'utf8'), {
+    const js = ts.transpileModule(readFileSync(new URL('../src/' + file, import.meta.url), 'utf8').replaceAll('import.meta.env', '({})'), {
       compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
     }).outputText;
     new Function('require', 'module', 'exports', js)(name => {

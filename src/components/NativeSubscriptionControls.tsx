@@ -3,9 +3,16 @@ import { useNativeSubscription } from '@/hooks/useNativeSubscription';
 import { nativePurchasesEnabled } from '@/lib/nativePurchases';
 import { nativePlatform, nativeSubscriptionManagementUrl } from '@/lib/nativeEnvironment';
 
-export default function NativeSubscriptionControls({ userId, purchaseOnly = false, hidePurchase = false, purchaseLabel = 'View Pro and Teams subscriptions', onVerified, onboardingTier, planTier }: {
+type Props = {
   userId: string; purchaseOnly?: boolean; hidePurchase?: boolean; purchaseLabel?: string; onVerified?: () => void | Promise<void>; onboardingTier?: 'pro' | 'team'; planTier?: 'pro' | 'team';
-}) {
+};
+
+export default function NativeSubscriptionControls(props: Props) {
+  if (import.meta.env.ONLYFAST_2027_PREVIEW) return <p className="p-4 text-center text-sm">Purchases disabled. <a href="/pricing" className="underline">Choose an authorized test subscription</a>.</p>;
+  return <LiveSubscriptionControls {...props} />;
+}
+
+function LiveSubscriptionControls({ userId, purchaseOnly = false, hidePurchase = false, purchaseLabel = 'View Pro and Teams subscriptions', onVerified, onboardingTier, planTier }: Props) {
   const { account, busy, message, loadError, run, offering, offeringError, retryOffering } = useNativeSubscription(userId, { onVerified, onboardingTier, planTier });
   const platform = nativePlatform(navigator.userAgent, navigator.maxTouchPoints);
   const recordedStore = account?.row?.subscription_source === 'revenuecat' ? account.row.revenuecat_store || 'unknown' : undefined;

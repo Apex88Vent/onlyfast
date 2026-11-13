@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { assertLocalSandboxConfiguration } from './nativeSandboxPolicy';
+import { testingConnectionInput, testingFetch, validateTestingConnection } from './testingEnvironment';
 
 /* ──────────────────────────────────────────────────────────────────────────
  * SWITCHING TO A DIFFERENT SUPABASE / DATABASE PROJECT
@@ -51,10 +52,12 @@ const envKey =
 if (import.meta.env.MODE === 'native-sandbox') {
   assertLocalSandboxConfiguration(import.meta.env.MODE, env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY);
 }
-// No isolated hosted backend exists yet. Ignore inherited credentials.
+// Dedicated testing values only; never inherit the legacy or production keys.
 const phase2027 = import.meta.env.ONLYFAST_2027_PREVIEW === true;
-const supabaseUrl = phase2027 ? 'https://onlyfast-2027.invalid' : envUrl || FALLBACK_URL;
-const supabaseKey = phase2027 ? 'preview-disabled-public-key' : envKey || FALLBACK_KEY;
+const testing = phase2027 && import.meta.env.ONLYFAST_2027_APP
+  ? validateTestingConnection(testingConnectionInput(import.meta.env)) : null;
+const supabaseUrl = phase2027 ? testing?.url || 'https://onlyfast-2027.invalid' : envUrl || FALLBACK_URL;
+const supabaseKey = phase2027 ? testing?.publishableKey || 'preview-disabled-public-key' : envKey || FALLBACK_KEY;
 
 // Runtime diagnostics — surface a single, friendly notice in the console when
 // env vars aren't set, but only treat it as an *error* when we have no usable
@@ -113,7 +116,9 @@ if (typeof window !== 'undefined' && !phase2027) {
   }
 }
 
-const supabase = createClient(supabaseUrl, supabaseKey, phase2027
+const supabase = createClient(supabaseUrl, supabaseKey, testing
+  ? { auth: { storageKey: testing.storageKey }, global: { fetch: testingFetch(testing.url) } }
+  : phase2027
   ? { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'onlyfast-2027-disabled' },
       global: { fetch: async () => { throw new Error('Isolated 2027 backend is not configured. No request was sent.'); } } }
   : import.meta.env.MODE === 'native-sandbox'

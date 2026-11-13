@@ -1,8 +1,19 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { validateTestingConnection, verifyTestingConnection } from '../src/lib/testingEnvironment.ts';
+import { testingConnectionInput, testingFetch, validateTestingConnection, verifyTestingConnection } from '../src/lib/testingEnvironment.ts';
 
 const input = { deployment: 'preview', branch: 'develop/onlyfast-2027', url: 'https://mfzajhnfonrfuiwxgvhe.supabase.co', publishableKey: 'sb_publishable_synthetic_test_only' };
+test('testing requests reject alternate origins even with a valid session and never inherit production configuration', async () => {
+  assert.equal(testingConnectionInput({ VITE_SUPABASE_URL: 'https://production.invalid' }).url, '');
+  let calls = 0;
+  const guarded = testingFetch(input.url, async () => { calls++; return new Response('{}'); });
+  for (const target of ['https://thpyjvwtfvfxiufchrxn.supabase.co/rest/v1/race_setups', input.url + '.evil.invalid', 'https://evil.invalid']) {
+    assert.throws(() => guarded(new Request(target)), /OUTSIDE_TEST_PROJECT_DENIED/);
+  }
+  assert.equal(calls, 0);
+  await guarded(input.url + '/auth/v1/token');
+  assert.equal(calls, 1);
+});
 test('functional testing connection checks exact provenance, actual endpoint and public key before any request', async () => {
   let calls = 0;
   const fetcher = async () => { calls++; return new Response('{}'); };

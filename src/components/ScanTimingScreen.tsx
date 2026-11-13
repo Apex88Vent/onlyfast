@@ -401,7 +401,9 @@ const ScanTimingScreen: React.FC<Props> = ({
         `Got function_version=${JSON.stringify(data.function_version)}.\n\n` +
         `This means your Supabase project is still running an OLD copy of ` +
         `scan-timing-screen. You must redeploy:\n\n` +
-        `1. Open https://supabase.com/dashboard/project/thpyjvwtfvfxiufchrxn/functions\n` +
+        (import.meta.env.ONLYFAST_2027_PREVIEW
+          ? `Testing OCR is not configured. Contact the testing environment operator.\n`
+          : `1. Open https://supabase.com/dashboard/project/thpyjvwtfvfxiufchrxn/functions\n`) +
         `2. Click the function named "scan-timing-screen"\n` +
         `3. Delete everything in the editor\n` +
         `4. Paste the contents of docs/edge-functions/scan-timing-screen.ts\n` +

@@ -15,7 +15,7 @@ function setup(status, enabled = false, platform = 'android') {
   const f = { status, enabled, platform, storeCalls: [], syncCalls: 0, identity: 'tester', error: null, verified: 0 };
   globalThis.window = new EventTarget();
   function compile(file) {
-    const code = ts.transpileModule(readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8'), {
+    const code = ts.transpileModule(readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8').replaceAll('import.meta.env', '({})'), {
       compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2021, esModuleInterop: true },
     }).outputText;
     const mod = { exports: {} };

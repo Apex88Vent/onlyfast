@@ -153,6 +153,7 @@ function evaluate<T = Record<string, unknown>>(file: string, env: Record<string,
   const { outputText } = ts.transpileModule(input, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } });
   const module = { exports: {} as T };
   new Function('require', 'module', 'exports', '__env', outputText)((id: string) => {
+    if (id === './testingEnvironment') return evaluate('testingEnvironment.ts', env, {});
     assert.ok(id in modules, 'Unexpected dependency: ' + id);
     return modules[id];
   }, module, module.exports, env);

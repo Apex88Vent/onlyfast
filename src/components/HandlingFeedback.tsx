@@ -348,7 +348,9 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
         'To fix this — full step-by-step is in DEPLOY_AI_FUNCTION.md at the project root.',
         '',
         'Quick version:',
-        '1. Open https://supabase.com/dashboard/project/thpyjvwtfvfxiufchrxn/functions',
+        import.meta.env.ONLYFAST_2027_PREVIEW
+          ? 'Testing AI is not configured. Contact the testing environment operator.'
+          : '1. Open https://supabase.com/dashboard/project/thpyjvwtfvfxiufchrxn/functions',
         '2. Deploy a new function named exactly "get-suggestions" (Verify JWT: ON)',
         '3. Deploy the repository function folder so its required _shared modules are bundled; do not paste index.ts by itself',
         '4. Project Settings > Edge Functions > Secrets > add OPENAI_API_KEY and SUPABASE_SERVICE_ROLE_KEY',

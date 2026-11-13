@@ -12,3 +12,8 @@ interface ImportMetaEnv {
 }
 
 interface ImportMetaEnv { readonly ONLYFAST_2027_PREVIEW: boolean; }
+interface ImportMetaEnv {
+  readonly ONLYFAST_2027_APP: boolean;
+  readonly ONLYFAST_DEPLOYMENT_BRANCH: string;
+  readonly ONLYFAST_DEPLOYMENT_TARGET: string;
+}
