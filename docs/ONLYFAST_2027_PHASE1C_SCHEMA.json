@@ -1,0 +1,2693 @@
+{
+  "grants": [
+    {
+      "role": "service_role",
+      "table": "beta_feature_definitions",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "service_role",
+      "table": "beta_feature_definitions",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "service_role",
+      "table": "beta_feature_definitions",
+      "schema": "public",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "service_role",
+      "table": "beta_feature_definitions",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "beta_feature_definitions",
+      "schema": "public",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "service_role",
+      "table": "beta_feature_definitions",
+      "schema": "public",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "service_role",
+      "table": "beta_feature_definitions",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "authenticated",
+      "table": "beta_tester_accounts",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "beta_tester_accounts",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "service_role",
+      "table": "beta_tester_accounts",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "service_role",
+      "table": "beta_tester_accounts",
+      "schema": "public",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "service_role",
+      "table": "beta_tester_accounts",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "beta_tester_accounts",
+      "schema": "public",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "service_role",
+      "table": "beta_tester_accounts",
+      "schema": "public",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "service_role",
+      "table": "beta_tester_accounts",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlyfast_onlylaps_session_links",
+      "schema": "public",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlyfast_onlylaps_session_links",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlyfast_onlylaps_session_links",
+      "schema": "public",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlyfast_onlylaps_session_links",
+      "schema": "public",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlyfast_onlylaps_session_links",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlyfast_onlylaps_session_links",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "service_role",
+      "table": "onlyfast_onlylaps_session_links",
+      "schema": "public",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "service_role",
+      "table": "onlyfast_onlylaps_session_links",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "onlyfast_onlylaps_session_links",
+      "schema": "public",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "service_role",
+      "table": "onlyfast_onlylaps_session_links",
+      "schema": "public",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlyfast_onlylaps_session_links",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_lap_sector_times",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_lap_sector_times",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_lap_sector_times",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_lap_sector_times",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_lap_sector_times",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_lap_sector_times",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_lap_sector_times",
+      "schema": "public",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_lap_sector_times",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_lap_sector_times",
+      "schema": "public",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_lap_sector_times",
+      "schema": "public",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_lap_sector_times",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_lap_times",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_lap_times",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_lap_times",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_lap_times",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_lap_times",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_lap_times",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_lap_times",
+      "schema": "public",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_lap_times",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_lap_times",
+      "schema": "public",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_lap_times",
+      "schema": "public",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_lap_times",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_my_tracks",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_my_tracks",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_my_tracks",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_my_tracks",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_my_tracks",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_my_tracks",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_my_tracks",
+      "schema": "public",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_my_tracks",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_my_tracks",
+      "schema": "public",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_my_tracks",
+      "schema": "public",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_my_tracks",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_sensor_calibrations",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_sensor_calibrations",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_sensor_calibrations",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_sensor_calibrations",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_sensor_calibrations",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_sensor_calibrations",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_sensor_calibrations",
+      "schema": "public",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_sensor_calibrations",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_sensor_calibrations",
+      "schema": "public",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_sensor_calibrations",
+      "schema": "public",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_sensor_calibrations",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_session_analysis",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_session_analysis",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_session_analysis",
+      "schema": "public",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_session_analysis",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_session_analysis",
+      "schema": "public",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_session_analysis",
+      "schema": "public",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_session_analysis",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_session_analysis",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_session_analysis",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_session_analysis",
+      "schema": "public",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_session_analysis",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_session_analysis",
+      "schema": "public",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_session_analysis",
+      "schema": "public",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_session_analysis",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_telemetry_samples",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_telemetry_samples",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_telemetry_samples",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_telemetry_samples",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_telemetry_samples",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_telemetry_samples",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_telemetry_samples",
+      "schema": "public",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_telemetry_samples",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_telemetry_samples",
+      "schema": "public",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_telemetry_samples",
+      "schema": "public",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_telemetry_samples",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_telemetry_shares",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_telemetry_shares",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_telemetry_shares",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_telemetry_shares",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_telemetry_shares",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_telemetry_shares",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_telemetry_shares",
+      "schema": "public",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_telemetry_shares",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_telemetry_shares",
+      "schema": "public",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_telemetry_shares",
+      "schema": "public",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_telemetry_shares",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_timing_sessions",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_timing_sessions",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_timing_sessions",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_timing_sessions",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_timing_sessions",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_timing_sessions",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_timing_sessions",
+      "schema": "public",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_timing_sessions",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_timing_sessions",
+      "schema": "public",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_timing_sessions",
+      "schema": "public",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_timing_sessions",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_track_maps",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_track_maps",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_track_maps",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_track_maps",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_track_maps",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_track_maps",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_track_maps",
+      "schema": "public",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_track_maps",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_track_maps",
+      "schema": "public",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_track_maps",
+      "schema": "public",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_track_maps",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_track_sector_defaults",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_track_sector_defaults",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_track_sector_defaults",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_track_sector_defaults",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_track_sector_defaults",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_track_sector_defaults",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_track_sector_defaults",
+      "schema": "public",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_track_sector_defaults",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_track_sector_defaults",
+      "schema": "public",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_track_sector_defaults",
+      "schema": "public",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_track_sector_defaults",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_user_track_sectors",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_user_track_sectors",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_user_track_sectors",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "authenticated",
+      "table": "onlylaps_user_track_sectors",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_user_track_sectors",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_user_track_sectors",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_user_track_sectors",
+      "schema": "public",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_user_track_sectors",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_user_track_sectors",
+      "schema": "public",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_user_track_sectors",
+      "schema": "public",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "service_role",
+      "table": "onlylaps_user_track_sectors",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "authenticated",
+      "table": "parts_reference",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "authenticated",
+      "table": "parts_reference",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "authenticated",
+      "table": "parts_reference",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "authenticated",
+      "table": "parts_reference",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "service_role",
+      "table": "parts_reference",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "service_role",
+      "table": "parts_reference",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "service_role",
+      "table": "parts_reference",
+      "schema": "public",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "service_role",
+      "table": "parts_reference",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "parts_reference",
+      "schema": "public",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "service_role",
+      "table": "parts_reference",
+      "schema": "public",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "service_role",
+      "table": "parts_reference",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "authenticated",
+      "table": "race_schedule",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "authenticated",
+      "table": "race_schedule",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "authenticated",
+      "table": "race_schedule",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "authenticated",
+      "table": "race_schedule",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "service_role",
+      "table": "race_schedule",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "service_role",
+      "table": "race_schedule",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "service_role",
+      "table": "race_schedule",
+      "schema": "public",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "service_role",
+      "table": "race_schedule",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "race_schedule",
+      "schema": "public",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "service_role",
+      "table": "race_schedule",
+      "schema": "public",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "service_role",
+      "table": "race_schedule",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "authenticated",
+      "table": "race_setups",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "authenticated",
+      "table": "race_setups",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "authenticated",
+      "table": "race_setups",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "authenticated",
+      "table": "race_setups",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "service_role",
+      "table": "race_setups",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "service_role",
+      "table": "race_setups",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "service_role",
+      "table": "race_setups",
+      "schema": "public",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "service_role",
+      "table": "race_setups",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "race_setups",
+      "schema": "public",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "service_role",
+      "table": "race_setups",
+      "schema": "public",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "service_role",
+      "table": "race_setups",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "service_role",
+      "table": "revenuecat_webhook_events",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "service_role",
+      "table": "revenuecat_webhook_events",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "service_role",
+      "table": "revenuecat_webhook_events",
+      "schema": "public",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "service_role",
+      "table": "revenuecat_webhook_events",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "revenuecat_webhook_events",
+      "schema": "public",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "service_role",
+      "table": "revenuecat_webhook_events",
+      "schema": "public",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "service_role",
+      "table": "revenuecat_webhook_events",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "authenticated",
+      "table": "setup_assist_usage",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "setup_assist_usage",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "service_role",
+      "table": "setup_assist_usage",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "service_role",
+      "table": "setup_assist_usage",
+      "schema": "public",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "service_role",
+      "table": "setup_assist_usage",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "setup_assist_usage",
+      "schema": "public",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "service_role",
+      "table": "setup_assist_usage",
+      "schema": "public",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "service_role",
+      "table": "setup_assist_usage",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "authenticated",
+      "table": "shared_setups",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "authenticated",
+      "table": "shared_setups",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "authenticated",
+      "table": "shared_setups",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "authenticated",
+      "table": "shared_setups",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "service_role",
+      "table": "shared_setups",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "service_role",
+      "table": "shared_setups",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "service_role",
+      "table": "shared_setups",
+      "schema": "public",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "service_role",
+      "table": "shared_setups",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "shared_setups",
+      "schema": "public",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "service_role",
+      "table": "shared_setups",
+      "schema": "public",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "service_role",
+      "table": "shared_setups",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "authenticated",
+      "table": "timing_scan_usage",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "timing_scan_usage",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "service_role",
+      "table": "timing_scan_usage",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "service_role",
+      "table": "timing_scan_usage",
+      "schema": "public",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "service_role",
+      "table": "timing_scan_usage",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "timing_scan_usage",
+      "schema": "public",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "service_role",
+      "table": "timing_scan_usage",
+      "schema": "public",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "service_role",
+      "table": "timing_scan_usage",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "authenticated",
+      "table": "user_feature_flags",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "user_feature_flags",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "service_role",
+      "table": "user_feature_flags",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "service_role",
+      "table": "user_feature_flags",
+      "schema": "public",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "service_role",
+      "table": "user_feature_flags",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "user_feature_flags",
+      "schema": "public",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "service_role",
+      "table": "user_feature_flags",
+      "schema": "public",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "service_role",
+      "table": "user_feature_flags",
+      "schema": "public",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "authenticated",
+      "table": "user_subscriptions",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "user_subscriptions",
+      "schema": "public",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "service_role",
+      "table": "user_subscriptions",
+      "schema": "public",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "service_role",
+      "table": "user_subscriptions",
+      "schema": "public",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "service_role",
+      "table": "user_subscriptions",
+      "schema": "public",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "table": "user_subscriptions",
+      "schema": "public",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "service_role",
+      "table": "user_subscriptions",
+      "schema": "public",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "service_role",
+      "table": "user_subscriptions",
+      "schema": "public",
+      "privilege": "UPDATE"
+    }
+  ],
+  "tables": [
+    {
+      "name": "setup_weekend_aliases",
+      "schema": "onlyfast_private",
+      "rls_enabled": true
+    },
+    {
+      "name": "setup_weekends",
+      "schema": "onlyfast_private",
+      "rls_enabled": true
+    },
+    {
+      "name": "subscription_2027_limits",
+      "schema": "onlyfast_private",
+      "rls_enabled": true
+    },
+    {
+      "name": "testing_2027_environment",
+      "schema": "onlyfast_private",
+      "rls_enabled": true
+    },
+    {
+      "name": "timing_weekend_usage",
+      "schema": "onlyfast_private",
+      "rls_enabled": true
+    },
+    {
+      "name": "usage_requests",
+      "schema": "onlyfast_private",
+      "rls_enabled": true
+    },
+    {
+      "name": "beta_feature_definitions",
+      "schema": "public",
+      "rls_enabled": true
+    },
+    {
+      "name": "beta_tester_accounts",
+      "schema": "public",
+      "rls_enabled": true
+    },
+    {
+      "name": "onlyfast_onlylaps_session_links",
+      "schema": "public",
+      "rls_enabled": true
+    },
+    {
+      "name": "onlylaps_lap_sector_times",
+      "schema": "public",
+      "rls_enabled": true
+    },
+    {
+      "name": "onlylaps_lap_times",
+      "schema": "public",
+      "rls_enabled": true
+    },
+    {
+      "name": "onlylaps_my_tracks",
+      "schema": "public",
+      "rls_enabled": true
+    },
+    {
+      "name": "onlylaps_sensor_calibrations",
+      "schema": "public",
+      "rls_enabled": true
+    },
+    {
+      "name": "onlylaps_session_analysis",
+      "schema": "public",
+      "rls_enabled": true
+    },
+    {
+      "name": "onlylaps_telemetry_samples",
+      "schema": "public",
+      "rls_enabled": true
+    },
+    {
+      "name": "onlylaps_telemetry_shares",
+      "schema": "public",
+      "rls_enabled": true
+    },
+    {
+      "name": "onlylaps_timing_sessions",
+      "schema": "public",
+      "rls_enabled": true
+    },
+    {
+      "name": "onlylaps_track_maps",
+      "schema": "public",
+      "rls_enabled": true
+    },
+    {
+      "name": "onlylaps_track_sector_defaults",
+      "schema": "public",
+      "rls_enabled": true
+    },
+    {
+      "name": "onlylaps_user_track_sectors",
+      "schema": "public",
+      "rls_enabled": true
+    },
+    {
+      "name": "parts_reference",
+      "schema": "public",
+      "rls_enabled": true
+    },
+    {
+      "name": "race_schedule",
+      "schema": "public",
+      "rls_enabled": true
+    },
+    {
+      "name": "race_setups",
+      "schema": "public",
+      "rls_enabled": true
+    },
+    {
+      "name": "revenuecat_webhook_events",
+      "schema": "public",
+      "rls_enabled": true
+    },
+    {
+      "name": "setup_assist_usage",
+      "schema": "public",
+      "rls_enabled": true
+    },
+    {
+      "name": "shared_setups",
+      "schema": "public",
+      "rls_enabled": true
+    },
+    {
+      "name": "timing_scan_usage",
+      "schema": "public",
+      "rls_enabled": true
+    },
+    {
+      "name": "user_feature_flags",
+      "schema": "public",
+      "rls_enabled": true
+    },
+    {
+      "name": "user_subscriptions",
+      "schema": "public",
+      "rls_enabled": true
+    }
+  ],
+  "policies": [
+    {
+      "name": "beta_tester_accounts_select_own",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "beta_tester_accounts",
+      "schema": "public",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "onlyfast_onlylaps_links_delete_own",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "onlyfast_onlylaps_session_links",
+      "schema": "public",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "onlyfast_onlylaps_links_insert_own",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "onlyfast_onlylaps_session_links",
+      "schema": "public",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "onlyfast_onlylaps_links_select_own",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "onlyfast_onlylaps_session_links",
+      "schema": "public",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "onlyfast_onlylaps_links_update_own",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "onlyfast_onlylaps_session_links",
+      "schema": "public",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "OnlyLaps users manage lap sector results",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "onlylaps_lap_sector_times",
+      "schema": "public",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "Users can create their OnlyLaps lap times",
+      "roles": [
+        "public"
+      ],
+      "table": "onlylaps_lap_times",
+      "schema": "public",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "Users can delete their OnlyLaps lap times",
+      "roles": [
+        "public"
+      ],
+      "table": "onlylaps_lap_times",
+      "schema": "public",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "Users can read their OnlyLaps lap times",
+      "roles": [
+        "public"
+      ],
+      "table": "onlylaps_lap_times",
+      "schema": "public",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "Users can update their OnlyLaps lap times",
+      "roles": [
+        "public"
+      ],
+      "table": "onlylaps_lap_times",
+      "schema": "public",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "OnlyLaps users can delete their My Tracks",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "onlylaps_my_tracks",
+      "schema": "public",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "OnlyLaps users can insert their My Tracks",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "onlylaps_my_tracks",
+      "schema": "public",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "OnlyLaps users can read their My Tracks",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "onlylaps_my_tracks",
+      "schema": "public",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "OnlyLaps users can update their My Tracks",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "onlylaps_my_tracks",
+      "schema": "public",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "Users can create their OnlyLaps sensor calibrations",
+      "roles": [
+        "public"
+      ],
+      "table": "onlylaps_sensor_calibrations",
+      "schema": "public",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "Users can delete their OnlyLaps sensor calibrations",
+      "roles": [
+        "public"
+      ],
+      "table": "onlylaps_sensor_calibrations",
+      "schema": "public",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "Users can read their OnlyLaps sensor calibrations",
+      "roles": [
+        "public"
+      ],
+      "table": "onlylaps_sensor_calibrations",
+      "schema": "public",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "Users can update their OnlyLaps sensor calibrations",
+      "roles": [
+        "public"
+      ],
+      "table": "onlylaps_sensor_calibrations",
+      "schema": "public",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "onlylaps_session_analysis_delete_own",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "onlylaps_session_analysis",
+      "schema": "public",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "onlylaps_session_analysis_insert_own",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "onlylaps_session_analysis",
+      "schema": "public",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "onlylaps_session_analysis_select_own",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "onlylaps_session_analysis",
+      "schema": "public",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "onlylaps_session_analysis_update_own",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "onlylaps_session_analysis",
+      "schema": "public",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "Users can create their OnlyLaps telemetry samples",
+      "roles": [
+        "public"
+      ],
+      "table": "onlylaps_telemetry_samples",
+      "schema": "public",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "Users can delete their OnlyLaps telemetry samples",
+      "roles": [
+        "public"
+      ],
+      "table": "onlylaps_telemetry_samples",
+      "schema": "public",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "Users can read their OnlyLaps telemetry samples",
+      "roles": [
+        "public"
+      ],
+      "table": "onlylaps_telemetry_samples",
+      "schema": "public",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "Users can update their OnlyLaps telemetry samples",
+      "roles": [
+        "public"
+      ],
+      "table": "onlylaps_telemetry_samples",
+      "schema": "public",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "OnlyLaps owners manage telemetry shares",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "onlylaps_telemetry_shares",
+      "schema": "public",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "Users can create their OnlyLaps timing sessions",
+      "roles": [
+        "public"
+      ],
+      "table": "onlylaps_timing_sessions",
+      "schema": "public",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "Users can delete their OnlyLaps timing sessions",
+      "roles": [
+        "public"
+      ],
+      "table": "onlylaps_timing_sessions",
+      "schema": "public",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "Users can read their OnlyLaps timing sessions",
+      "roles": [
+        "public"
+      ],
+      "table": "onlylaps_timing_sessions",
+      "schema": "public",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "Users can update their OnlyLaps timing sessions",
+      "roles": [
+        "public"
+      ],
+      "table": "onlylaps_timing_sessions",
+      "schema": "public",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "OnlyLaps track maps are readable when active or owned",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "onlylaps_track_maps",
+      "schema": "public",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "OnlyLaps users can insert their own track maps",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "onlylaps_track_maps",
+      "schema": "public",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "OnlyLaps users can update their own track maps",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "onlylaps_track_maps",
+      "schema": "public",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "OnlyLaps creators manage track sector defaults",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "onlylaps_track_sector_defaults",
+      "schema": "public",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "OnlyLaps users read track sector defaults",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "onlylaps_track_sector_defaults",
+      "schema": "public",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "OnlyLaps users manage personal sectors",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "onlylaps_user_track_sectors",
+      "schema": "public",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "Users can delete their own parts",
+      "roles": [
+        "public"
+      ],
+      "table": "parts_reference",
+      "schema": "public",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "Users can insert their own parts",
+      "roles": [
+        "public"
+      ],
+      "table": "parts_reference",
+      "schema": "public",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "Users can update their own parts",
+      "roles": [
+        "public"
+      ],
+      "table": "parts_reference",
+      "schema": "public",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "Users can view their own parts",
+      "roles": [
+        "public"
+      ],
+      "table": "parts_reference",
+      "schema": "public",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "Users can delete their own race schedule",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "race_schedule",
+      "schema": "public",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "Users can insert their own race schedule",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "race_schedule",
+      "schema": "public",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "Users can update their own race schedule",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "race_schedule",
+      "schema": "public",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "Users can view their own race schedule",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "race_schedule",
+      "schema": "public",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "phase1_setup_owner_read",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "race_setups",
+      "schema": "public",
+      "command": "SELECT",
+      "permissive": "RESTRICTIVE"
+    },
+    {
+      "name": "phase1_setup_owner_write",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "race_setups",
+      "schema": "public",
+      "command": "ALL",
+      "permissive": "RESTRICTIVE"
+    },
+    {
+      "name": "race_setups_active_vehicle_guard",
+      "roles": [
+        "public"
+      ],
+      "table": "race_setups",
+      "schema": "public",
+      "command": "ALL",
+      "permissive": "RESTRICTIVE"
+    },
+    {
+      "name": "race_setups_delete_own",
+      "roles": [
+        "public"
+      ],
+      "table": "race_setups",
+      "schema": "public",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "race_setups_development_library_gate",
+      "roles": [
+        "public"
+      ],
+      "table": "race_setups",
+      "schema": "public",
+      "command": "ALL",
+      "permissive": "RESTRICTIVE"
+    },
+    {
+      "name": "race_setups_insert_own",
+      "roles": [
+        "public"
+      ],
+      "table": "race_setups",
+      "schema": "public",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "race_setups_select_own",
+      "roles": [
+        "public"
+      ],
+      "table": "race_setups",
+      "schema": "public",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "race_setups_update_own",
+      "roles": [
+        "public"
+      ],
+      "table": "race_setups",
+      "schema": "public",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "Users can view their own setup assist usage",
+      "roles": [
+        "public"
+      ],
+      "table": "setup_assist_usage",
+      "schema": "public",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "phase1_share_owner_read",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "shared_setups",
+      "schema": "public",
+      "command": "SELECT",
+      "permissive": "RESTRICTIVE"
+    },
+    {
+      "name": "phase1_share_owner_write",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "shared_setups",
+      "schema": "public",
+      "command": "ALL",
+      "permissive": "RESTRICTIVE"
+    },
+    {
+      "name": "shared_setups_delete_own",
+      "roles": [
+        "public"
+      ],
+      "table": "shared_setups",
+      "schema": "public",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "shared_setups_insert_own",
+      "roles": [
+        "public"
+      ],
+      "table": "shared_setups",
+      "schema": "public",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "shared_setups_select_own",
+      "roles": [
+        "public"
+      ],
+      "table": "shared_setups",
+      "schema": "public",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "shared_setups_select_unexpired_public",
+      "roles": [
+        "public"
+      ],
+      "table": "shared_setups",
+      "schema": "public",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "shared_setups_update_own",
+      "roles": [
+        "public"
+      ],
+      "table": "shared_setups",
+      "schema": "public",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "timing_scan_usage_owner_read",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "timing_scan_usage",
+      "schema": "public",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "user_feature_flags_select_own",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "user_feature_flags",
+      "schema": "public",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "Users can view their own subscription",
+      "roles": [
+        "public"
+      ],
+      "table": "user_subscriptions",
+      "schema": "public",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    }
+  ],
+  "triggers": [
+    {
+      "name": "beta_feature_definitions_touch_updated_at",
+      "table": "beta_feature_definitions",
+      "schema": "public",
+      "enabled": "O"
+    },
+    {
+      "name": "beta_tester_accounts_touch_updated_at",
+      "table": "beta_tester_accounts",
+      "schema": "public",
+      "enabled": "O"
+    },
+    {
+      "name": "onlyfast_onlylaps_links_touch_updated_at",
+      "table": "onlyfast_onlylaps_session_links",
+      "schema": "public",
+      "enabled": "O"
+    },
+    {
+      "name": "onlylaps_lap_sector_times_set_updated_at",
+      "table": "onlylaps_lap_sector_times",
+      "schema": "public",
+      "enabled": "O"
+    },
+    {
+      "name": "onlylaps_sensor_calibrations_set_updated_at",
+      "table": "onlylaps_sensor_calibrations",
+      "schema": "public",
+      "enabled": "O"
+    },
+    {
+      "name": "onlylaps_session_analysis_touch_updated_at",
+      "table": "onlylaps_session_analysis",
+      "schema": "public",
+      "enabled": "O"
+    },
+    {
+      "name": "onlylaps_timing_sessions_set_updated_at",
+      "table": "onlylaps_timing_sessions",
+      "schema": "public",
+      "enabled": "O"
+    },
+    {
+      "name": "onlylaps_track_maps_set_updated_at",
+      "table": "onlylaps_track_maps",
+      "schema": "public",
+      "enabled": "O"
+    },
+    {
+      "name": "onlylaps_track_revision_on_update",
+      "table": "onlylaps_track_maps",
+      "schema": "public",
+      "enabled": "O"
+    },
+    {
+      "name": "onlylaps_sector_track_revision",
+      "table": "onlylaps_track_sector_defaults",
+      "schema": "public",
+      "enabled": "O"
+    },
+    {
+      "name": "onlylaps_track_sector_defaults_set_updated_at",
+      "table": "onlylaps_track_sector_defaults",
+      "schema": "public",
+      "enabled": "O"
+    },
+    {
+      "name": "onlylaps_sector_track_revision",
+      "table": "onlylaps_user_track_sectors",
+      "schema": "public",
+      "enabled": "O"
+    },
+    {
+      "name": "onlylaps_user_track_sectors_set_updated_at",
+      "table": "onlylaps_user_track_sectors",
+      "schema": "public",
+      "enabled": "O"
+    },
+    {
+      "name": "set_parts_reference_updated_at",
+      "table": "parts_reference",
+      "schema": "public",
+      "enabled": "O"
+    },
+    {
+      "name": "set_race_schedule_updated_at",
+      "table": "race_schedule",
+      "schema": "public",
+      "enabled": "O"
+    },
+    {
+      "name": "guard_development_setup_library",
+      "table": "race_setups",
+      "schema": "public",
+      "enabled": "O"
+    },
+    {
+      "name": "guard_setup_vehicle",
+      "table": "race_setups",
+      "schema": "public",
+      "enabled": "O"
+    },
+    {
+      "name": "phase1_guard_setup_limits",
+      "table": "race_setups",
+      "schema": "public",
+      "enabled": "O"
+    },
+    {
+      "name": "race_setups_touch_updated_at",
+      "table": "race_setups",
+      "schema": "public",
+      "enabled": "O"
+    },
+    {
+      "name": "user_feature_flags_touch_updated_at",
+      "table": "user_feature_flags",
+      "schema": "public",
+      "enabled": "O"
+    },
+    {
+      "name": "guard_development_active_class",
+      "table": "user_subscriptions",
+      "schema": "public",
+      "enabled": "O"
+    },
+    {
+      "name": "onlyfast_capture_stripe_source",
+      "table": "user_subscriptions",
+      "schema": "public",
+      "enabled": "O"
+    },
+    {
+      "name": "onlyfast_project_subscription",
+      "table": "user_subscriptions",
+      "schema": "public",
+      "enabled": "O"
+    }
+  ],
+  "functions": [
+    {
+      "name": "complete_racing_onboarding",
+      "schema": "onlyfast_private",
+      "arguments": "",
+      "security_definer": true
+    },
+    {
+      "name": "environment_2027",
+      "schema": "onlyfast_private",
+      "arguments": "",
+      "security_definer": true
+    },
+    {
+      "name": "get_test_tier",
+      "schema": "onlyfast_private",
+      "arguments": "",
+      "security_definer": true
+    },
+    {
+      "name": "guard_setup_limits",
+      "schema": "onlyfast_private",
+      "arguments": "",
+      "security_definer": true
+    },
+    {
+      "name": "guard_setup_vehicle",
+      "schema": "onlyfast_private",
+      "arguments": "",
+      "security_definer": true
+    },
+    {
+      "name": "has_unlimited_vehicles",
+      "schema": "onlyfast_private",
+      "arguments": "p_uid uuid",
+      "security_definer": true
+    },
+    {
+      "name": "membership_tier",
+      "schema": "onlyfast_private",
+      "arguments": "p_user_id uuid",
+      "security_definer": true
+    },
+    {
+      "name": "redeem_setup_share",
+      "schema": "onlyfast_private",
+      "arguments": "p_code text",
+      "security_definer": true
+    },
+    {
+      "name": "save_racing_onboarding_progress",
+      "schema": "onlyfast_private",
+      "arguments": "p_step text, p_discipline text, p_class text",
+      "security_definer": true
+    },
+    {
+      "name": "set_test_tier",
+      "schema": "onlyfast_private",
+      "arguments": "p_tier text",
+      "security_definer": true
+    },
+    {
+      "name": "setup_2027_alias_keys",
+      "schema": "onlyfast_private",
+      "arguments": "p_row jsonb",
+      "security_definer": false
+    },
+    {
+      "name": "setup_2027_edit_state",
+      "schema": "onlyfast_private",
+      "arguments": "p_setup_id uuid",
+      "security_definer": true
+    },
+    {
+      "name": "setup_event_key",
+      "schema": "onlyfast_private",
+      "arguments": "p_row jsonb",
+      "security_definer": false
+    },
+    {
+      "name": "test_subscription_tier",
+      "schema": "onlyfast_private",
+      "arguments": "p_uid uuid",
+      "security_definer": true
+    },
+    {
+      "name": "admin_set_beta_feature",
+      "schema": "public",
+      "arguments": "p_user_id uuid, p_feature_key text, p_enabled boolean",
+      "security_definer": true
+    },
+    {
+      "name": "admin_set_beta_tester_account",
+      "schema": "public",
+      "arguments": "p_user_id uuid, p_is_test_account boolean, p_beta_features_enabled boolean, p_tester_kind text",
+      "security_definer": true
+    },
+    {
+      "name": "beta_management_allowed",
+      "schema": "public",
+      "arguments": "",
+      "security_definer": true
+    },
+    {
+      "name": "change_active_race_class",
+      "schema": "public",
+      "arguments": "p_new_class text",
+      "security_definer": true
+    },
+    {
+      "name": "complete_racing_onboarding",
+      "schema": "public",
+      "arguments": "",
+      "security_definer": false
+    },
+    {
+      "name": "get_active_race_class_state",
+      "schema": "public",
+      "arguments": "",
+      "security_definer": true
+    },
+    {
+      "name": "get_onlyfast_2027_environment",
+      "schema": "public",
+      "arguments": "",
+      "security_definer": false
+    },
+    {
+      "name": "get_onlyfast_2027_setup_edit_state",
+      "schema": "public",
+      "arguments": "p_setup_id uuid",
+      "security_definer": false
+    },
+    {
+      "name": "get_onlyfast_membership",
+      "schema": "public",
+      "arguments": "",
+      "security_definer": true
+    },
+    {
+      "name": "get_onlyfast_test_tier",
+      "schema": "public",
+      "arguments": "",
+      "security_definer": false
+    },
+    {
+      "name": "get_setup_class_lock_state",
+      "schema": "public",
+      "arguments": "p_setup_id uuid",
+      "security_definer": true
+    },
+    {
+      "name": "has_beta_feature",
+      "schema": "public",
+      "arguments": "p_feature_key text",
+      "security_definer": true
+    },
+    {
+      "name": "initialize_active_race_class",
+      "schema": "public",
+      "arguments": "p_class text",
+      "security_definer": true
+    },
+    {
+      "name": "list_user_setup_summaries",
+      "schema": "public",
+      "arguments": "",
+      "security_definer": true
+    },
+    {
+      "name": "onlyfast_active_race_class",
+      "schema": "public",
+      "arguments": "p_user_id uuid",
+      "security_definer": true
+    },
+    {
+      "name": "onlyfast_apply_revenuecat",
+      "schema": "public",
+      "arguments": "p_user_id uuid, p_snapshot jsonb, p_event_id text, p_event_type text, p_event_at timestamp with time zone",
+      "security_definer": true
+    },
+    {
+      "name": "onlyfast_can_access_setup_class",
+      "schema": "public",
+      "arguments": "p_user_id uuid, p_race_class text",
+      "security_definer": true
+    },
+    {
+      "name": "onlyfast_can_save_setup_class",
+      "schema": "public",
+      "arguments": "p_user_id uuid, p_race_class text",
+      "security_definer": true
+    },
+    {
+      "name": "onlyfast_can_use_setup_library",
+      "schema": "public",
+      "arguments": "",
+      "security_definer": false
+    },
+    {
+      "name": "onlyfast_canonical_race_class",
+      "schema": "public",
+      "arguments": "p_class text",
+      "security_definer": true
+    },
+    {
+      "name": "onlyfast_capture_stripe_source",
+      "schema": "public",
+      "arguments": "",
+      "security_definer": false
+    },
+    {
+      "name": "onlyfast_expire_revenuecat",
+      "schema": "public",
+      "arguments": "",
+      "security_definer": true
+    },
+    {
+      "name": "onlyfast_finish_usage",
+      "schema": "public",
+      "arguments": "p_user_id uuid, p_feature text, p_request_id uuid, p_token uuid, p_response jsonb",
+      "security_definer": true
+    },
+    {
+      "name": "onlyfast_guard_development_setup_class",
+      "schema": "public",
+      "arguments": "",
+      "security_definer": true
+    },
+    {
+      "name": "onlyfast_has_unlimited_classes",
+      "schema": "public",
+      "arguments": "p_user_id uuid",
+      "security_definer": false
+    },
+    {
+      "name": "onlyfast_is_development_setup_class",
+      "schema": "public",
+      "arguments": "p_class text",
+      "security_definer": false
+    },
+    {
+      "name": "onlyfast_membership_for_user",
+      "schema": "public",
+      "arguments": "p_user_id uuid",
+      "security_definer": true
+    },
+    {
+      "name": "onlyfast_onlylaps_candidate_lap_summaries",
+      "schema": "public",
+      "arguments": "p_user_id uuid, p_session_ids uuid[]",
+      "security_definer": true
+    },
+    {
+      "name": "onlyfast_onlylaps_touch_updated_at",
+      "schema": "public",
+      "arguments": "",
+      "security_definer": false
+    },
+    {
+      "name": "onlyfast_project_subscription",
+      "schema": "public",
+      "arguments": "",
+      "security_definer": false
+    },
+    {
+      "name": "onlyfast_race_discipline",
+      "schema": "public",
+      "arguments": "p_class text",
+      "security_definer": false
+    },
+    {
+      "name": "onlyfast_reserve_usage",
+      "schema": "public",
+      "arguments": "p_user_id uuid, p_feature text, p_request_id uuid, p_fingerprint text, p_setup_id uuid, p_admin_override boolean",
+      "security_definer": true
+    },
+    {
+      "name": "onlyfast_resolve_assist_session",
+      "schema": "public",
+      "arguments": "p_user_id uuid, p_saved_name text",
+      "security_definer": true
+    },
+    {
+      "name": "onlyfast_set_onlylaps_session_link",
+      "schema": "public",
+      "arguments": "p_user_id uuid, p_onlyfast_session_id uuid, p_onlylaps_session_id uuid, p_link_method text, p_match_confidence numeric",
+      "security_definer": true
+    },
+    {
+      "name": "onlyfast_subscription_tier",
+      "schema": "public",
+      "arguments": "p_user_id uuid",
+      "security_definer": true
+    },
+    {
+      "name": "onlyfast_unlink_onlylaps_session",
+      "schema": "public",
+      "arguments": "p_user_id uuid, p_onlyfast_session_id uuid",
+      "security_definer": true
+    },
+    {
+      "name": "onlylaps_sector_track_revision",
+      "schema": "public",
+      "arguments": "",
+      "security_definer": true
+    },
+    {
+      "name": "onlylaps_set_updated_at",
+      "schema": "public",
+      "arguments": "",
+      "security_definer": false
+    },
+    {
+      "name": "onlylaps_track_revision_on_update",
+      "schema": "public",
+      "arguments": "",
+      "security_definer": false
+    },
+    {
+      "name": "redeem_setup_share",
+      "schema": "public",
+      "arguments": "p_code text",
+      "security_definer": false
+    },
+    {
+      "name": "save_racing_onboarding_progress",
+      "schema": "public",
+      "arguments": "p_step text, p_discipline text, p_class text",
+      "security_definer": false
+    },
+    {
+      "name": "set_onlyfast_test_tier",
+      "schema": "public",
+      "arguments": "p_tier text",
+      "security_definer": false
+    },
+    {
+      "name": "set_updated_at",
+      "schema": "public",
+      "arguments": "",
+      "security_definer": false
+    },
+    {
+      "name": "touch_beta_feature_updated_at",
+      "schema": "public",
+      "arguments": "",
+      "security_definer": false
+    },
+    {
+      "name": "touch_updated_at",
+      "schema": "public",
+      "arguments": "",
+      "security_definer": false
+    }
+  ],
+  "environment": {
+    "project_ref": "mfzajhnfonrfuiwxgvhe",
+    "schema_version": "phase1b-v1"
+  },
+  "project_ref": "mfzajhnfonrfuiwxgvhe",
+  "migration_count": 24
+}

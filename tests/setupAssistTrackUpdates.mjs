@@ -20,7 +20,7 @@ const plansDeclaration = placementSource.statements.filter(ts.isVariableStatemen
 assert.ok(plansDeclaration && ts.isStringLiteral(plansDeclaration.initializer));
 const housePlansPath = plansDeclaration.initializer.text;
 function compile(file, modules = {}) {
-  const source = readFileSync(new URL(`../src/components/${file}`, import.meta.url), 'utf8');
+  const source = readFileSync(new URL(`../src/components/${file}`, import.meta.url), 'utf8').replaceAll('import.meta.env', '({})');
   const code = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2021, esModuleInterop: true } }).outputText;
   const output = { exports: {} };
   new Function('require', 'module', 'exports', code)(name => {

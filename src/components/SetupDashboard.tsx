@@ -9,7 +9,7 @@ import { canAccessSetupClass } from '@/lib/setupLibraryAccess';
 import { buildLibraryCustomFields, libraryFieldsFromRow, SETUP_LIBRARY_KEY } from '@/lib/setupLibraryStorage';
 import React, { useState, useEffect, useLayoutEffect, useCallback, useId, useRef } from 'react';
 import { isMedianIOSApp } from '@/lib/paymentVisibility';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseUrl } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import TrackInfoSection from './TrackInfoSection';
 import ChassisSetupForm from './ChassisSetupForm';
@@ -353,6 +353,8 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   const { template: customCarTemplate, initialSheet } = useCustomCarTemplate();
   const { hasBetaFeature, testerKind } = useBetaFeatures();
   const onlyLapsLinkingEnabled =
+    // OnlyLaps integration is a later phase of this isolated OnlyFast project.
+    supabaseUrl !== 'https://mfzajhnfonrfuiwxgvhe.supabase.co' &&
     testerKind === 'experimental' &&
     hasBetaFeature(BETA_FEATURES.testAccountFullAccess);
   const [activeTab, setActiveTab] = useState<SetupType>('base');
