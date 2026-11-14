@@ -32,6 +32,7 @@ type ServerAuthResult =
   | {
       user: { id: string };
       admin: ReturnType<typeof createClient>;
+      reader: ReturnType<typeof createClient>;
     };
 
 async function requireUser(req: Request): Promise<ServerAuthResult> {
@@ -59,6 +60,7 @@ async function requireUser(req: Request): Promise<ServerAuthResult> {
 
   return {
     user: data.user,
+    reader: authClient,
     admin: createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     }),
@@ -101,7 +103,7 @@ Deno.serve(async (req) => {
     const context = await getOnlyLapsSetupContext({
       onlyfastSessionId,
       userId: auth.user.id,
-      store: createOnlyLapsSetupContextStore(auth.admin),
+      store: createOnlyLapsSetupContextStore(Deno.env.get('SUPABASE_URL') === 'https://mfzajhnfonrfuiwxgvhe.supabase.co' ? auth.reader : auth.admin),
     });
     if (statusOnly) {
       const evidence = inspectOnlyLapsMeasuredEvidence(context);

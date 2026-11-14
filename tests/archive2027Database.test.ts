@@ -1,0 +1,83 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { readFile } from 'node:fs/promises';
+import { PGlite } from '@electric-sql/pglite';
+import { bootstrap2027Sequence, TESTING_PROJECT_REF } from '../scripts/prepare-2027-bootstrap.mjs';
+import { trackTraceSchemaSql } from './helpers/archive2027.mjs';
+
+test('2027 archive: atomic weekend/base transitions, retained data, quota release and owner security', async () => {
+  const db = new PGlite();
+  const a='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', b='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const role = async (name: string, uid='') => {
+    await db.exec('reset role');
+    await db.query("select set_config('request.jwt.claim.sub',$1,false),set_config('request.jwt.claim.role',$2,false)",[uid,name]);
+    await db.exec('set role '+name);
+  };
+  const rpc=async(name: string,args: unknown[]=[]) => (await db.query<any>('select public.'+name+'('+args.map((_,i)=>'$'+(i+1)).join(',')+') r',args)).rows[0].r;
+  try {
+    await db.exec(`create role anon; create role authenticated; create role service_role bypassrls;
+      create schema auth; create schema extensions;
+      create table auth.users(id uuid primary key,email text,raw_app_meta_data jsonb default '{}',raw_user_meta_data jsonb default '{}');
+      create function auth.uid() returns uuid language sql as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+      create function auth.jwt() returns jsonb language sql as $$ select jsonb_build_object('sub',auth.uid(),'role',current_setting('request.jwt.claim.role',true)) $$;
+      grant usage on schema auth,public to anon,authenticated,service_role;
+      create schema cron; create function cron.schedule(text,text,text) returns bigint language sql as $$ select 1::bigint $$;`);
+    for(const e of (await bootstrap2027Sequence(TESTING_PROJECT_REF)).entries) await db.exec(e.sql
+      .replace(/^create extension if not exists pgcrypto(?: with schema extensions)?;\r?$/gmi,'')
+      .replace(/^create extension if not exists pg_cron with schema pg_catalog;\r?$/gmi,''));
+    await db.exec(await readFile(new URL('../supabase/testing-2027/phase1c-api-hardening.sql',import.meta.url),'utf8'));
+    await db.exec(await readFile(new URL('../supabase/testing-2027/phase2-archives.sql',import.meta.url),'utf8'));
+    await db.exec(await trackTraceSchemaSql());
+    await db.query('insert into auth.users(id) values($1),($2)',[a,b]);
+    await db.query("insert into public.user_subscriptions(user_id,plan,status,active_race_class) values($1,'free','active','Dwarf Cars'),($2,'free','active','Dwarf Cars')",[a,b]);
+    await db.query("insert into public.beta_tester_accounts(user_id,is_test_account,beta_features_enabled,tester_kind,test_subscription_tier) values($1,true,true,'experimental','sportsman')",[a]);
+    await db.query("insert into public.user_feature_flags(user_id,feature_key,enabled) values($1,'test_account_full_access',true)",[a]);
+    await role('authenticated',a);
+    const schedule=(await db.query<any>("insert into public.race_schedule(user_id,race_date,track,finishing_position) values($1,'2026-11-14','Archive Speedway','3rd') returning id",[a])).rows[0].id;
+    const insert=async(name:string,kind='base')=>(await db.query<any>("insert into public.race_setups(user_id,setup_name,setup_type,race_class,notes,timing_data,race_schedule_id) values($1,$2,$3,'Dwarf Cars','retained notes','{\"result\":3}',$4) returning *",[a,name,kind,name==='weekend0'?schedule:null])).rows[0];
+    const base1=await insert('base1','base_template'); await insert('base2','base_template');
+    await assert.rejects(insert('base3','base_template'),/SPORTSMAN_BASE_SETUP_LIMIT/);
+    const weekends=[]; for(let i=0;i<5;i++)weekends.push(await insert('weekend'+i));
+    const heat=await insert('weekend0','heat');
+    await db.query("insert into public.shared_setups(setup_id,shared_by,share_code,is_public) values($1,$2,'PHASE2AA',true)",[heat.id,a]);
+    await assert.rejects(insert('sixth'),/SPORTSMAN_RACE_WEEKEND_LIMIT/);
+    const archive=await rpc('set_onlyfast_setup_archive',[weekends[0].id,true]); assert(archive.archived_at);
+    assert.equal((await rpc('set_onlyfast_setup_archive',[heat.id,true])).changed,false);
+    assert.equal((await db.query('select id from public.race_setups where race_weekend_id=$1',[weekends[0].race_weekend_id])).rows.length,0);
+    assert.equal(await rpc('redeem_setup_share',['PHASE2AA']),null,'share codes cannot reveal archived content');
+    await assert.rejects(rpc('set_onlyfast_setup_archive',[heat.id,false]),/RESTORE_REQUIRES/);
+    await assert.rejects(insert('weekend0'),/ARCHIVED_SETUP/);
+    await insert('sixth'); await assert.rejects(insert('seventh'),/SPORTSMAN_RACE_WEEKEND_LIMIT/);
+    await rpc('set_onlyfast_setup_archive',[base1.id,true]);await insert('base3','base_template');
+    const summaries=await rpc('list_user_setup_summaries');assert(summaries.some((r:any)=>r.id===heat.id&&r.archived_at));
+    assert(summaries.every((r:any)=>!('notes' in r)&&!('timing_data' in r)));
+    await role('authenticated',b);
+    assert.equal(await rpc('onlyfast_subscription_tier',[b]),'unsubscribed');
+    await assert.rejects(rpc('set_onlyfast_setup_archive',[base1.id,true]),/OWNER_REQUIRED/);
+    await role('authenticated',a);await rpc('set_onlyfast_test_tier',['pro']);
+    const restoredRead=(await db.query<any>('select * from public.race_setups where id=$1',[weekends[0].id])).rows[0];
+    assert.equal(restoredRead.notes,weekends[0].notes);assert.deepEqual(restoredRead.timing_data,weekends[0].timing_data);
+    assert.equal(restoredRead.race_schedule_id,schedule);
+    assert.equal((await db.query<any>('select finishing_position from public.race_schedule where id=$1',[schedule])).rows[0].finishing_position,'3rd');
+    assert.deepEqual(restoredRead.created_at,weekends[0].created_at);assert.deepEqual(restoredRead.updated_at,weekends[0].updated_at);
+    assert((await rpc('get_onlyfast_2027_setup_edit_state',[heat.id])).archived_at);
+    await rpc('set_onlyfast_setup_archive',[heat.id,false]);
+    assert.equal((await rpc('get_onlyfast_2027_setup_edit_state',[heat.id])).archived_at,null);
+    await rpc('set_onlyfast_test_tier',['sportsman']);
+    await assert.rejects(db.query("update public.race_setups set notes='overquota edit' where id=$1",[heat.id]),/READ_ONLY:over_quota/);
+    await assert.rejects(insert('weekend0','extra1'),/READ_ONLY:over_quota/,'new child sessions cannot bypass downgrade read-only enforcement');
+    await role('postgres');
+    assert.equal((await db.query<any>('select count(*) n from onlyfast_private.setup_archive_events')).rows[0].n,3);
+    const historic=(await db.query<any>("insert into public.race_setups(user_id,setup_name,setup_type,race_class,notes) values($1,'Unsubscribed history','base','Modified','retain without subscription') returning id",[b])).rows[0].id;
+    await role('authenticated',b);
+    assert.equal((await db.query<any>('select notes from public.race_setups where id=$1',[historic])).rows[0].notes,'retain without subscription');
+    await assert.rejects(db.query("update public.race_setups set notes='forged' where id=$1",[historic]),/READ_ONLY/);
+    await assert.rejects(db.query("insert into public.race_setups(user_id,setup_name,setup_type,race_class) values($1,'new','base','Dwarf Cars')",[b]),/READ_ONLY|VEHICLE_LOCKED/);
+    await assert.rejects(db.query("insert into public.race_schedule(user_id,race_date,track) values($1,'2026-11-16','forbidden')",[b]),/READ_ONLY/);
+    await role('authenticated',a); await rpc('set_onlyfast_test_tier',['factory']);
+    await rpc('set_onlyfast_setup_archive',[base1.id,false]);
+    assert.equal((await db.query('select id from public.race_setups where id=$1',[base1.id])).rows.length,1);
+    await rpc('set_onlyfast_test_tier',['rookie']);
+    assert.equal(await rpc('onlyfast_subscription_tier',[a]),'rookie','explicit legacy Rookie test remains compatible');
+  } finally {await db.close();}
+});

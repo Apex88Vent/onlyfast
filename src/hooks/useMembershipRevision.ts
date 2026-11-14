@@ -7,5 +7,5 @@ const subscribe = (listener: () => void) => {
 };
 // Re-render existing feature gates after trusted access is refreshed.
 export function useMembershipRevision() {
-  useSyncExternalStore(subscribe, getMembershipRevision, () => 0);
+  return useSyncExternalStore(subscribe, getMembershipRevision, () => 0);
 }

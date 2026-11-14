@@ -1,4 +1,5 @@
 import { useMembershipRevision } from '@/hooks/useMembershipRevision';
+import { useTestingAccountAccess, testingClassReadOnly } from '@/hooks/useTestingAccountAccess';
 import LockedFeatureNotice from './LockedFeatureNotice';
 import { setupClassLabel, EXPANDED_CLASS_CONFIGS } from '@/lib/setupLibrary';
 import { ROAD_TRACK_KEYS, emptyRoadTrackFeedback } from '@/lib/roadTrackFeedback';
@@ -28,6 +29,8 @@ import BaseTemplatePicker from './BaseTemplatePicker';
 import TodoList from './TodoList';
 import TimingDataDisplay from './TimingDataDisplay';
 import ActiveOnlyLapsSessionLinkSlot from './ActiveOnlyLapsSessionLinkSlot';
+import TrackTraceEntry from '@/features/track-trace/TrackTraceEntry';
+import { trackTraceEnabled } from '@/features/track-trace/api';
 import { attachTimingDataToSession, type TimingData } from '@/lib/timingData';
 import { buildPerformanceSummary, parsePerformancePosition } from '@/lib/performanceSummary';
 import {
@@ -40,6 +43,7 @@ import RaceSchedule from './RaceSchedule';
 
 const HandlingFeedback = deferredFeature(() => import('./HandlingFeedback'), 'Setup Assist').Component;
 const ScanTimingScreen = deferredFeature(() => import('./ScanTimingScreen'), 'timing scanner').Component;
+const TrackTraceSessionLink = deferredFeature(() => import('@/features/track-trace/TrackTraceSessionLink'), 'OnlyFast Track Trace telemetry linking').Component;
 import {
   getRaceRolloverSelection,
   getRaceFinalScheduledDate,
@@ -342,7 +346,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   onUpgrade,
   landingRequest = 0,
 }) => {
-  useMembershipRevision();
+  const membershipRevision = useMembershipRevision();
   const defaults = getDefaultRaceSessionLabels(selectedCar);
   const TAB_LABELS = {
     ...DEFAULT_TAB_LABELS,
@@ -479,10 +483,28 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   const trackCategory = EXPANDED_CLASS_CONFIGS[currentSetup.raceClass || selectedCar]?.category;
   const carNumber = readCarNumber(user, carNumberOverride);
   const effectiveTier = getEffectiveTier(readMembership(user?.user_metadata || {}));
+  const phase2Testing = supabaseUrl === 'https://mfzajhnfonrfuiwxgvhe.supabase.co';
+  const accountAccess2027 = useTestingAccountAccess(user?.id);
+  const accessSetupId = savedMeta.ids[activeTab];
+  const [serverSetupAccess, setServerSetupAccess] = useState<{ id: string; editable: boolean; readable: boolean; reason?: string } | null>(null);
+  useEffect(() => {
+    if (!phase2Testing || !accessSetupId || !user) { setServerSetupAccess(null); return; }
+    let active = true; setServerSetupAccess(null);
+    const load = async () => {
+      const result = await supabase.rpc('get_onlyfast_2027_setup_edit_state', { p_setup_id: accessSetupId });
+      if (active) setServerSetupAccess({ id: accessSetupId, editable: !result.error && result.data?.editable === true,
+        readable: !result.error && result.data?.readable === true, reason: result.data?.reason || (result.error ? 'verification_unavailable' : undefined) });
+    };
+    void load(); const interval = setInterval(() => void load(), 30000);
+    return () => { active = false; clearInterval(interval); };
+  }, [phase2Testing, accessSetupId, user?.id, membershipRevision]);
   const [lockClock, setLockClock] = useState(Date.now());
   useEffect(() => { if (effectiveTier !== 'sportsman') return; const timer = setInterval(() => setLockClock(Date.now()), 30000); return () => clearInterval(timer); }, [effectiveTier]);
-  const sportsmanReadOnly = effectiveTier === 'sportsman' && !!savedMeta.name &&
-    (!savedMeta.createdAt || !Number.isFinite(Date.parse(savedMeta.createdAt)) || getSetupPermissions(effectiveTier, savedMeta.createdAt, false, lockClock).locked);
+  const sportsmanReadOnly = effectiveTier === 'unsubscribed' ||
+    (phase2Testing && !!user && testingClassReadOnly(accountAccess2027, currentSetup.raceClass || selectedCar)) ||
+    (phase2Testing && !!accessSetupId && (serverSetupAccess?.id !== accessSetupId || !serverSetupAccess.editable)) ||
+    (effectiveTier === 'sportsman' && !!savedMeta.name &&
+    (!savedMeta.createdAt || !Number.isFinite(Date.parse(savedMeta.createdAt)) || getSetupPermissions(effectiveTier, savedMeta.createdAt, false, lockClock).locked));
   const currentClassSaveRestricted = classLocksEnabled &&
     (currentSetup.raceClass || selectedCar).trim().toLowerCase() !== selectedCar.trim().toLowerCase();
 
@@ -951,13 +973,15 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
 
 
   const handleChange = useCallback((field: string, value: string) => {
+    if (sportsmanReadOnly || currentClassSaveRestricted) return;
     setSetups(prev => ({
       ...prev,
       [activeTab]: { ...prev[activeTab], [field]: value },
     }));
-  }, [activeTab]);
+  }, [activeTab, sportsmanReadOnly, currentClassSaveRestricted]);
 
   const handleSharedChange = useCallback((field: string, value: string) => {
+    if (sportsmanReadOnly || currentClassSaveRestricted) return;
     const sharedFields = ['trackName', 'raceDate', 'raceClass', 'trackCondition', 'trackShape', 'trackLength', 'latitude', 'longitude', 'temperature', 'humidity', 'windSpeed', 'windDirection'];
 
     if (sharedFields.includes(field)) {
@@ -973,7 +997,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     } else {
       handleChange(field, value);
     }
-  }, [handleChange]);
+  }, [handleChange, sportsmanReadOnly, currentClassSaveRestricted]);
 
 
   const switchTab = useCallback((newTab: SetupType) => {
@@ -1109,6 +1133,10 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     const ownerId = payload.user_id;
     const { data: auth } = await supabase.auth.getSession();
     if (!ownerId || auth.session?.user.id !== ownerId) throw new Error('Save account changed. Sign in as the original owner.');
+    if (supabaseUrl === 'https://mfzajhnfonrfuiwxgvhe.supabase.co') {
+      const access = await supabase.rpc('get_onlyfast_2027_account_access');
+      if (access.error || testingClassReadOnly(access.data, payload.race_class || '')) throw new Error('This racing class is read-only.');
+    }
     let p = cleanPayload(payload);
     for (let i = 0; i < 6; i++) {
       const { data, error } = await supabase.from('race_setups').insert(p).select().single();
@@ -1144,6 +1172,10 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     const ownerId = payload.user_id || user?.id;
     const { data: auth } = await supabase.auth.getSession();
     if (!ownerId || auth.session?.user.id !== ownerId) throw new Error('Save account changed. Sign in as the original owner.');
+    if (supabaseUrl === 'https://mfzajhnfonrfuiwxgvhe.supabase.co') {
+      const access = await supabase.rpc('get_onlyfast_2027_setup_edit_state', { p_setup_id: id });
+      if (access.error || access.data?.editable !== true) throw new Error('This saved setup is read-only.');
+    }
     let p = cleanPayload(payload);
     delete p.user_id;
     for (let i = 0; i < 6; i++) {
@@ -1251,7 +1283,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     // those accounts bypass every check below automatically. Real users keep
     // their normal Rookie/Pro/Team restrictions.
     // -------------------------------------------------------------------
-    if (sportsmanReadOnly) { setSaveMessage('This Sportsman setup is read-only. Values, notes and results remain accessible.'); return null; }
+    if (sportsmanReadOnly || currentClassSaveRestricted) { setSaveMessage('This setup is read-only. Available values, notes and results remain accessible.'); return null; }
     const tier = effectiveTier;
     if (tier !== 'team' && tier !== 'factory') {
       try {
@@ -1268,7 +1300,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
           existingRows = data || [];
         }
 
-        existingRows = existingRows.filter((r: any) => tier === 'sportsman' || !classLocksEnabled ||
+        existingRows = existingRows.filter((r: any) => !r.archived_at).filter((r: any) => tier === 'sportsman' || !classLocksEnabled ||
           String(r.race_class || '').trim().toLowerCase() === selectedCar.trim().toLowerCase());
         const rows = (existingRows || []).filter(
           (r: any) => (r.setup_type || 'base') !== 'base_template'
@@ -1451,6 +1483,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   // Rookie/free) may save; the centralized tier check inside performSave decides
   // whether each save is allowed and surfaces an upgrade prompt if a limit is hit.
   const handleSaveClick = async () => {
+    if (sportsmanReadOnly || currentClassSaveRestricted) { setSaveMessage('This setup is read-only.'); return; }
     if (!user) {
       // First-save by an unregistered user: ask them to sign in before saving.
       try { localStorage.setItem('pending_plan_redirect', '1'); } catch {}
@@ -1626,7 +1659,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   const handleLoadSetup = async (setup: any) => {
     if (!canAccessSetupClass(setup.race_class)) return;
     if (
-      classLocksEnabled &&
+      !phase2Testing && classLocksEnabled &&
       String(setup?.race_class || '').trim().toLowerCase() !== selectedCar.trim().toLowerCase()
     ) {
       setClassLockNoticeOpen(true);
@@ -1822,6 +1855,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
 
 
   const handleCopyLastSetup = () => {
+    if (sportsmanReadOnly || currentClassSaveRestricted) return;
     const sourceTab: SetupType = activeTab === 'heat' ? 'base' : activeTab === 'main' ? 'heat' : 'base';
     const source = setups[sourceTab];
     setSetups(prev => ({
@@ -1841,6 +1875,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   };
 
   const handleCopyFromPastSetup = (setup: any) => {
+    if (sportsmanReadOnly || currentClassSaveRestricted) return;
     if (!canAccessSetupClass(setup.race_class) || !areSetupSheetsCompatible(setup.race_class, setups[activeTab].raceClass || selectedCar)) return;
     const loaded = loadSetupIntoState(setup);
     const current = setups[activeTab];
@@ -1872,6 +1907,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
 
   // Apply a base template to the Hot Laps setup
   const handleApplyBaseTemplate = (template: any) => {
+    if (sportsmanReadOnly || currentClassSaveRestricted) return;
     if (!canAccessSetupClass(template.race_class) || !areSetupSheetsCompatible(template.race_class, setups.base.raceClass || selectedCar)) return;
     const loaded = loadSetupIntoState(template);
     if (template.custom_fields) {
@@ -1965,6 +2001,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   };
 
   const handleClearSetup = () => {
+    if (sportsmanReadOnly || currentClassSaveRestricted) return;
     const label = labelForTab(activeTab);
     if (!confirm(`Clear the ${label} tab?`)) return;
     setSetups(prev => ({
@@ -2002,6 +2039,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   };
 
   const submitRenameSession = async () => {
+    if (sportsmanReadOnly || currentClassSaveRestricted) { setRenameError('This session is read-only.'); return; }
     const name = renameValue.trim();
     if (!name) { setRenameError('Session name cannot be empty.'); return; }
     // Prevent duplicate names within this race day (other active tabs).
@@ -2010,16 +2048,15 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     );
     if (dup) { setRenameError('A session with that name already exists for this race day.'); return; }
 
-    // Update label in state (display only — setup data untouched).
-    setSessionLabels(prev => ({ ...prev, [activeTab]: name }));
     // Persist immediately if this session already has a saved DB row.
     const id = savedMeta.ids[activeTab];
     if (id) {
       try {
         await dbUpdate(id, { session_label: name });
         setRefreshTrigger(prev => prev + 1);
-      } catch {}
+      } catch (error) { setRenameError(error instanceof Error ? error.message : 'Could not rename this session.'); return; }
     }
+    setSessionLabels(prev => ({ ...prev, [activeTab]: name }));
     setRenameOpen(false);
   };
 
@@ -2069,6 +2106,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   };
 
   const submitDeleteSession = async () => {
+    if (sportsmanReadOnly || currentClassSaveRestricted) { setSaveMessage('This session is read-only.'); return; }
     setDeleteBusy(true);
     const deletedTab = activeTab;
     const deletedId = savedMeta.ids[deletedTab];
@@ -2140,6 +2178,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
 
   // Add a new session (plus button in the horizontal selector).
   const openAddSession = () => {
+    if (sportsmanReadOnly || currentClassSaveRestricted) { setSaveMessage('This setup is read-only.'); return; }
     setSessionMenuOpen(false);
     setAddSessionValue('');
     setAddSessionError(null);
@@ -2147,6 +2186,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   };
 
   const submitAddSession = () => {
+    if (sportsmanReadOnly || currentClassSaveRestricted) { setAddSessionError('This setup is read-only.'); return; }
     const name = addSessionValue.trim();
     if (!name) { setAddSessionError('Session name cannot be empty.'); return; }
     const dup = ALL_SLOTS.some(
@@ -3006,6 +3046,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
             weekendTransitionClass={weekendTransitionClass}
             performanceStats={performanceStats}
             upcomingEvents={upcomingEvents}
+            actionGridSlot={<TrackTraceEntry userId={user?.id ?? null} variant="landing" />}
             onChangeClass={onChangeClass}
             onAction={handleHomeAction}
           />
@@ -3043,6 +3084,8 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
             onTemplatesChange={() => setBaseTemplateRefresh(prev => prev + 1)}
             initialTemplate={baseTemplateToEdit}
           />
+        ) : phase2Testing && !!accessSetupId && (serverSetupAccess?.id !== accessSetupId || !serverSetupAccess.readable) ? (
+          <p role="status" className="rounded-xl border bg-slate-50 p-6">{serverSetupAccess?.reason === 'archived' ? 'This setup is archived. Upgrade to Pro or Factory to view its saved contents.' : 'Checking access to this saved setup…'}</p>
         ) : (
 
 
@@ -3205,6 +3248,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
                 activeSessionSlot={activeTab}
                 sessionIds={savedMeta.ids}
               />
+              {trackTraceEnabled && <TrackTraceSessionLink key={'track-trace-' + user?.id + ':' + selectedSessionId + ':' + membershipRevision} userId={user?.id ?? null} setupId={selectedSessionId} />}
 
               {resumedBanner && (
                 <div className="bg-gradient-to-r from-[#00A8E8]/10 to-[#00A8E8]/5 border border-[#00A8E8]/30 rounded-xl px-4 py-3 flex items-center gap-3 flex-wrap" role="status" aria-live="polite">
@@ -3302,8 +3346,8 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
                 </div>
               )}
 
-              {sportsmanReadOnly && <p role="status" className="rounded-xl bg-blue-50 border p-3 text-sm">Read-only Sportsman setup. All values, notes and session results remain visible.</p>}
-              <fieldset disabled={sportsmanReadOnly} className="min-w-0 space-y-6" aria-label="Saved setup information">
+              {sportsmanReadOnly && <p role="status" className="rounded-xl bg-blue-50 border p-3 text-sm">Read-only setup{serverSetupAccess?.reason ? ': ' + serverSetupAccess.reason.replace(/_/g, ' ') : ''}. All available saved values, notes and session results remain viewable.</p>}
+              <fieldset disabled={sportsmanReadOnly || currentClassSaveRestricted} className="min-w-0 space-y-6" aria-label="Saved setup information">
               <TrackInfoSection
                 trackName={currentSetup.trackName}
                 raceDate={currentSetup.raceDate}
@@ -3339,7 +3383,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
                 data={currentSetup}
                 customFields={customFields}
                 onChange={handleChange}
-                raceClass={selectedCar}
+                raceClass={currentSetup.raceClass || selectedCar}
                 activeTab={activeTab}
                 baseSetup={baseSetupForDiff}
                 baseLabel={baseLabelForDiff}
@@ -3364,12 +3408,14 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
                 onSaved={handleTimingDataSaved}
               />
 
+              </fieldset>
               <TimingDataDisplay
                 timingData={selectedSessionId ? timingDataBySessionId[selectedSessionId] ?? null : null}
                 setupType={activeTab}
               />
 
 
+              <fieldset disabled={sportsmanReadOnly || currentClassSaveRestricted} className="min-w-0" aria-label="Setup Assist">
               <HandlingFeedback
                 entryHandling={currentSetup.entry_handling}
                 midHandling={currentSetup.mid_handling}
@@ -3380,6 +3426,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
                 raceWeekendKey={savedMeta.name || undefined}
                 onlyfastSessionId={selectedSessionId}
                 onlyLapsTelemetryEnabled={onlyLapsLinkingEnabled}
+                trackTraceTelemetryEnabled={trackTraceEnabled}
               />
               </fieldset>
 

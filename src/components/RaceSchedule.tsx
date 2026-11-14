@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseUrl } from '@/lib/supabase';
+import { useTestingAccountAccess } from '@/hooks/useTestingAccountAccess';
 import { User } from '@supabase/supabase-js';
 import RaceScheduleForm, { RaceEntry } from './RaceScheduleForm';
 import RaceScheduleExport from './RaceScheduleExport';
@@ -12,6 +13,8 @@ interface RaceScheduleProps {
 }
 
 const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick, onScheduleChanged }) => {
+  const accountAccess = useTestingAccountAccess(user?.id);
+  const readOnly = supabaseUrl === 'https://mfzajhnfonrfuiwxgvhe.supabase.co' && (!accountAccess || accountAccess.tier === 'unsubscribed');
   const [races, setRaces] = useState<RaceEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -50,6 +53,7 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick, onSche
   useEffect(() => { fetchRaces(); }, [fetchRaces]);
 
   const openAdd = () => {
+    if (readOnly) { setError('Your schedule is read-only without an active subscription.'); return; }
     if (!user) { onSignInClick(); return; }
     setEditing(null);
     setFormError('');
@@ -57,12 +61,14 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick, onSche
   };
 
   const openEdit = (entry: RaceEntry) => {
+    if (readOnly) { setError('Your schedule is read-only without an active subscription.'); return; }
     setEditing(entry);
     setFormError('');
     setFormOpen(true);
   };
 
   const handleSave = async (entry: RaceEntry) => {
+    if (readOnly) { setFormError('Your schedule is read-only without an active subscription.'); return; }
     if (!user) { onSignInClick(); return; }
     setSaving(true);
     setFormError('');
@@ -106,6 +112,7 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick, onSche
   };
 
   const handleDelete = async (entry: RaceEntry) => {
+    if (readOnly) { setError('Your schedule is read-only without an active subscription.'); return; }
     if (!user || !entry.id) return;
     if (!confirm(`Delete the race at ${entry.track}?`)) return;
     setError('');
@@ -167,6 +174,7 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick, onSche
           </button>
           <button
             onClick={openAdd}
+            disabled={readOnly}
             className="bg-[#00A8E8] hover:bg-[#0090c7] text-white px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
@@ -199,6 +207,7 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick, onSche
           <p className="text-[#1A1B23] font-semibold">No races added yet.</p>
           <button
             onClick={openAdd}
+            disabled={readOnly}
             className="mt-4 bg-[#00A8E8] hover:bg-[#0090c7] text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors inline-flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
@@ -238,6 +247,7 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick, onSche
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <button
                     onClick={() => openEdit(r)}
+                    disabled={readOnly}
                     aria-label={`Edit race at ${r.track}`}
                     className="w-9 h-9 rounded-lg flex items-center justify-center text-[#6B7280] hover:text-[#00A8E8] hover:bg-[#00A8E8]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
                   >
@@ -245,6 +255,7 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick, onSche
                   </button>
                   <button
                     onClick={() => handleDelete(r)}
+                    disabled={readOnly}
                     aria-label={`Delete race at ${r.track}`}
                     className="w-9 h-9 rounded-lg flex items-center justify-center text-[#9CA3AF] hover:text-red-500 hover:bg-red-50 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500"
                   >

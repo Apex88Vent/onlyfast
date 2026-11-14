@@ -1,0 +1,24 @@
+{
+  "project_ref": "mfzajhnfonrfuiwxgvhe",
+  "organization_id": "wxswxtsewczfijycqnwi",
+  "migration_name": "onlyfast_2027_phase2_archives_history_testing",
+  "artifact": "phase2-archives-install.sql",
+  "sha256": "7366BC8FA69FA08079F98622024819B5B07EBE69D57B96FBB55B6E58D53FA27E",
+  "prerequisite_order": [
+    "23 Phase 1C bootstrap migrations",
+    "onlyfast_2027_phase1c_api_hardening",
+    "track_trace_foundation_testing",
+    "track_trace_phase2b"
+  ],
+  "component_order": [
+    {
+      "file": "phase2-archives.sql",
+      "sha256": "F1374C37D76728469C3ACF5EC5CE352E44442B8862499682C4429A2C75393598"
+    },
+    {
+      "file": "track-trace-history-access.sql",
+      "sha256": "6751213223C5AF524BE57D1DA578AE77C405E7152517FB9F7E8CBE197692386A"
+    }
+  ],
+  "transaction": "single; component transaction wrappers removed without changing their SQL bodies"
+}

@@ -5,7 +5,7 @@ import { supabase, supabaseUrl, supabaseKey } from '@/lib/supabase';
 import { getTrustedMembership } from './trustedMembership';
 
 export type LegacyMembershipTier = 'rookie' | 'pro' | 'team';
-export type MembershipTier = LegacyMembershipTier | 'sportsman' | 'factory';
+export type MembershipTier = LegacyMembershipTier | 'sportsman' | 'factory' | 'unsubscribed';
 
 export type LimitValue = number | 'unlimited';
 
@@ -31,6 +31,12 @@ export interface TierLimits {
 }
 
 export const tierLimits: Record<MembershipTier, TierLimits> = {
+  unsubscribed: {
+    onlyLapsEnabled: false, telemetryEnabled: false, telemetrySetupAssistEnabled: false, adsEnabled: false,
+    maxCars: 1, maxBaseSetups: 0, maxRaceWeekendSetups: 0, raceWeekendSetupLockHours: null,
+    timingUploadsPerMonth: 0, timingUploadsPerRaceWeekend: 0, setupAssistsPerRaceWeekend: 0,
+    setupExport: false, leaderboardUpload: false, leaderboardBadges: false, advancedProfile: false,
+  },
   rookie: {
     onlyLapsEnabled: false, telemetryEnabled: false, telemetrySetupAssistEnabled: false,
     adsEnabled: true,
@@ -399,6 +405,7 @@ const normCar = (v: string) => (v || '').trim().toLowerCase();
  * easy to unit test and call from the real save flow.
  */
 export function checkSavePermission(ctx: SavePermissionContext): SavePermission {
+  if (ctx.tier === 'unsubscribed') return { allowed: false, reason: 'subscription_read_only', upgradeText: 'Your account is read-only. Choose an active subscription to save changes.' };
   const limits = tierLimits[ctx.tier];
 
   // --- Car-type lock (applies to every tier with a finite maxCars) ----------

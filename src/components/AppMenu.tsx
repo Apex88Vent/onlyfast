@@ -1,12 +1,13 @@
 import React, { useEffect, useRef } from 'react';
 
-export type MenuAction = 'home' | 'setup' | 'saved' | 'create-base' | 'todo' | 'compare' | 'parts' | 'schedule' | 'view-shared' | 'how-it-works';
+export type MenuAction = 'home' | 'setup' | 'saved' | 'create-base' | 'todo' | 'compare' | 'parts' | 'schedule' | 'view-shared' | 'view-shared-telemetry' | 'how-it-works';
 
 interface AppMenuProps {
   isOpen: boolean;
   onClose: () => void;
   onSelect: (action: MenuAction) => void;
   activeView?: string;
+  telemetryAccess?: 'allowed' | 'locked' | 'pending';
 }
 
 const items: { action: MenuAction; label: string; description: string; icon: React.ReactNode }[] = [
@@ -91,6 +92,12 @@ const items: { action: MenuAction; label: string; description: string; icon: Rea
     ),
   },
   {
+    action: 'view-shared-telemetry',
+    label: 'View Shared Telemetry',
+    description: 'Enter a share code to view telemetry',
+    icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M3 3v18h18M5 14l5-5 4 4 7-8" /></svg>,
+  },
+  {
     action: 'how-it-works',
     label: 'How OnlyFast Works',
     description: 'Replay the guided onboarding',
@@ -102,7 +109,7 @@ const items: { action: MenuAction; label: string; description: string; icon: Rea
   },
 ];
 
-const AppMenu: React.FC<AppMenuProps> = ({ isOpen, onClose, onSelect, activeView }) => {
+const AppMenu: React.FC<AppMenuProps> = ({ isOpen, onClose, onSelect, activeView, telemetryAccess }) => {
   const drawerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -155,12 +162,13 @@ const AppMenu: React.FC<AppMenuProps> = ({ isOpen, onClose, onSelect, activeView
         </div>
 
         <nav className="flex-1 overflow-y-auto py-2" aria-label="App sections">
-          {items.map(item => {
+          {items.filter(item => item.action !== 'view-shared-telemetry' || telemetryAccess !== undefined).map(item => {
             const isActive = activeView === item.action ||
               (item.action === 'setup' && activeView === 'setup');
             return (
               <button
                 key={item.action}
+                disabled={item.action === 'view-shared-telemetry' && telemetryAccess === 'pending'}
                 onClick={() => { onSelect(item.action); onClose(); }}
                 className={`w-full text-left px-4 py-3 flex items-start gap-3 transition-colors focus:outline-none focus:bg-[#F5F5F7] ${
                   isActive ? 'bg-[#00A8E8]/10 text-[#00A8E8]' : 'text-[#1A1B23] hover:bg-[#F5F5F7]'
@@ -174,6 +182,11 @@ const AppMenu: React.FC<AppMenuProps> = ({ isOpen, onClose, onSelect, activeView
                   <span className={`block text-xs ${isActive ? 'text-[#00A8E8]/80' : 'text-[#9CA3AF]'}`}>
                     {item.description}
                   </span>
+                  {item.action === 'view-shared-telemetry' && telemetryAccess === 'locked' && <span className="mt-1 flex items-center gap-1 text-xs text-[#6B7280]">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
+                    Upgrade to Pro to Unlock
+                  </span>}
+                  {item.action === 'view-shared-telemetry' && telemetryAccess === 'pending' && <span className="block text-xs text-[#6B7280]">Checking access…</span>}
                 </span>
                 {isActive && (
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="mt-1">

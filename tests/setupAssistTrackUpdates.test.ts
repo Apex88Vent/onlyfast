@@ -89,10 +89,11 @@ test('copying chassis and applying a template clears road feedback as it clears 
 
 // Run the actual edge-function handler with mocked infrastructure, inspecting
 // the generated API request instead of spending credits or mutating live data.
-function edgeHandler() {
+function edgeHandler(testing = false, permission: 'allowed' | 'denied' | 'error' | 'throw' = 'allowed') {
   let handler: (req: Request) => Promise<Response>;
   let requestBody: any;
   let content: unknown = JSON.stringify(answer);
+  let telemetryEnabled: boolean | undefined;
   const file = readFileSync(new URL('../supabase/functions/get-suggestions/index.ts', import.meta.url), 'utf8');
   const code = ts.transpileModule(file, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2021 } });
   const modules = {
@@ -102,14 +103,23 @@ function edgeHandler() {
       reserveUsage: async () => ({ status: 'reserved', reservation: {} }),
       finishUsage: async () => {}, releaseUsage: async () => {},
     },
-    'https://esm.sh/@supabase/supabase-js@2': { createClient: () => ({ auth: { getUser: async () => ({ data: { user: { id: 'test', app_metadata: { has_admin_full_access: true } } } }) } }) },
+    'https://esm.sh/@supabase/supabase-js@2': { createClient: () => ({ auth: { getUser: async () => ({ data: { user: { id: 'test', app_metadata: { has_admin_full_access: true } } } }) }, rpc: async () => { if(permission==='throw')throw Error('Permission service unavailable');return {data:{feature:'track_trace',allowed:permission==='allowed'},error:permission==='error'?Error('offline'):null}; } }) },
     '../_shared/beta-features.ts': { hasBetaFeatureForUser: async () => false },
     '../_shared/onlylaps-setup-context-store.ts': { createOnlyLapsSetupContextStore: () => ({}) },
-    '../_shared/setup-assist-onlylaps-context.ts': { loadSetupAssistOnlyLapsPromptContext: async () => ({ promptContext: null, debug: {} }), appendOnlyLapsTelemetryToSetupAssistPrompt: (prompt: string) => prompt, toBetaSetupAssistTelemetryDebug: () => null },
+    '../_shared/setup-assist-onlylaps-context.ts': { loadSetupAssistOnlyLapsPromptContext: async (options: { betaEnabled: boolean }) => { telemetryEnabled=options.betaEnabled;return { promptContext: null, debug: {} }; }, appendOnlyLapsTelemetryToSetupAssistPrompt: (prompt: string) => prompt, toBetaSetupAssistTelemetryDebug: () => null },
   };
-  new Function('require', 'exports', 'Deno', 'fetch', 'console', code.outputText)(name => modules[name], {}, { env: { get: () => 'test' }, serve: callback => { handler = callback; } }, async (_url, options) => { requestBody = JSON.parse(options.body); return new Response(JSON.stringify({ choices: [{ message: { content } }] })); }, { log() {}, error() {} });
-  return { call: (body: object, auth = true) => handler(new Request('http://test', { method: 'POST', headers: { ...(auth ? { Authorization: 'Bearer test' } : {}), 'Content-Type': 'application/json' }, body: JSON.stringify(body) })), body: () => requestBody, setContent: (value: unknown) => { content = value; } };
+  new Function('require', 'exports', 'Deno', 'fetch', 'console', code.outputText)(name => modules[name], {}, { env: { get: (key: string) => testing && key==='SUPABASE_URL' ? 'https://mfzajhnfonrfuiwxgvhe.supabase.co' : 'test' }, serve: callback => { handler = callback; } }, async (_url, options) => { requestBody = JSON.parse(options.body); return new Response(JSON.stringify({ choices: [{ message: { content } }] })); }, { log() {}, error() {} });
+  return { call: (body: object, auth = true) => handler(new Request('http://test', { method: 'POST', headers: { ...(auth ? { Authorization: 'Bearer test' } : {}), 'Content-Type': 'application/json' }, body: JSON.stringify(body) })), body: () => requestBody, telemetryEnabled: () => telemetryEnabled, setContent: (value: unknown) => { content = value; } };
 }
+
+test('2027 Setup Assist uses central telemetry permission and permission outages preserve normal suggestions',async()=>{
+  for(const permission of ['allowed','denied','error','throw'] as const){
+    const edge=edgeHandler(true,permission);
+    const response=await edge.call({raceClass:'Dwarf Cars',onlyfast_session_id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'});
+    assert.equal(response.status,200);assert.equal(edge.telemetryEnabled(),permission==='allowed');
+    assert.match((await response.json()).suggestion,/## Summary/);
+  }
+});
 
 test('suggestions and What If use correct dirt meanings, strict formatting and unchanged model/auth scope', async () => {
   for (const whatIfQuestion of [undefined, 'What if I soften the front spring?']) {

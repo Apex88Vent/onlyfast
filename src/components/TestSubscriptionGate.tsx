@@ -80,6 +80,7 @@ export default function TestSubscriptionGate({ userId, onContinue, onBack, child
         </button>
       </MembershipPlanCard>)}
     </div>
+    {testing && <button disabled={busy} onClick={() => void run('unsubscribed')} className="rounded-lg border px-4 py-3 font-semibold">Test no active subscription</button>}
     {error && <p role="alert" className="text-red-600">{error}</p>}
     <button onClick={() => void run()} disabled={busy} className="rounded-xl bg-[#00A8E8] px-6 py-3 font-semibold text-white disabled:opacity-50">{busy ? 'Saving…' : 'Continue'}</button>
     {!testing && <MembershipComparison />}

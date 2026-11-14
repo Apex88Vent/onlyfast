@@ -31,6 +31,7 @@ interface HandlingFeedbackProps {
   onlyfastSessionId?: string;
   /** Same experimental test-account gate used by the telemetry link card. */
   onlyLapsTelemetryEnabled?: boolean;
+  trackTraceTelemetryEnabled?: boolean;
 }
 
 interface BetaTelemetryDebug {
@@ -106,6 +107,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
   raceWeekendKey,
   onlyfastSessionId,
   onlyLapsTelemetryEnabled = false,
+  trackTraceTelemetryEnabled = false,
 }) => {
   useMembershipRevision();
   const [suggestions, setSuggestions] = useState('');
@@ -199,7 +201,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
 
   useEffect(() => {
     const requestVersion = ++telemetryStatusRequestRef.current;
-    if (!onlyLapsTelemetryEnabled) return;
+    if (!onlyLapsTelemetryEnabled && !trackTraceTelemetryEnabled) return;
     if (!onlyfastSessionId) {
       setTelemetryStatus({ state: 'none', displayName: null });
       return;
@@ -212,7 +214,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
         const accessToken = sessionData.session?.access_token;
         if (!accessToken) throw new Error('Missing session');
         const { data, error } = await supabase.functions.invoke(
-          'get-onlylaps-setup-context',
+          trackTraceTelemetryEnabled ? 'track-trace-setup-context' : 'get-onlylaps-setup-context',
           {
             headers: { Authorization: `Bearer ${accessToken}` },
             body: {
@@ -268,6 +270,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
     };
   }, [
     onlyLapsTelemetryEnabled,
+    trackTraceTelemetryEnabled,
     onlyfastSessionId,
     telemetryStatusRefresh,
   ]);
@@ -408,7 +411,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
           completedAssistAds.current.suggestions = adScope.userId;
         }
         setTelemetryRequestDebug(
-          onlyLapsTelemetryEnabled
+          (onlyLapsTelemetryEnabled || trackTraceTelemetryEnabled)
             ? readBetaTelemetryDebug(data.telemetry_debug)
             : null,
         );
@@ -478,7 +481,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
           completedAssistAds.current.whatIf = adScope.userId;
         }
         setTelemetryRequestDebug(
-          onlyLapsTelemetryEnabled
+          (onlyLapsTelemetryEnabled || trackTraceTelemetryEnabled)
             ? readBetaTelemetryDebug(data.telemetry_debug)
             : null,
         );
@@ -532,7 +535,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
         </h3>
       </div>
 
-      {onlyLapsTelemetryEnabled && (
+      {(onlyLapsTelemetryEnabled || trackTraceTelemetryEnabled) && (
         <div
           className="text-[11px] text-[#6B7280] -mt-2 mb-3"
           role="status"
@@ -541,7 +544,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
           {telemetryStatus.state === 'available' ? (
             <>
               <span className="font-semibold text-[#00A8E8]">
-                OnlyLaps telemetry available
+                {trackTraceTelemetryEnabled ? 'OnlyFast Track Trace telemetry available' : 'OnlyLaps telemetry available'}
               </span>
               {telemetryStatus.displayName && (
                 <span className="block truncate">
@@ -551,7 +554,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
             </>
           ) : telemetryStatus.state === 'no_metrics' ? (
             <>
-              <span>OnlyLaps telemetry linked, but no usable metrics were found</span>
+              <span>{trackTraceTelemetryEnabled ? 'OnlyFast Track Trace telemetry linked, but no usable metrics were found' : 'OnlyLaps telemetry linked, but no usable metrics were found'}</span>
               {telemetryStatus.displayName && (
                 <span className="block truncate">
                   {telemetryStatus.displayName}
@@ -559,16 +562,16 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
               )}
             </>
           ) : telemetryStatus.state === 'loading' ? (
-            'Checking OnlyLaps telemetry…'
+            trackTraceTelemetryEnabled ? 'Checking OnlyFast Track Trace telemetry…' : 'Checking OnlyLaps telemetry…'
           ) : telemetryStatus.state === 'unavailable' ? (
-            'OnlyLaps telemetry unavailable'
+            trackTraceTelemetryEnabled ? 'OnlyFast Track Trace telemetry unavailable' : 'OnlyLaps telemetry unavailable'
           ) : (
-            'No OnlyLaps telemetry linked'
+            trackTraceTelemetryEnabled ? 'No OnlyFast Track Trace telemetry linked' : 'No OnlyLaps telemetry linked'
           )}
         </div>
       )}
 
-      {onlyLapsTelemetryEnabled && telemetryRequestDebug && (
+      {(onlyLapsTelemetryEnabled || trackTraceTelemetryEnabled) && telemetryRequestDebug && (
         <div className="text-[10px] text-[#6B7280] border border-dashed border-[#D1D5DB] bg-[#F9FAFB] rounded-md px-2.5 py-1.5 -mt-1 mb-3">
           {telemetryRequestDebug.context_used ? (
             <>

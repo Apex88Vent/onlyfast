@@ -20,7 +20,8 @@ export function componentFunction(file: string, name: string, state: Record<stri
   const js = ts.transpileModule(`const fn = ${expression};`, { compilerOptions: { target: ts.ScriptTarget.ES2021 } }).outputText;
   const scope = { ...storage, ...access, ...library, ...custom,
     user: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }, selectedCar: 'GT3', customFields: [], customCarTemplate: null,
-    classLocksEnabled: false, sessionLabels: { base: 'Hot Laps', heat: 'Heat', main: 'Main' },
+    classLocksEnabled: false, sportsmanReadOnly: false, currentClassSaveRestricted: false,
+    sessionLabels: { base: 'Hot Laps', heat: 'Heat', main: 'Main' },
     sessionOrders: {}, DEFAULT_ORDER: { base: 0, heat: 1, main: 2 }, savedMeta: {},
     isDefaultRaceSessionType: () => true, TAB_LABELS: { base: { short: 'Hot Laps' } },
     emptyTemplate: () => ({}), ...state,

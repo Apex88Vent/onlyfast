@@ -79,7 +79,7 @@ test(`actual insert retry recovers a committed row after ${insertError.code}`, a
     async single(){return updating?{data:{id,user_id:owner},error:null}:{error:insertError};},
     async maybeSingle(){return {data:{id,user_id:owner,notes:'original'},error:null};}};
   const supabase={auth:{getSession:async()=>({data:{session:{user:{id:owner}}}})},from:()=>query};
-  const save=new Function('supabase','cleanPayload','useCallback',js+';return save;')(supabase,(p:unknown)=>p,(callback:unknown)=>callback);
+  const save=new Function('supabase','supabaseUrl','cleanPayload','useCallback',js+';return save;')(supabase,'https://fixture.invalid',(p:unknown)=>p,(callback:unknown)=>callback);
   assert.equal((await save({id,user_id:owner,notes:'newer queued edit'})).id,id);
   assert.deepEqual(lastValues,{notes:'newer queued edit'});
   assert.equal(attempts,1);

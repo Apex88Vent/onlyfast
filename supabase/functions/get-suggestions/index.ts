@@ -45,6 +45,7 @@ type MembershipTier = 'rookie' | 'pro' | 'team' | 'sportsman' | 'factory';
 interface AuthContext {
   user: any;
   admin: any;
+  contextReader: any;
 }
 
 function buildSetupDetails(currentSetup: SetupShape | null | undefined, raceClass: string): string {
@@ -135,7 +136,7 @@ async function requireUser(req: Request): Promise<AuthContext | Response> {
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  return { user: data.user, admin };
+  return { user: data.user, admin, contextReader: supabaseUrl === 'https://mfzajhnfonrfuiwxgvhe.supabase.co' ? authClient : admin };
 }
 
 function isResponse(value: AuthContext | Response): value is Response {
@@ -189,12 +190,17 @@ Deno.serve(async (req) => {
       return json({ error: 'Save your race weekend first to use Setup Assist.' }, 400);
     }
 
-    const hasTelemetryBetaAccess = await hasBetaFeatureForUser(
-      auth.admin,
-      auth.user.id,
-      'test_account_full_access',
-      'experimental',
-    );
+    let hasTelemetryBetaAccess = false;
+    if (Deno.env.get('SUPABASE_URL') === 'https://mfzajhnfonrfuiwxgvhe.supabase.co') {
+      // A telemetry permission outage must not block ordinary Setup Assist.
+      try {
+        const permission = await auth.contextReader.rpc('get_track_trace_permission');
+        hasTelemetryBetaAccess = !permission.error && permission.data?.feature === 'track_trace' &&
+          (permission.data.can_record ?? permission.data.allowed) === true;
+      } catch { hasTelemetryBetaAccess = false; }
+    } else {
+      hasTelemetryBetaAccess = await hasBetaFeatureForUser(auth.admin, auth.user.id, 'test_account_full_access', 'experimental');
+    }
     await resolveEffectiveTier(auth.admin, auth.user);
     const usage = await reserveUsage(auth.admin, auth.user, 'assist', { ...body, onlyfast_session_id: exactOnlyFastSessionId });
     if (usage.status === 'complete') return json(usage.response);
@@ -205,7 +211,7 @@ Deno.serve(async (req) => {
       betaEnabled: hasTelemetryBetaAccess,
       onlyfastSessionId: exactOnlyFastSessionId,
       userId: auth.user.id,
-      store: createOnlyLapsSetupContextStore(auth.admin),
+      store: createOnlyLapsSetupContextStore(auth.contextReader),
     });
     console.log('[get-suggestions] telemetry context', telemetry.debug);
 

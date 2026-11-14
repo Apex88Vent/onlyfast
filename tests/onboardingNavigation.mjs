@@ -15,6 +15,7 @@ import * as pavementValues from '../src/lib/pavementSetupValues.ts';
 import { buildBetaAccessSnapshot, CLOSED_BETA_ACCESS, setCachedBetaAccess, clearCachedBetaAccess } from '../src/lib/betaFeatures.ts';
 import { componentFunction } from './setupLibraryHarness.ts';
 import { resolveAuthUiTransition } from '../src/lib/authUiTransition.ts';
+import * as homeActionStyles from '../src/components/homeActionStyles.ts';
 
 const qaRequire = createRequire(process.env.REACT_TEST_RENDERER_MODULE);
 const React = qaRequire('react');
@@ -31,6 +32,7 @@ function compile(file, modules = {}) {
   const code = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2021, esModuleInterop: true } }).outputText;
   const output = { exports: {} };
   new Function('require', 'module', 'exports', code)(name => {
+    if (name === './homeActionStyles') return homeActionStyles;
     if (name === 'react') return React;
     if (name === '@/hooks/useMembershipRevision') return { useMembershipRevision: () => {} };
     if (name === '@/lib/nativeAds') return { nativeAds: {

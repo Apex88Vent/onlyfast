@@ -1,8 +1,10 @@
 import { setupClassLabel } from '@/lib/setupLibrary';
 import React, { useState, useEffect, useMemo } from 'react';
 import { isMedianIOSApp } from '@/lib/paymentVisibility';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseUrl, supabaseKey } from '@/lib/supabase';
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
 import { User } from '@supabase/supabase-js';
+import { useMembershipRevision } from '@/hooks/useMembershipRevision';
 import { canAccessSetupClass } from '@/lib/setupLibraryAccess';
 import {
   DEFAULT_RACE_SESSION_ORDER,
@@ -56,6 +58,7 @@ const cleanBaseTitle = (name: string) => name.replace(/^\[BASE TEMPLATE\]\s*/i, 
 const canGroup = (s: any) => norm(s.setup_name) !== '' || (norm(s.track_name) !== '' && norm(s.race_date) !== '');
 
 const buildGroupKey = (s: any) => {
+  if (s.race_weekend_id) return `weekend|${s.race_weekend_id}`;
   const raceScheduleId = norm(s.race_schedule_id);
   if (raceScheduleId) return `schedule|${raceScheduleId}`;
   const trackName = norm(s.track_name).toLowerCase();
@@ -156,9 +159,39 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
   classLocksEnabled,
   onUpgrade,
 }) => {
+  const membershipRevision = useMembershipRevision();
   const [setups, setSetups] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const phase2 = supabaseUrl === 'https://mfzajhnfonrfuiwxgvhe.supabase.co';
+  const [archiveFilter, setArchiveFilter] = useState('all');
+  const [archiveTarget, setArchiveTarget] = useState<{ group: SetupGroup; restore: boolean } | null>(null);
+  const [archiveBusy, setArchiveBusy] = useState(false);
+  const [archiveError, setArchiveError] = useState('');
+  const [archiveNotice, setArchiveNotice] = useState('');
+  const archivePending = React.useRef(false);
+  const counts = setups[0]?.access?.counts || { base: 0, regular: 0 };
+  const sportsman = setups[0]?.access?.tier === 'sportsman';
+
+  const confirmArchive = async () => {
+    if (!archiveTarget || archivePending.current || !user) return;
+    archivePending.current = true; setArchiveBusy(true); setArchiveError('');
+    try {
+      const session = await supabase.auth.getSession();
+      if (session.data.session?.user.id !== user.id) throw new Error('Your account changed. Sign in again.');
+      const response = await fetch(supabaseUrl + '/rest/v1/rpc/set_onlyfast_setup_archive', {
+        method: 'POST', headers: { apikey: supabaseKey, Authorization: 'Bearer ' + session.data.session.access_token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_setup_id: archiveTarget.group.setups[0].id, p_archive: !archiveTarget.restore }),
+      });
+      const data = await response.json();
+      if ((await supabase.auth.getSession()).data.session?.user.id !== user.id) throw new Error('Your account changed. Reopen Saved Setups.');
+      if (!response.ok) throw new Error(data?.message || 'The archive change failed.');
+      if (!data || Boolean(data.archived_at) === archiveTarget.restore) throw new Error('The database did not confirm the archive state.');
+      setArchiveNotice(archiveTarget.restore ? 'Setup restored.' : 'Setup archived. Its active slot is now available.');
+      setArchiveTarget(null); await fetchSetups(); onDataChanged?.();
+    } catch (e) { setArchiveError(e instanceof Error ? e.message : 'The archive change could not be confirmed.'); }
+    finally { archivePending.current = false; setArchiveBusy(false); }
+  };
 
   // Add-session modal state (the ONLY session control remaining on this screen).
   const [addTarget, setAddTarget] = useState<SetupGroup | null>(null);
@@ -173,7 +206,7 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
 
   useEffect(() => {
     if (user) fetchSetups();
-  }, [user, refreshTrigger]);
+  }, [user, refreshTrigger, membershipRevision]);
 
   const fetchSetups = async () => {
     if (!user) return;
@@ -182,8 +215,9 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
     try {
       const { data: summaryData, error: summaryError } = await supabase.rpc('list_user_setup_summaries');
       if (!summaryError && Array.isArray(summaryData)) {
-        setSetups(summaryData.filter(s => canAccessSetupClass(s.race_class)).slice(0, 50));
+        setSetups(summaryData.filter(s => canAccessSetupClass(s.race_class)).slice(0, phase2 ? undefined : 50));
       } else {
+        if (phase2) { setSetups([]); throw new Error('Could not verify setup permissions. Please try again.'); }
         const { data, error } = await supabase
           .from('race_setups')
           .select('*')
@@ -200,8 +234,9 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
   };
 
   const groups = useMemo(() => buildGroups(setups.filter(setup =>
-    isBaseSetupRow(setup) || isValidSavedRaceSession(setup as RaceWeekendSessionRow)
-  )), [setups]);
+    (isBaseSetupRow(setup) || isValidSavedRaceSession(setup as RaceWeekendSessionRow)) &&
+    (!phase2 || archiveFilter === 'all' || (archiveFilter === 'archived' ? Boolean(setup.archived_at) : !setup.archived_at))
+  )), [setups, archiveFilter, phase2]);
 
   const loadSavedSetup = async (setup: any, groupSetups: any[]) => {
     if (!user) return;
@@ -357,6 +392,15 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
           </button>
         </div>
 
+        {phase2 && <div className="mb-4 space-y-3 text-sm text-[#374151]">
+          <label className="flex flex-wrap items-center gap-2">Show setups
+            <select aria-label="Archive filter" className="rounded-lg border border-[#9CA3AF] p-2" value={archiveFilter} onChange={e => setArchiveFilter(e.target.value)}>
+              <option value="all">All</option><option value="active">Active</option><option value="archived">Archived</option>
+            </select>
+          </label>
+          {sportsman && <p>Base setups: {counts.base} / 2 · Race setups: {counts.regular} / 5</p>}
+          {archiveNotice && <p role="status">{archiveNotice}</p>}
+        </div>}
         <div aria-live="polite">
           {loading ? (
             <div className="text-center py-8 text-[#9CA3AF]" role="status">Loading setups...</div>
@@ -385,7 +429,10 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
           ) : (
             <ul className="space-y-3 max-h-[560px] overflow-y-auto" aria-label="Saved setups list">
               {groups.map(group => {
-                const isLocked = classLocksEnabled && Boolean(group.raceClass) &&
+                const archived = phase2 && Boolean(group.setups[0]?.archived_at);
+                const archiveLocked = archived && group.setups[0]?.access?.readable === false;
+                const canModify = !phase2 || group.setups[0]?.access?.editable === true;
+                const isLocked = phase2 ? archiveLocked : classLocksEnabled && Boolean(group.raceClass) &&
                   group.raceClass.trim().toLowerCase() !== activeClass.trim().toLowerCase();
                 const subtitleParts = [setupClassLabel(group.raceClass), group.trackName, group.org].filter(p => p && p.trim() !== '');
                 const orderedSetups = group.isBaseSetup
@@ -395,23 +442,25 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
                       .filter((row): row is RaceWeekendSessionRow => Boolean(row));
                 const firstSetup = orderedSetups[0];
                 const openFirstSetup = () => {
+                  if (archiveLocked) { setArchiveNotice('Archived setups cannot be opened, edited, or restored on Sportsman. Choose Pro or Factory in subscription testing to unlock access.'); return; }
                   if (!isLocked && firstSetup) loadSavedSetup(firstSetup, orderedSetups);
                 };
 
                 return (
                   <li
                     key={group.key}
-                    className={`rounded-xl border p-4 ${isLocked ? 'border-[#E5E7EB] bg-[#F3F4F6] opacity-75' : 'border-[#E5E7EB] bg-[#F9FAFB] cursor-pointer focus-within:ring-2 focus-within:ring-[#00A8E8]/30'}`}
-                    role={isLocked ? undefined : 'button'}
-                    tabIndex={isLocked ? undefined : 0}
+                    className={`rounded-xl border p-4 ${archived || isLocked || !canModify ? 'border-[#D1D5DB] bg-[#E5E7EB] text-[#4B5563]' : 'border-[#E5E7EB] bg-[#F9FAFB]'} cursor-pointer focus-within:ring-2 focus-within:ring-[#00A8E8]/30`}
+                    role={phase2 || !isLocked ? 'button' : undefined}
+                    tabIndex={phase2 || !isLocked ? 0 : undefined}
                     onClick={openFirstSetup}
                     onKeyDown={(e) => {
+                      if (e.target !== e.currentTarget) return;
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
                         openFirstSetup();
                       }
                     }}
-                    aria-label={isLocked ? `${group.title || 'Saved setup'} is locked because it belongs to another class` : `Open ${group.title || 'saved setup'}`}
+                    aria-label={archiveLocked ? `${group.title || 'Saved setup'} is archived and locked` : isLocked ? `${group.title || 'Saved setup'} is locked because it belongs to another class` : `Open ${group.title || 'saved setup'}`}
                   >
                     {/* Parent race-day title + delete-entire-event trash icon */}
                     <div className="mb-3 flex items-start justify-between gap-2">
@@ -422,12 +471,13 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
                               BASE SETUP
                             </span>
                           )}
-                          {isLocked && (
+                          {(isLocked || archived || !canModify) && (
                             <span className="inline-flex flex-shrink-0 items-center text-[#6B7280]" title="Locked setup" aria-label="Locked setup">
                               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="10" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
                             </span>
                           )}
                           <div className="font-bold text-base text-[#1A1B23] truncate">{group.title || 'Untitled'}</div>
+                          {archived && <span className="text-xs font-semibold text-[#374151]">Archived</span>}
                         </div>
                         {subtitleParts.length > 0 && (
                           <div className="text-xs text-[#9CA3AF] truncate mt-0.5">
@@ -435,7 +485,7 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
                           </div>
                         )}
                       </div>
-                      {!isLocked && <button
+                      {!isLocked && canModify && !archived && <button
                         onClick={(e) => {
                           e.stopPropagation();
                           openDelete(group);
@@ -450,13 +500,13 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
                       </button>}
                     </div>
 
-                    {isLocked && <p className="mb-3 text-xs text-[#6B7280]">Locked — Switch back to this vehicle to access this setup.</p>}
+                    {isLocked && <p className="mb-3 text-xs text-[#4B5563]">{archiveLocked ? 'Archived — Pro or Factory is required to open or restore this setup.' : 'Locked — Switch back to this vehicle to access this setup.'}</p>}
                     {isLocked && (
                       <button
                         onClick={(event) => { event.stopPropagation(); onUpgrade(); }}
                         className="mb-3 text-xs font-semibold text-[#00A8E8] underline-offset-4 hover:underline focus:outline-none focus:ring-2 focus:ring-[#00A8E8] rounded"
                       >
-                        Upgrade to Teams to Unlock
+                        {phase2 ? 'View subscription options' : 'Upgrade to Teams to Unlock'}
                       </button>
                     )}
 
@@ -480,7 +530,7 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
                       ))}
 
                       {/* Trailing [+] add-session button */}
-                      {!isLocked && !group.isBaseSetup && (
+                      {!isLocked && canModify && !archived && !group.isBaseSetup && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -496,6 +546,11 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
                         </button>
                       )}
                     </div>
+                    {phase2 && group.setups[0]?.access?.tier !== 'unsubscribed' && (!archived || !archiveLocked) && <button
+                      className="mt-3 rounded-lg border border-[#6B7280] px-3 py-2 text-sm font-semibold text-[#374151] focus-visible:ring-2 focus-visible:ring-[#00A8E8]"
+                      onClick={e => { e.stopPropagation(); setArchiveError(''); setArchiveTarget({ group, restore: archived }); }}>
+                      {archived ? 'Restore Setup' : 'Archive Setup'}
+                    </button>}
                   </li>
                 );
               })}
@@ -504,6 +559,23 @@ const SavedSetups: React.FC<SavedSetupsProps> = ({
         </div>
       </section>
 
+      <AlertDialog open={Boolean(archiveTarget)} onOpenChange={open => { if (!open && !archiveBusy) setArchiveTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{archiveTarget?.restore ? 'Restore setup?' : 'Permanently archive setup?'}</AlertDialogTitle>
+            <AlertDialogDescription>{archiveTarget?.restore
+              ? 'This setup will return to your active list. Its original racing data and creation timestamp will remain unchanged.'
+              : 'Archiving this setup will free one of your active setup slots. The setup will remain saved, but you will not be able to open, edit, or restore it while subscribed to Sportsman. Upgrading to Pro or Factory will unlock your archived setups.'}</AlertDialogDescription>
+          </AlertDialogHeader>
+          {archiveError && <p role="alert" className="text-sm text-red-700">{archiveError}</p>}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={archiveBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction disabled={archiveBusy} onClick={e => { e.preventDefault(); void confirmArchive(); }}>
+              {archiveBusy ? 'Saving…' : archiveTarget?.restore ? 'Restore Setup' : 'Permanently Archive'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {/* ADD SESSION MODAL */}
       {addTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-label="Add Session">

@@ -21,7 +21,7 @@ export const PLANS_2027: PlanMeta[] = (['sportsman', 'pro', 'factory'] as const)
       limits.maxBaseSetups === 'unlimited' ? 'Unlimited base setups' : limits.maxBaseSetups + ' saved base setups',
       limits.maxRaceWeekendSetups === 'unlimited' ? 'Unlimited regular race setups' : limits.maxRaceWeekendSetups + ' active regular setup slots, including locked setups',
       limits.raceWeekendSetupLockHours === null ? 'No editing time limit' : 'Read-only after 48 hours; all values, notes and results remain visible',
-      limits.onlyLapsEnabled ? 'Full OnlyLaps and telemetry access — coming with integration' : 'No OnlyLaps or advanced telemetry',
+      limits.onlyLapsEnabled ? 'Full OnlyFast Track Trace access — timing integration in progress' : 'OnlyFast Track Trace requires Pro or Factory',
       limits.setupAssistsPerRaceWeekend === 'unlimited' ? 'Unlimited Setup Assist and timing scans' : '1 Setup Assist and 2 timing scans per race weekend',
       'No advertisements',
     ],

@@ -6,11 +6,12 @@ import React, { useState, useEffect, useCallback, useId, useRef } from 'react';
 import { areSetupSheetsCompatible, isDevelopmentClass } from '@/lib/setupLibrary';
 import { canAccessSetupClass } from '@/lib/setupLibraryAccess';
 import { buildLibraryCustomFields, libraryFieldsFromRow } from '@/lib/setupLibraryStorage';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseUrl } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import ChassisSetupForm from './ChassisSetupForm';
 import CustomFieldManager, { CustomField } from './CustomFieldManager';
 import { getEffectiveTier, readMembership, checkSavePermission } from '@/lib/membership';
+import { useTestingAccountAccess, testingClassReadOnly } from '@/hooks/useTestingAccountAccess';
 
 interface CreateBaseSetupViewProps {
   user: User | null;
@@ -66,6 +67,21 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
   const [templates, setTemplates] = useState<any[]>([]);
   const compatibleTemplates = templates.filter(t => canAccessSetupClass(t.race_class) && areSetupSheetsCompatible(t.race_class, selectedCar));
   const [editingId, setEditingId] = useState<string | null>(null);
+  const phase2 = supabaseUrl === 'https://mfzajhnfonrfuiwxgvhe.supabase.co';
+  const accountAccess = useTestingAccountAccess(user?.id);
+  const [editAccess, setEditAccess] = useState<{ id: string; editable: boolean; readable: boolean } | null>(null);
+  const [permissionRevision, setPermissionRevision] = useState(0);
+  useEffect(() => { const update = () => setPermissionRevision(v => v + 1); window.addEventListener('membership-updated', update); return () => window.removeEventListener('membership-updated', update); }, []);
+  useEffect(() => {
+    setEditAccess(null); if (!phase2 || !editingId) return;
+    let active = true;
+    void supabase.rpc('get_onlyfast_2027_setup_edit_state', { p_setup_id: editingId }).then(({ data, error }) => {
+      if (active) setEditAccess({ id: editingId, editable: !error && data?.editable === true, readable: !error && data?.readable === true });
+    });
+    return () => { active = false; };
+  }, [phase2, editingId, user?.id, permissionRevision]);
+  const readOnly = phase2 && (testingClassReadOnly(accountAccess, template.raceClass || selectedCar) ||
+    Boolean(editingId && (editAccess?.id !== editingId || !editAccess?.editable)));
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [customFieldsOpen, setCustomFieldsOpen] = useState(false);
@@ -134,15 +150,20 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
         .order('created_at', { ascending: false });
       const byId = new Map<string, any>();
       [...(canonical || []), ...(legacy || [])].forEach(row => byId.set(row.id, row));
-      setTemplates([...byId.values()]);
+      if (phase2) {
+        const summaries = await supabase.rpc('list_user_setup_summaries');
+        const accessById = new Map((!summaries.error && Array.isArray(summaries.data) ? summaries.data : []).map((row: any) => [row.id, row.access]));
+        setTemplates([...byId.values()].map(row => ({ ...row, access: accessById.get(row.id) })));
+      } else setTemplates([...byId.values()]);
     } catch {}
-  }, [user]);
+  }, [user, phase2, permissionRevision]);
 
   useEffect(() => { fetchTemplates(); }, [fetchTemplates]);
 
   const handleChange = useCallback((field: string, value: string) => {
+    if (readOnly) return;
     setTemplate(prev => ({ ...prev, [field]: value }));
-  }, []);
+  }, [readOnly]);
 
   const buildPayload = (s: BaseTemplateState) => {
     if (!canAccessSetupClass(s.raceClass || selectedCar)) throw new Error('This setup class is available only to the OnlyFast test account.');
@@ -235,6 +256,7 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
   };
 
   const handleSave = async () => {
+    if (readOnly) { setMessage('This base setup is read-only. Its saved values remain available.'); return; }
     if (!user) { onSignInClick(); return; }
     if (!template.setup_name.trim()) {
       setMessage('Please give this base template a name.');
@@ -258,7 +280,7 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
         if (tier === 'sportsman') {
           const { data, error } = await supabase.rpc('list_user_setup_summaries');
           if (error || !Array.isArray(data)) throw error || new Error('Setup summary unavailable');
-          baseCount = data.filter((row: any) => row.setup_type === 'base_template' || String(row.setup_name || '').startsWith('[BASE TEMPLATE]')).length;
+          baseCount = data.filter((row: any) => !row.archived_at && (row.setup_type === 'base_template' || String(row.setup_name || '').startsWith('[BASE TEMPLATE]'))).length;
         }
         const { data: allRows } = await supabase
           .from('race_setups')
@@ -404,6 +426,7 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
   };
 
   const openRename = (t: any) => {
+    if (phase2 && testingClassReadOnly(accountAccess, t.race_class || selectedCar)) { setMessage('This base setup is read-only.'); return; }
     setRenameTarget(t);
     setRenameValue((t.setup_name || '').replace(/^\[BASE TEMPLATE\]\s*/, ''));
     setRenameError('');
@@ -418,6 +441,10 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
 
   const submitRename = async () => {
     if (!user || !renameTarget) return;
+    if (phase2) {
+      const state = await supabase.rpc('get_onlyfast_2027_setup_edit_state', { p_setup_id: renameTarget.id });
+      if (state.error || !state.data?.editable) { setRenameError('This base setup is read-only.'); return; }
+    }
     const nextName = renameValue.trim();
     if (!nextName) {
       setRenameError('Please enter a base setup name.');
@@ -458,20 +485,25 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
 
   const handleDelete = async (id: string) => {
     if (!user) return;
+    if (phase2) {
+      const state = await supabase.rpc('get_onlyfast_2027_setup_edit_state', { p_setup_id: id });
+      if (state.error || !state.data?.editable) { setMessage('This base setup is read-only.'); return; }
+    }
     if (!confirm('Delete this base template?')) return;
     try {
-      await supabase
+      const { error } = await supabase
         .from('race_setups')
         .delete()
         .eq('id', id)
         .eq('user_id', user.id);
+      if (error) throw error;
       if (editingId === id) {
         setEditingId(null);
         setTemplate(emptyTemplate());
       }
       fetchTemplates();
       onTemplatesChange?.();
-    } catch {}
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Could not delete this base setup.'); }
   };
 
   const handleNew = () => {
@@ -542,16 +574,18 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
                   onClick={() => handleEdit(t)}
                   className="text-[#00A8E8] hover:text-[#0090c7] text-xs font-semibold px-2 py-1 rounded hover:bg-[#00A8E8]/10 transition-colors"
                 >
-                  Edit
+                  {phase2 && t.access?.editable !== true ? 'View' : 'Edit'}
                 </button>
                 <button
                   onClick={() => openRename(t)}
+                  disabled={phase2 && t.access?.editable !== true}
                   className="text-[#6B7280] hover:text-[#1A1B23] text-xs font-semibold px-2 py-1 rounded hover:bg-[#E5E7EB] transition-colors"
                 >
                   Rename
                 </button>
                 <button
                   onClick={() => handleDelete(t.id)}
+                  disabled={phase2 && t.access?.editable !== true}
                   className="text-red-500 hover:text-red-700 text-xs font-semibold px-2 py-1 rounded hover:bg-red-50 transition-colors"
                 >
                   Delete
@@ -562,6 +596,8 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
         </section>
       )}
 
+      {phase2 && editingId && (editAccess?.id !== editingId || !editAccess.readable) ? <p role="status">Checking access to this saved base setup. Archived contents require Pro or Factory.</p> : <>
+      <fieldset disabled={readOnly} className="min-w-0 space-y-6" aria-label="Base setup fields">
       {/* Template name */}
       <section className="bg-white rounded-2xl border border-[#E5E7EB] p-5 shadow-sm">
         {!editingId && compatibleTemplates.length > 0 && (
@@ -634,6 +670,9 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
         />
       </section>
 
+      </fieldset>
+      </>}
+      {readOnly && <p role="status" className="rounded-lg border bg-blue-50 p-3 text-sm">Read-only base setup. All available saved values remain viewable.</p>}
       {/* Sticky save bar */}
       <div className="sticky bottom-[max(1rem,env(safe-area-inset-bottom))] bg-white border border-[#E5E7EB] rounded-xl shadow-lg p-3 flex items-center justify-between gap-3 flex-wrap">
         <div aria-live="polite" className="flex-1 min-w-0">
@@ -650,7 +689,7 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
         </div>
         <button
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || readOnly}
           className="bg-[#00A8E8] hover:bg-[#0090c7] text-white px-6 py-2.5 rounded-lg font-semibold transition-colors disabled:opacity-50 flex items-center gap-2 shadow-sm"
         >
           {saving ? 'Saving...' : editingId ? 'Update Template' : 'Save Template'}

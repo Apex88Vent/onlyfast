@@ -38,7 +38,7 @@ export default function Phase2027Preview() {
       </section>
       <section className="rounded-2xl border-2 border-[#d5dbe4] bg-white p-4 space-y-4" aria-label="Sample permission inspector">
         <h2 className="text-xl font-bold">{PLANS_2027.find(plan => plan.tier === inspected)?.displayName} · sample permission inspector</h2>
-        <p className="text-sm text-[#475569]">These are disposable examples. No account is selected and nothing is saved. OnlyLaps and telemetry are future permissions; integration is not installed.</p>
+        <p className="text-sm text-[#475569]">These are disposable examples. No account is selected and nothing is saved. OnlyFast Track Trace timing integration is in progress.</p>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <label className="grid gap-1">Saved base setups<input aria-label="Saved base setups" type="number" min="0" max="100" value={baseCount} onChange={e => setBaseCount(Math.max(0, Number(e.target.value)))} className="rounded border p-2 w-full" /></label>
           <label className="grid gap-1">Total regular setups<input aria-label="Total regular setups" type="number" min="0" max="100" value={regularCount} onChange={e => setRegularCount(Math.max(0, Number(e.target.value)))} className="rounded border p-2 w-full" /></label>
@@ -50,7 +50,7 @@ export default function Phase2027Preview() {
           <li>New regular setup: {regular.allowed ? 'Allowed' : 'Blocked — ' + regular.reason.replace(/_/g, ' ')}</li>
           <li>Editing existing regular setup: {permissions.canEdit ? 'Allowed' : 'Read-only after 48 hours'}</li>
           <li>Viewing existing regular setup: Always available within your selected class.</li>
-          <li>OnlyLaps / telemetry: {limits.onlyLapsEnabled ? 'Included when integration launches' : 'Not included'}</li>
+          <li>OnlyFast Track Trace: {limits.onlyLapsEnabled ? 'Included; timing integration in progress' : 'Requires Pro or Factory'}</li>
           <li>Advertisements: None.</li>
         </ul>
         <fieldset className="rounded-xl border p-4 space-y-2" aria-label="Sample saved setup">

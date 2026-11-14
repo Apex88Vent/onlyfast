@@ -11,6 +11,9 @@ import { resetTestAccountData } from '@/lib/testAccount';
 import { useBetaFeatures } from '@/hooks/useBetaFeatures';
 import { useMembershipRevision } from '@/hooks/useMembershipRevision';
 import { BETA_FEATURES } from '@/lib/betaFeatures';
+import { trackTraceEnabled } from '@/features/track-trace/api';
+import { useTrackTracePermission } from '@/features/track-trace/useTrackTrace';
+import SharedTelemetryDialog from '@/features/track-trace/SharedTelemetryDialog';
 
 interface HeaderProps {
   user: User | null;
@@ -37,11 +40,14 @@ const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBac
   const [showDropdown, setShowDropdown] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [sharedTelemetryOpen, setSharedTelemetryOpen] = useState(false);
+  const telemetryPermission = useTrackTracePermission(user?.id ?? null);
   const [activeView, setActiveView] = useState<string>('home');
   const [nicknameOverride, setNicknameOverride] = useState<string>('');
   useMembershipRevision();
   const membership = user ? getTrustedMembership(user.id) : null;
   const planLabel = !membership ? null
+    : membership.membership_tier === 'unsubscribed' ? 'Read-only'
     : membership.has_admin_full_access ? 'Admin'
     : membership.membership_tier === 'sportsman' ? 'Sportsman'
     : membership.membership_tier === 'factory' ? 'Factory'
@@ -114,6 +120,12 @@ const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBac
   }, [showDropdown]);
 
   const handleMenuSelect = (action: MenuAction) => {
+    if (action === 'view-shared-telemetry') {
+      if (!trackTraceEnabled) return;
+      if (telemetryPermission.fullAccess) setSharedTelemetryOpen(true);
+      else if (telemetryPermission.navigationLocked) navigate('/upgrade');
+      return;
+    }
     if (action === 'how-it-works') {
       onOpenHowOnlyFastWorks?.();
       return;
@@ -304,7 +316,9 @@ const Header: React.FC<HeaderProps> = ({ user, onSignInClick, selectedCar, onBac
         onClose={() => setMenuOpen(false)}
         onSelect={handleMenuSelect}
         activeView={activeView}
+        telemetryAccess={trackTraceEnabled ? telemetryPermission.fullAccess ? 'allowed' : telemetryPermission.navigationLocked ? 'locked' : 'pending' : undefined}
       />
+      {sharedTelemetryOpen && trackTraceEnabled && <SharedTelemetryDialog userId={user?.id ?? null} onClose={() => setSharedTelemetryOpen(false)} />}
 
       {user && <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} user={user} />}
     </>

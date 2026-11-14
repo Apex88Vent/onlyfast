@@ -1,6 +1,7 @@
 import { getClassIcon } from '@/lib/classIcons';
 import { setupClassLabel } from '@/lib/setupLibrary';
 import React from 'react';
+import { homeActionCardClassName, homeActionIconContainerClassName, homeActionIconClassName, homeActionLabelClassName } from './homeActionStyles';
 import { EXPANDED_CLASS_CONFIGS, SETUP_CATEGORY_LABELS, type SetupCategory } from '@/lib/setupLibrary';
 import { ArrowLeft, ArrowRight, BarChart3, CalendarDays, CheckCircle2, CircleDashed, Library, Plus, Save, Trophy, Wrench, type LucideIcon } from 'lucide-react';
 
@@ -42,6 +43,7 @@ interface HomeLandingProps {
   performanceStats?: PerformanceStat[];
   upcomingEvents?: UpcomingEvent[];
   middleSlot?: React.ReactNode;
+  actionGridSlot?: React.ReactNode;
   onChangeClass: () => void;
   onAction: (action: HomeAction) => void;
 }
@@ -203,6 +205,7 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
   performanceStats = [],
   upcomingEvents = [],
   middleSlot,
+  actionGridSlot,
   onChangeClass,
   onAction,
 }) => {
@@ -218,6 +221,23 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
   const topInfoCount = (selectedCar ? 1 : 0) + (showNextEvent ? 1 : 0);
   const formattedCarNumber = formatCarNumber(carNumber);
   const selectedCarIcon = getClassIcon(selectedCar, 'white');
+  const actionGridRef = React.useRef<HTMLElement | null>(null);
+  React.useEffect(() => {
+    if (!actionGridSlot) return;
+    const grid = actionGridRef.current;
+    const reference = grid?.querySelector<HTMLElement>('[data-home-action="library"]');
+    if (!grid || !reference) return;
+    // Text wrapping can increase a standard row above its shared minimum height.
+    // Mirror that actual card without resizing any of the original six actions.
+    const syncHeight = () => grid.style.setProperty('--home-action-height', `${reference.getBoundingClientRect().height}px`);
+    syncHeight();
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(syncHeight);observer.observe(reference);
+      return () => observer.disconnect();
+    }
+    window.addEventListener('resize',syncHeight);
+    return () => window.removeEventListener('resize',syncHeight);
+  }, [actionGridSlot]);
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -287,21 +307,23 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
         middleSlot
       )}
 
-      <section className="grid grid-cols-2 gap-1.5 sm:gap-4 mb-2 sm:mb-5" aria-label="Home actions">
+      <section ref={actionGridRef} className="grid grid-cols-2 gap-1.5 sm:gap-4 mb-2 sm:mb-5" aria-label="Home actions">
         {actionCards.map(({ action, label, icon: Icon }) => (
             <button
               key={action}
+              data-home-action={action}
               onClick={() => onAction(action)}
-              className="bg-white rounded-xl sm:rounded-2xl border border-[#E5E7EB] shadow-sm hover:shadow-md hover:border-[#00A8E8]/35 active:scale-[0.99] transition-all px-2 py-1 sm:p-6 min-h-[78px] sm:min-h-[200px] text-left grid grid-cols-[48px_minmax(0,1fr)] items-center justify-center gap-2 max-[379px]:grid-cols-[32px_minmax(0,1fr)] max-[379px]:gap-1.5 sm:flex sm:flex-col sm:text-center sm:gap-0 focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
+              className={homeActionCardClassName + ' grid grid-cols-[48px_minmax(0,1fr)] gap-2 max-[379px]:grid-cols-[32px_minmax(0,1fr)] max-[379px]:gap-1.5 sm:flex sm:flex-col sm:text-center sm:gap-0'}
             >
-              <span className="h-12 w-12 max-[379px]:w-8 sm:h-16 sm:w-16 flex items-center justify-center text-[#00A8E8]">
-                <Icon className="h-10 w-10 max-[379px]:h-8 max-[379px]:w-8 sm:h-16 sm:w-16" strokeWidth={2.2} aria-hidden="true" />
+              <span className={homeActionIconContainerClassName}>
+                <Icon className={homeActionIconClassName} strokeWidth={2.2} aria-hidden="true" />
               </span>
-              <span className="block min-w-0 break-words text-[18px] max-[379px]:text-base sm:text-[34px] font-semibold text-[#1A1B23] sm:mt-5 leading-tight">
+              <span className={homeActionLabelClassName + ' sm:mt-5'}>
                 {label}
               </span>
             </button>
         ))}
+        {actionGridSlot}
       </section>
 
       {middleSlot && Boolean(showCurrentRaceWeekendCard && displayedWeekend || performanceStats.length || upcomingEvents.length) && (

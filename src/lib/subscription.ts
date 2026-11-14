@@ -1,6 +1,6 @@
 // Subscription state derives from server-owned subscription rows and grants.
 
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseUrl } from '@/lib/supabase';
 import { setTrustedAuthorization, clearTrustedMembership, invalidateAdvertisingMembership, getTrustedTestTier } from './trustedMembership';
 import type { MembershipTier } from './membership';
 import {
@@ -25,7 +25,7 @@ export interface UserSubscriptionRow {
 export interface AccountStatus {
   testTier?: MembershipTier | null;
   /** Display label for the account. */
-  label: 'Free' | 'Pro' | 'Teams' | 'Sportsman' | 'Factory' | 'Admin';
+  label: 'Free' | 'Pro' | 'Teams' | 'Sportsman' | 'Factory' | 'Admin' | 'Read-only';
   /** Normalized plan from Stripe (ignores admin override). */
   plan: SubscriptionPlan;
   /** Whether the user effectively has paid access (admin override included). */
@@ -104,13 +104,16 @@ export function deriveAccountStatus(
   const testTier = getTrustedTestTier(row?.user_id);
   if (testTier) {
     return {
-      label: testTier === 'sportsman' ? 'Sportsman' : testTier === 'factory' ? 'Factory' : testTier === 'rookie' ? 'Free' : testTier === 'pro' ? 'Pro' : 'Teams',
-      plan: testTier === 'rookie' ? 'free' : testTier === 'team' ? 'teams' : testTier,
-      isPaid: testTier !== 'rookie', isAdmin: false, row, testTier,
+      label: testTier === 'unsubscribed' ? 'Read-only' : testTier === 'sportsman' ? 'Sportsman' : testTier === 'factory' ? 'Factory' : testTier === 'rookie' ? 'Free' : testTier === 'pro' ? 'Pro' : 'Teams',
+      plan: testTier === 'rookie' || testTier === 'unsubscribed' ? 'free' : testTier === 'team' ? 'teams' : testTier,
+      isPaid: !['rookie','unsubscribed'].includes(testTier), isAdmin: false, row, testTier,
     };
   }
 
   const access = readMembership();
+  if (access.membership_tier === 'unsubscribed') {
+    return { label: 'Read-only', plan: 'free', isPaid: false, isAdmin: false, row };
+  }
   const isAdmin = access.has_admin_full_access;
 
   if (isAdmin) {
@@ -167,7 +170,16 @@ export async function syncMembershipFromSubscription(): Promise<AccountStatus | 
     throw testOverride.error;
   }
   const testTier = testOverride.data;
-  if (testTier !== null && !['rookie', 'pro', 'team', 'sportsman', 'factory'].includes(testTier)) throw new Error('Invalid test membership');
-  setTrustedAuthorization(user.id, row, verified.data.user.app_metadata || {}, testTier);
+  if (testTier !== null && !['rookie', 'pro', 'team', 'sportsman', 'factory', 'unsubscribed'].includes(testTier)) throw new Error('Invalid test membership');
+  let serverTier: MembershipTier | null = null;
+  if (supabaseUrl === 'https://mfzajhnfonrfuiwxgvhe.supabase.co') {
+    const result = await supabase.rpc('get_onlyfast_membership');
+    const tier = result.data?.tier;
+    if (result.error || !['rookie','sportsman','pro','factory','team','admin','unsubscribed'].includes(tier)) throw new Error('Testing membership verification failed');
+    const current = await supabase.auth.getSession();
+    if (current.data.session?.user.id !== user.id || revision !== refreshRevision) return null;
+    serverTier = tier === 'admin' ? 'team' : tier;
+  }
+  setTrustedAuthorization(user.id, row, verified.data.user.app_metadata || {}, testTier, serverTier);
   return deriveAccountStatus(row);
 }

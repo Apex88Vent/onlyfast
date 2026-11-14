@@ -31,6 +31,7 @@ type ServerAuthResult =
   | {
       user: { id: string };
       admin: SupabaseClient;
+      reader: SupabaseClient;
     };
 
 async function requireBetaUser(req: Request): Promise<ServerAuthResult> {
@@ -71,7 +72,7 @@ async function requireBetaUser(req: Request): Promise<ServerAuthResult> {
     return { response: json({ error: 'This feature is unavailable.' }, 403) };
   }
 
-  return { user: data.user, admin };
+  return { user: data.user, admin, reader: supabaseUrl === 'https://mfzajhnfonrfuiwxgvhe.supabase.co' ? authClient : admin };
 }
 
 function errorText(error: { code?: string; message?: string } | null): string | null {
@@ -79,7 +80,7 @@ function errorText(error: { code?: string; message?: string } | null): string | 
   return `${error.code || 'unknown'}:${error.message || 'Database request failed.'}`;
 }
 
-function createStore(admin: SupabaseClient): OnlyLapsSessionLinkStore {
+function createStore(admin: SupabaseClient, reader: SupabaseClient): OnlyLapsSessionLinkStore {
   const onlylapsSessionColumns =
     'id,user_id,track_map_id,name,session_name,session_type,started_at,ended_at';
   const linkColumns =
@@ -87,7 +88,7 @@ function createStore(admin: SupabaseClient): OnlyLapsSessionLinkStore {
 
   return {
     async findOwnedOnlyFastSession(sessionId, userId) {
-      const { data, error } = await admin
+      const { data, error } = await reader
         .from('race_setups')
         .select('id,user_id,track_name,race_date,session_label,setup_type')
         .eq('id', sessionId)
@@ -97,7 +98,7 @@ function createStore(admin: SupabaseClient): OnlyLapsSessionLinkStore {
     },
 
     async listOwnedLinksForOnlyFast(onlyfastSessionId, userId) {
-      const { data, error } = await admin
+      const { data, error } = await reader
         .from('onlyfast_onlylaps_session_links')
         .select(linkColumns)
         .eq('onlyfast_session_id', onlyfastSessionId)
@@ -107,7 +108,7 @@ function createStore(admin: SupabaseClient): OnlyLapsSessionLinkStore {
     },
 
     async findOwnedOnlyLapsSession(sessionId, userId) {
-      const { data, error } = await admin
+      const { data, error } = await reader
         .from('onlylaps_timing_sessions')
         .select(onlylapsSessionColumns)
         .eq('id', sessionId)
@@ -117,7 +118,7 @@ function createStore(admin: SupabaseClient): OnlyLapsSessionLinkStore {
     },
 
     async listOwnedOnlyLapsSessions(userId, queryOptions) {
-      let query = admin
+      let query = reader
         .from('onlylaps_timing_sessions')
         .select(onlylapsSessionColumns)
         .eq('user_id', userId)
@@ -156,7 +157,7 @@ function createStore(admin: SupabaseClient): OnlyLapsSessionLinkStore {
 
     async listOwnedLinksForOnlyLaps(sessionIds, userId) {
       if (sessionIds.length === 0) return { data: [], error: null };
-      const { data, error } = await admin
+      const { data, error } = await reader
         .from('onlyfast_onlylaps_session_links')
         .select(linkColumns)
         .eq('user_id', userId)
@@ -237,7 +238,7 @@ Deno.serve(async (req) => {
   const onlyfastSessionId = String(
     input.onlyfast_session_id || '',
   ).trim();
-  const store = createStore(auth.admin);
+  const store = createStore(auth.admin, auth.reader);
 
   try {
     if (action === 'list') {

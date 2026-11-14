@@ -10,6 +10,7 @@ import * as sessions from '../src/lib/raceWeekendSessions.ts';
 import * as schedule from '../src/lib/scheduleSelection.ts';
 import * as custom from '../src/lib/customCar.ts';
 import * as storage from '../src/lib/setupLibraryStorage.ts';
+import * as homeActionStyles from '../src/components/homeActionStyles.ts';
 
 const require = createRequire(import.meta.url);
 const user = { id: 'rookie-fixture', user_metadata: {} };
@@ -40,13 +41,21 @@ function renderPage(file: string, states: Record<string, unknown> = {}, props = 
     useEffect() {}, useLayoutEffect() {}, useMemo: (fn: () => unknown) => fn(), useCallback: (fn: unknown) => fn,
     useRef: (current: unknown) => ({ current }), useId: () => 'fixture' };
   const modules: Record<string, unknown> = {
+    './homeActionStyles': homeActionStyles,
     react: fakeReact, '@/lib/supabase': { supabase: {} }, '@/lib/setupLibrary': library,
     '@/lib/setupLibraryStorage': storage, '@/lib/customCar': custom,
     '@/lib/raceWeekendSessions': sessions, '@/lib/scheduleSelection': schedule,
     '@/lib/classIcons': { getClassIcon: () => null },
     '@/lib/setupLibraryAccess': { canAccessSetupClass: () => true },
     '@/lib/paymentVisibility': { isMedianIOSApp: false },
+    '@/components/ui/alert-dialog': {
+      AlertDialog: ({ open, children }: { open: boolean; children: React.ReactNode }) => open ? children : null,
+      ...Object.fromEntries(['AlertDialogContent','AlertDialogHeader','AlertDialogTitle','AlertDialogDescription','AlertDialogFooter','AlertDialogCancel','AlertDialogAction']
+        .map(name => [name, ({ children }: { children: React.ReactNode }) => children])),
+    },
     '@/lib/membership': { getEffectiveTier: () => eligible ? 'rookie' : 'pro', readMembership: () => ({}) },
+    '@/hooks/useTestingAccountAccess': { useTestingAccountAccess: () => null, testingClassReadOnly: () => false },
+    '@/hooks/useMembershipRevision': { useMembershipRevision: () => 0 },
     './RookieAdSlot': component(({ user, container, colSpan }: { user?: unknown; container?: string; colSpan?: number }) => {
       if (!eligible || !user) return null;
       const ad = React.createElement('aside', { 'data-house-ad': true }, 'Existing house ad');

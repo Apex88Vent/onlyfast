@@ -75,6 +75,9 @@ export async function verifyDatabaseSubscriptionUI(db, role, userId, normalId, p
       if (name === '@/hooks/useBetaFeatures') return { useBetaFeatures: () => ({ hasBetaFeature: () => true, testerKind: 'experimental', loading: false }) };
       if (name === '@/lib/setupLibrary') return { setupClassLabel: value => value };
       if (name === '@/lib/testAccount') return { resetTestAccountData: async () => false };
+      if (name === '@/features/track-trace/api') return { trackTraceEnabled: false };
+      if (name === '@/features/track-trace/useTrackTrace') return { useTrackTracePermission: () => ({ allowed: false }) };
+      if (name === '@/features/track-trace/SharedTelemetryDialog') return component(() => null);
       if (['./SettingsModal', './AppMenu', '@/components/NativeSubscriptionControls'].includes(name)) return component(() => null);
       if (name === 'react-router-dom') return { useNavigate: () => () => {}, Link: ({ to, children, ...props }) => React.createElement('a', { href: to, ...props }, children) };
       if (name === 'lucide-react') return { Check: () => null, ChevronDown: () => null, Lock: () => null, ArrowUpRight: () => null };

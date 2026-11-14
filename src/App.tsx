@@ -22,6 +22,10 @@ import BetaRoute from "./components/BetaRoute";
 import { BetaFeaturesProvider } from "./contexts/BetaFeaturesContext";
 import { AppProvider } from "./contexts/AppContext";
 import { BETA_FEATURES } from "./lib/betaFeatures";
+import TestingAccountAccess from './components/TestingAccountAccess';
+import { trackTraceEnabled } from './features/track-trace/api';
+
+const TrackTracePage = lazy(() => import('./features/track-trace/TrackTracePage'));
 
 const queryClient = new QueryClient();
 const OnboardingPreview = import.meta.env.DEV ? lazy(() => import("./pages/OnboardingPreview")) : null;
@@ -39,8 +43,10 @@ const App = () => (
           <BetaFeaturesProvider>
             <AppProvider>
             <SafeBackHandler />
+            <TestingAccountAccess />
             <RouteMetadata />
             <Routes>
+              {trackTraceEnabled && <Route path="/track-trace" element={<Suspense fallback={<p role="status">Loading OnlyFast Track Trace…</p>}><TrackTracePage /></Suspense>} />}
               <Route path="/" element={<AppEntry />} />
               <Route path="/app" element={<AppEntry />} />
               <Route path="/login" element={<AppEntry />} />

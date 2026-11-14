@@ -23,7 +23,7 @@ export function resolveAuthorizedMembership(row: Subscription | null, grants: Gr
 }
 
 let activeUser: string | null = null;
-let authorization: { row: Subscription | null; grants: Grants; testTier: MembershipTier | null } | null = null;
+let authorization: { row: Subscription | null; grants: Grants; testTier: MembershipTier | null; serverTier: MembershipTier | null } | null = null;
 // Advertising may fail closed without changing subscription entitlement behavior.
 export const AD_AUTHORIZATION_MAX_AGE_MS = 5 * 60 * 1000;
 let advertisingVerifiedAt: number | null = null;
@@ -43,15 +43,15 @@ export function clearTrustedMembership(userId: string | null = null) {
   advertisingVerifiedAt = null;
   changed();
 }
-export function setTrustedAuthorization(userId: string, row: Subscription | null, grants: Grants, testTier: MembershipTier | null = null) {
+export function setTrustedAuthorization(userId: string, row: Subscription | null, grants: Grants, testTier: MembershipTier | null = null, serverTier: MembershipTier | null = null) {
   activeUser = userId;
-  authorization = { row: row ? { ...row } : null, grants: { ...grants }, testTier };
+  authorization = { row: row ? { ...row } : null, grants: { ...grants }, testTier, serverTier };
   advertisingVerifiedAt = Date.now();
   changed();
 }
 export function getTrustedMembership(userId: string | null = activeUser): MembershipState | null {
   if (userId !== activeUser) return null;
-  return authorization ? resolveAuthorizedMembership(authorization.row, authorization.grants, Date.now(), authorization.testTier) : null;
+  return authorization ? resolveAuthorizedMembership(authorization.row, authorization.grants, Date.now(), authorization.serverTier ?? authorization.testTier) : null;
 }
 
 // Set only from the authenticated, own-account test-tier RPC, never beta caches.
