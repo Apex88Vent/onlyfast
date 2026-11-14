@@ -1,5 +1,7 @@
 # OnlyFast 2027 Phase 2 finalization — November 13, 2026
 
+Hosted result: [November 14 Phase 2 acceptance](ONLYFAST_2027_PHASE2_HOSTED_ACCEPTANCE.md) — installed migration verified without reapplication, 13 hosted groups passed, original racing records preserved, and production isolation confirmed. Earlier blocker/status text below is historical.
+
 Latest installation handoff: [November 14 deployment unblock](ONLYFAST_2027_PHASE2_DEPLOYMENT_UNBLOCK.md). The explicit generic testing-account connection is now verified; the atomic SQL artifact passes 754 regression tests. Hosted archive/history installation and acceptance remain pending. The material below records the earlier finalization checkpoint.
 
 **Local conflict resolved. Phase 2 remains incomplete because the dedicated MCP and hosted acceptance are unavailable.**
