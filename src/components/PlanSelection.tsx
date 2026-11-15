@@ -5,6 +5,7 @@ import MembershipPlanCard from './MembershipPlanCard';
 import MembershipPaidAction from './MembershipPaidAction';
 import { hideExternalPayments } from '@/lib/paymentVisibility';
 import TestSubscriptionGate from './TestSubscriptionGate';
+import Subscription2027Plans from './Subscription2027Plans';
 
 interface PlanSelectionProps {
   onComplete: () => void | Promise<void>;
@@ -77,7 +78,8 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userI
 };
 
 export default function AuthorizedPlanSelection(props: PlanSelectionProps) {
-  return <TestSubscriptionGate key={props.userId} userId={props.userId} onContinue={props.onComplete} onBack={props.onBack} showBrand={!props.onboarding}>
+  const selection = <TestSubscriptionGate key={props.userId} userId={props.userId} onContinue={props.onComplete} onBack={props.onBack} showBrand={!props.onboarding}>
     <PlanSelection {...props} />
   </TestSubscriptionGate>;
+  return import.meta.env.ONLYFAST_2027_PREVIEW ? <div className="space-y-8"><Subscription2027Plans key={props.userId} userId={props.userId}/>{selection}</div> : selection;
 }

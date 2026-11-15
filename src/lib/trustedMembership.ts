@@ -1,4 +1,5 @@
 import type { MembershipState, MembershipTier } from './membership';
+import { billing2027TierAt, type Billing2027Status } from './billing2027State.ts';
 
 type Subscription = { plan: string | null; status: string | null; subscription_source?: string | null; revenuecat_expires_at?: string | null };
 type Grants = Record<string, unknown>;
@@ -23,7 +24,8 @@ export function resolveAuthorizedMembership(row: Subscription | null, grants: Gr
 }
 
 let activeUser: string | null = null;
-let authorization: { row: Subscription | null; grants: Grants; testTier: MembershipTier | null; serverTier: MembershipTier | null } | null = null;
+let authorization: { row: Subscription | null; grants: Grants; testTier: MembershipTier | null; serverTier: MembershipTier | null;
+  billing: Billing2027Status | null; serverOffset: number } | null = null;
 // Advertising may fail closed without changing subscription entitlement behavior.
 export const AD_AUTHORIZATION_MAX_AGE_MS = 5 * 60 * 1000;
 let advertisingVerifiedAt: number | null = null;
@@ -43,14 +45,19 @@ export function clearTrustedMembership(userId: string | null = null) {
   advertisingVerifiedAt = null;
   changed();
 }
-export function setTrustedAuthorization(userId: string, row: Subscription | null, grants: Grants, testTier: MembershipTier | null = null, serverTier: MembershipTier | null = null) {
+export function setTrustedAuthorization(userId: string, row: Subscription | null, grants: Grants, testTier: MembershipTier | null = null, serverTier: MembershipTier | null = null, billing: Billing2027Status | null = null) {
   activeUser = userId;
-  authorization = { row: row ? { ...row } : null, grants: { ...grants }, testTier, serverTier };
+  authorization = { row: row ? { ...row } : null, grants: { ...grants }, testTier, serverTier,
+    billing: billing?.user_id === userId ? { ...billing } : null, serverOffset: billing ? Date.parse(billing.server_now)-Date.now() : 0 };
   advertisingVerifiedAt = Date.now();
   changed();
 }
 export function getTrustedMembership(userId: string | null = activeUser): MembershipState | null {
   if (userId !== activeUser) return null;
+  if (authorization?.billing && !authorization.testTier) {
+    const tier=billing2027TierAt(authorization.billing,Date.now()+authorization.serverOffset);
+    return { ...empty,membership_tier:tier==='admin'?'team':tier,has_admin_full_access:tier==='admin' };
+  }
   return authorization ? resolveAuthorizedMembership(authorization.row, authorization.grants, Date.now(), authorization.serverTier ?? authorization.testTier) : null;
 }
 
@@ -85,7 +92,8 @@ export function getTrustedAdvertisingMembership(userId: string, now = Date.now()
 export function getMembershipExpiration(): number | null {
   if (!authorization || authorization.testTier) return null;
   const values = [authorization.row?.subscription_source === 'revenuecat' ? authorization.row.revenuecat_expires_at : null,
-    authorization.grants.promo_access_expires_at];
+    authorization.grants.promo_access_expires_at, authorization.billing?.valid_until
+      ? new Date(Date.parse(authorization.billing.valid_until)-authorization.serverOffset).toISOString() : null];
   const future = values.filter((value): value is string => typeof value === 'string')
     .map(Date.parse).filter(value => Number.isFinite(value) && value > Date.now());
   return future.length ? Math.min(...future) : null;

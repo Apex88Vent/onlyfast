@@ -25,6 +25,6 @@ export const PLANS_2027: PlanMeta[] = (['sportsman', 'pro', 'factory'] as const)
       limits.setupAssistsPerRaceWeekend === 'unlimited' ? 'Unlimited Setup Assist and timing scans' : '1 Setup Assist and 2 timing scans per race weekend',
       'No advertisements',
     ],
-    supportingText: config.annualPrice === null ? 'Annual pricing to be determined.' : '$' + config.annualPrice.toFixed(0) + '/year',
+    supportingText: config.annualPrice === null ? 'Monthly only.' : '$' + config.annualPrice.toFixed(0) + '/year · 14 days free for eligible new subscribers',
   };
 });

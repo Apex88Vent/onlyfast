@@ -3,6 +3,7 @@
 import { supabase, supabaseUrl } from '@/lib/supabase';
 import { setTrustedAuthorization, clearTrustedMembership, invalidateAdvertisingMembership, getTrustedTestTier } from './trustedMembership';
 import type { MembershipTier } from './membership';
+import { verifyBilling2027Status, type Billing2027Status } from './billing2027State';
 import {
   readMembership,
 } from '@/lib/membership';
@@ -114,6 +115,10 @@ export function deriveAccountStatus(
   if (access.membership_tier === 'unsubscribed') {
     return { label: 'Read-only', plan: 'free', isPaid: false, isAdmin: false, row };
   }
+  if (access.membership_tier === 'sportsman' || access.membership_tier === 'factory') {
+    const plan = access.membership_tier;
+    return { label: plan === 'factory' ? 'Factory' : 'Sportsman', plan, isPaid: true, isAdmin: false, row };
+  }
   const isAdmin = access.has_admin_full_access;
 
   if (isAdmin) {
@@ -172,6 +177,7 @@ export async function syncMembershipFromSubscription(): Promise<AccountStatus | 
   const testTier = testOverride.data;
   if (testTier !== null && !['rookie', 'pro', 'team', 'sportsman', 'factory', 'unsubscribed'].includes(testTier)) throw new Error('Invalid test membership');
   let serverTier: MembershipTier | null = null;
+  let billing: Billing2027Status | null = null;
   if (supabaseUrl === 'https://mfzajhnfonrfuiwxgvhe.supabase.co') {
     const result = await supabase.rpc('get_onlyfast_membership');
     const tier = result.data?.tier;
@@ -179,7 +185,15 @@ export async function syncMembershipFromSubscription(): Promise<AccountStatus | 
     const current = await supabase.auth.getSession();
     if (current.data.session?.user.id !== user.id || revision !== refreshRevision) return null;
     serverTier = tier === 'admin' ? 'team' : tier;
+    const projection = await supabase.rpc('get_onlyfast_2027_billing_status');
+    if (!projection.error) {
+      billing=verifyBilling2027Status(user.id,projection.data);
+      const latestSession=await supabase.auth.getSession();
+      if(latestSession.data.session?.user.id!==user.id||revision!==refreshRevision)return null;
+    } else if (!['PGRST202','42883'].includes(projection.error.code)) {
+      throw new Error('Testing subscription state could not be verified');
+    }
   }
-  setTrustedAuthorization(user.id, row, verified.data.user.app_metadata || {}, testTier, serverTier);
+  setTrustedAuthorization(user.id, row, verified.data.user.app_metadata || {}, testTier, serverTier, billing);
   return deriveAccountStatus(row);
 }

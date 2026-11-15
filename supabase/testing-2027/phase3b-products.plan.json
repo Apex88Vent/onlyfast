@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "state": "unconfigured_review_contract",
+  "publish_authorized": false,
+  "current_offering_switch_authorized": false,
+  "environment": "sandbox",
+  "plans": [
+    { "key": "sportsman_monthly", "tier": "sportsman", "interval": "month", "duration": "P1M", "usd": 4.99, "intro_days": 0, "required_entitlement": "distinct_sportsman_entitlement_to_be_reviewed", "apple_product_id": null, "google_product_base_plan": null, "stripe_price_id": null },
+    { "key": "pro_monthly", "tier": "pro", "interval": "month", "duration": "P1M", "usd": 7.99, "intro_days": 14, "required_entitlement": "OnlyFast Pro", "apple_product_id": null, "google_product_base_plan": null, "stripe_price_id": null },
+    { "key": "pro_annual", "tier": "pro", "interval": "year", "duration": "P1Y", "usd": 60, "intro_days": 14, "required_entitlement": "OnlyFast Pro", "apple_product_id": null, "google_product_base_plan": null, "stripe_price_id": null },
+    { "key": "factory_monthly", "tier": "factory", "interval": "month", "duration": "P1M", "usd": 14.99, "intro_days": 0, "required_entitlement": "OnlyFast Teams_or_reviewed_additive_alias", "apple_product_id": null, "google_product_base_plan": null, "stripe_price_id": null }
+  ],
+  "requirements": [
+    "Verify App Store Connect agreement, subscription group levels and two-week introductory offer eligibility before configuring products.",
+    "Verify Google Play P14D free phases for both Pro intervals; existing one-week offers are not equivalent.",
+    "Verify real annual duration and stock Median getOfferings identifier semantics on installed sandbox binaries.",
+    "Keep legacy products, packages, entitlements and global current offering unchanged.",
+    "Register exact reviewed sandbox IDs in the private database registry with duration_verified only after store verification.",
+    "Never substitute a legacy Pro receipt or Price for Sportsman. No Factory annual or Sportsman annual plan."
+  ]
+}

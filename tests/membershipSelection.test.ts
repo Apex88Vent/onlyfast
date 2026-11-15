@@ -11,7 +11,8 @@ function renderPlans(native: boolean, allowWebCheckout = false, enabled = false,
   const cache = new Map<string, any>();
   function load(file: string): any {
     if (cache.has(file)) return cache.get(file);
-    const source = readFileSync(new URL('../src/' + file, import.meta.url), 'utf8');
+    const source = readFileSync(new URL('../src/' + file, import.meta.url), 'utf8')
+      .replaceAll('import.meta.env.ONLYFAST_2027_PREVIEW','false');
     const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, esModuleInterop: true } }).outputText;
     const mod = { exports: {} };
     new Function('require', 'module', 'exports', js)((name: string) => {
@@ -27,6 +28,7 @@ function renderPlans(native: boolean, allowWebCheckout = false, enabled = false,
         return React.createElement('button', { disabled: !enabled, onClick: onVerified }, enabled ? purchaseLabel || 'View Pro and Teams subscriptions' : 'Subscription unavailable');
       }, __esModule: true };
       if (name === './TestSubscriptionGate') return { __esModule: true, default: ({ children }: { children: React.ReactNode }) => children };
+      if (name === './Subscription2027Plans') return { __esModule: true, default: () => { throw new Error('2027 plans must not mount in legacy builds'); } };
       if (name.startsWith('./')) return load('components/' + name.slice(2) + '.tsx');
       return require(name);
     }, mod, mod.exports);

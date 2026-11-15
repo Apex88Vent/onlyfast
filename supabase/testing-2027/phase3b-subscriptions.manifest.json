@@ -1,0 +1,25 @@
+{
+  "project_ref": "mfzajhnfonrfuiwxgvhe",
+  "organization_id": "wxswxtsewczfijycqnwi",
+  "migration_name": "onlyfast_2027_phase3b_subscriptions_testing",
+  "installation_authorized": false,
+  "deployment_authorized": false,
+  "files": {
+    "phase3b-subscriptions-install.sql": {
+      "sha256": "C6A57B6B217141DB0640C60191F5D2FF446E44F2A5B4A1DC5BDB909FC356FE9C",
+      "bytes": 34007
+    },
+    "phase3b-subscriptions-retention.sql": {
+      "sha256": "05BA4C829BD5E368948978FB12B4438CFECD9EA8B31F705E5468B26D3D6BCB5D",
+      "bytes": 3943
+    },
+    "phase3b-subscriptions-verify.sql": {
+      "sha256": "71E1C2B4C20D050933F057D10F39C4A32CA3361477421CA9D698EAF70CEB418B",
+      "bytes": 3708
+    },
+    "phase3b-products.plan.json": {
+      "sha256": "E0AD65EC31948E8DDDCC14B8BA021B0DFD448A14BF38A36DE33CA8468E857680",
+      "bytes": 1962
+    }
+  }
+}
