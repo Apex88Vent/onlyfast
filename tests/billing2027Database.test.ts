@@ -82,6 +82,8 @@ test('Phase3B PostgreSQL: source overlap, grandfather evidence, stale/dedup even
     await apply('revenuecat',[],'2027-01-03T08:00:00Z');
     await asRole(db,'authenticated',uid);
     state=await rpc('get_onlyfast_2027_account_access');assert.equal(state.tier,'pro');assert.equal(state.class_selection_required,true);
+    assert.equal(state.selection_required,true,'original Phase 2 downgrade-screen contract retained');
+    assert.equal(state.active_class,'Dwarf Cars');assert.deepEqual(state.counts,state.active_counts);
     assert.equal(await rpc('onlyfast_can_save_setup_class',[uid,'Dwarf Cars']),false);
     assert.equal(await rpc('choose_onlyfast_2027_class',['Dwarf Cars']),'Dwarf Cars');
     assert.equal(await rpc('onlyfast_can_save_setup_class',[uid,'Dwarf Cars']),true);

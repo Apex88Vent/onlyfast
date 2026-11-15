@@ -8,6 +8,7 @@ export async function billingDatabase({beforeInstall}={}) {
   if(beforeInstall)await beforeInstall(db);
   try {await db.exec(await readFile(new URL('../../supabase/testing-2027/phase3b-subscriptions-install.sql',import.meta.url),'utf8'));}
   catch(error){await db.close();throw error;}
+  await db.exec(await readFile(new URL('../../supabase/testing-2027/phase3b-account-access-compatibility.sql',import.meta.url),'utf8'));
   return db;
 }
 export async function billingClock(db,time) {
