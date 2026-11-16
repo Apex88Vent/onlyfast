@@ -36,7 +36,7 @@ test('central beta configuration controls badges and exact beta information with
       assert.deepEqual(styles(badge.match(/class="([^"]+)"/)![1]),styles(discipline));
     }
   }
-  assert.equal(TRACK_TRACE_CONFIG.liveRecordingValidated,false);assert.equal(TRACK_TRACE_CONFIG.scanningIntegrated,false);
+  assert.equal(TRACK_TRACE_CONFIG.liveRecordingValidated,false);assert.equal(TRACK_TRACE_CONFIG.scanningIntegrated,true);
 });
 
 test('reused GPS fix adapter handles unsupported, denied and timeout errors without starting a watch or recording',async()=>{

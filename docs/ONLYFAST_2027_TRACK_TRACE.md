@@ -1,5 +1,19 @@
 # OnlyFast Track Trace foundation
 
+Current implementation: [Phase 2D live circuit recording and scanning](ONLYFAST_2027_TRACK_TRACE_PHASE2D.md).
+The testing route records actual GPS, saves/reviews circuit laps and captures
+private scans using the existing catalog. BETA remains; physical device testing
+and unscanned automatic lap timing are outstanding. Older phase status below is
+historical and superseded by this report.
+
+Previous phase: [Phase 2C shared community catalog](ONLYFAST_2027_TRACK_TRACE_PHASE2C.md).
+Testing supports controlled scan publication and direct cross-user track reuse;
+production publication remains subject to the documented review and approval.
+
+Latest update: [UI refinements and independent session preparation](ONLYFAST_2027_TRACK_TRACE_REFINEMENTS.md).
+Start Session now supports owned preparation with or without a setup, using
+either a saved circuit or Free Record. Live recording remains unavailable.
+
 Current follow-up: [Phase 2B report](ONLYFAST_2027_TRACK_TRACE_PHASE2B.md),
 November 14, 2026. It adds BETA labeling, exact-session manual linking and the
 saved circuit library. Its integration status and verification supersede the

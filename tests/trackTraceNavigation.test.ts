@@ -51,12 +51,12 @@ test('Sportsman landing entry is visibly locked and opens upgrade; unresolved pe
   assert.match(pending,/disabled=""/);assert.doesNotMatch(pending,/href=/);
   assert.equal(html(entry(true,false),{userId:'owner',variant:'landing'}),'');
 });
-test('Track Trace menu contains exactly four actions in a 2x2 grid and labels pending integrations',()=>{
+test('Track Trace menu contains exactly four actions in a 2x2 grid with circuit scanning',()=>{
   const Menu=component('features/track-trace/TrackTraceMenu.tsx');const output=html(Menu,{onSelect(){}});
   assert.equal((output.match(/<button /g)||[]).length,4);
   assert.match(output,/grid grid-cols-2/);
   for(const label of ['Start Session','Review Session','Track Library','Scan Track'])assert.match(output,new RegExp('>'+label+'<'));
-  assert.equal((output.match(/Unavailable —/g)||[]).length,1);
+  assert.match(output,/Capture a private circuit scan with GPS/);
 });
 
 test('read-only users have a historical viewing path while recording actions stay locked',()=>{

@@ -91,6 +91,9 @@ try {
     const browser=await chromium.launch({channel:'chrome',headless:true});
     try {
       for(const width of [320,390,768,1280]) for(const identity of [pro,sports,factory]) {
+        // These synthetic identities are also used by the separate archive QA.
+        // Set each expected testing tier immediately before its browser context.
+        await rpc(identity.client,'set_onlyfast_test_tier',{p_tier:identity.account.tier});
         const context=await browser.newContext({viewport:{width,height:900}});const errors=[],external=[];
         await context.route('**/*',route=>{
           const target=new URL(route.request().url());
@@ -101,6 +104,7 @@ try {
         await context.addInitScript(({session,ref})=>localStorage.setItem('onlyfast-2027-'+ref+'-auth',JSON.stringify(session)),{session:identity.session,ref});
         const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
         await page.goto(origin+'/track-trace'+(identity===pro?'?view=menu&setup='+setupId:''),{waitUntil:'domcontentloaded'});
+        await page.waitForLoadState('networkidle');
         await page.getByRole('heading',{name:'OnlyFast Track Trace',exact:true}).waitFor();
         if(identity===sports) {
           await page.getByRole('heading',{name:'Unlock OnlyFast Track Trace',exact:true}).waitFor();
@@ -115,8 +119,13 @@ try {
           }
           await menu.getByRole('button',{name:/Start Session/}).click();await page.getByRole('button',{name:'Link to Existing Setup',exact:true}).waitFor();await page.getByRole('button',{name:'Record Without Setup',exact:true}).click();
           const standaloneName='Independent browser '+identity.account.tier+' '+width+' '+randomUUID();await page.getByLabel('Session name',{exact:true}).fill(standaloneName);await page.getByRole('radio',{name:/^Free Record/}).check();
-          const creation=page.waitForResponse(r=>r.url()===url+'/rest/v1/rpc/create_track_trace_session'&&r.request().method()==='POST');await page.getByRole('button',{name:'Save circuit session',exact:true}).click();const created=await creation;assert(created.ok());const id=await created.json();assert.equal(typeof id,'string');standaloneSessions.push({identity,id});
-          await page.getByRole('heading',{name:standaloneName,exact:true}).waitFor();await page.getByText('0 laps · 0 sector results',{exact:true}).waitFor();
+          let created;
+          try {
+            [created]=await Promise.all([page.waitForResponse(r=>r.url()===url+'/rest/v1/rpc/create_track_trace_session'&&r.request().method()==='POST'),page.getByRole('button',{name:'Save circuit session',exact:true}).click()]);
+          } catch(error) { await page.screenshot({path:output+'/failed-'+identity.account.tier+'-'+width+'.png',fullPage:true});throw error; }
+          assert(created.ok());const id=await created.json();assert.equal(typeof id,'string');standaloneSessions.push({identity,id});
+          try { await page.getByRole('heading',{name:standaloneName,exact:true}).waitFor();await page.getByText('0 laps · 0 sector results',{exact:true}).waitFor(); }
+          catch(error) {await page.screenshot({path:output+'/failed-review-'+identity.account.tier+'-'+width+'.png',fullPage:true});throw error;}
           await page.getByRole('button',{name:'Back to Track Trace menu',exact:true}).click();
           if(identity===pro)await page.goto(origin+'/track-trace?view=menu&setup='+setupId,{waitUntil:'domcontentloaded'});
           await menu.getByRole('button',{name:/Review Session/}).click();

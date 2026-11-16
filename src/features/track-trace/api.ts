@@ -14,6 +14,7 @@ export interface TrackTracePermission {
 export interface TraceSession {
   id: string; name: string; session_name: string | null; started_at: string | null;
   ended_at: string | null; track_map_id: string | null; session_type: string;
+  device_info?: Record<string, unknown> | null;
 }
 export interface TraceLap { id: string; lap_number: number; duration_ms: number; is_valid: boolean; }
 export interface TraceContext {
@@ -37,6 +38,16 @@ export interface TraceTrack {
   automatic_start_finish_data: unknown; manual_start_finish_data: unknown;
   sector_defaults: { version: number; sector_count: number; lines: unknown }[];
   user_sectors: { version: number; sector_count: number; lines: unknown }[];
+  publication_status?: 'private' | 'published'; is_owner?: boolean;
+  community_layout_key?: string | null; community_layout_name?: string | null;
+  community_location?: string | null; facility_name?: string | null; area_key?: string;
+  description?: string | null;
+  submission?: { status: 'pending' | 'published' | 'rejected'; review_note: string | null } | null;
+}
+
+export interface TraceTrackDuplicate {
+  id: string; track_name: string; community_layout_name: string | null;
+  community_location: string | null; version: number; distance_m: number; same_layout: boolean;
 }
 
 export async function getTraceAssistStatus(setupId: string) {

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { traceRpc, type TraceContext } from './api';
 import { TrackTraceBetaBadge } from './TrackTraceBeta';
+import TrackTraceTelemetry from './TrackTraceTelemetry';
 
 const duration = (ms: number) => (ms / 1000).toFixed(3) + ' s';
 
@@ -25,12 +26,12 @@ export default function TrackTraceSessionReview({ userId, revision, sessionId, s
         <div className="flex flex-wrap items-center gap-2"><h2 className="text-lg font-bold">{detail.data.session.session_name || detail.data.session.name}</h2><TrackTraceBetaBadge /></div>
         <p className="mt-2 text-sm">{detail.data.laps.length} laps · {detail.data.sectors.length} sector results</p>
         <ul className="mt-3 space-y-1">{detail.data.laps.map(lap => <li key={lap.id}>Lap {lap.lap_number}: {duration(lap.duration_ms)}{lap.is_valid ? '' : ' (excluded)'}</li>)}</ul>
-        {detail.data.sectors.length > 0 && <ul className="mt-3 space-y-1 text-sm" aria-label="Sector results">{detail.data.sectors.map((sector, i) => <li key={sector.lap_id + ':' + sector.sector_index + ':' + i}>Sector {sector.sector_index + 1}: {duration(sector.duration_ms)}</li>)}</ul>}
+        {detail.data.sectors.length > 0 && <ul className="mt-3 space-y-1 text-sm" aria-label="Sector results">{detail.data.sectors.map((sector, i) => <li key={sector.lap_id + ':' + sector.sector_index + ':' + i}>Sector {sector.sector_index}: {sector.duration_ms==null?'Unavailable':duration(sector.duration_ms)}</li>)}</ul>}
         {detail.data.analysis.map(analysis => <div className="mt-4" key={analysis.id}>
           {analysis.optimum_lap_time_ms != null && <p>Optimum lap: {duration(analysis.optimum_lap_time_ms)}</p>}
           {analysis.summary_text && <p className="mt-2 whitespace-pre-wrap break-words text-sm">{analysis.summary_text}</p>}
         </div>)}
-        <p className="mt-4 text-sm text-slate-600">GPS trace display, lap comparisons and recording controls still require timing integration.</p>
+        <TrackTraceTelemetry key={detail.data.session.id+revision} userId={userId} revision={revision} sessionId={detail.data.session.id}/>
       </>}
   </section>;
 }

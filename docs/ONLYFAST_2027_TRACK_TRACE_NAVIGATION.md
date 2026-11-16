@@ -1,5 +1,17 @@
 # Track Trace navigation update
 
+Current functionality: [Phase 2D live GPS and scanning](ONLYFAST_2027_TRACK_TRACE_PHASE2D.md).
+The established Start/Scan entries now use real GPS adapters in testing. Prior
+unavailable-state descriptions below record the earlier navigation delivery.
+
+Latest phase: [Phase 2C shared community catalog](ONLYFAST_2027_TRACK_TRACE_PHASE2C.md),
+with shared-track discovery, layout/location search and scan submission in the
+existing Track Library route.
+
+Latest update: [UI refinements and independent preparation](ONLYFAST_2027_TRACK_TRACE_REFINEMENTS.md).
+The landing card now matches standard dimensions/icons, BETA matches discipline
+labels, and Start Session offers both preparation paths and track choices.
+
 Current follow-up: [Phase 2B report](ONLYFAST_2027_TRACK_TRACE_PHASE2B.md),
 November 14, 2026. The Track Library is now functional and BETA labels and
 in-place setup linking are implemented. Phase 2B records current test results,

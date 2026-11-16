@@ -3,10 +3,10 @@ import { TrackTraceBetaNotice } from './TrackTraceBeta';
 
 export type TrackTraceView = 'menu' | 'start' | 'review' | 'library' | 'scan';
 const actions = [
-  { view: 'start', label: 'Start Session', icon: Play, description: 'Prepare a session for a saved race setup' },
+  { view: 'start', label: 'Start Session', icon: Play, description: 'Prepare a linked or independent circuit session' },
   { view: 'review', label: 'Review Session', icon: ClipboardList, description: 'Open saved circuit sessions and telemetry' },
-  { view: 'library', label: 'Track Library', icon: Map, description: 'Choose from your saved circuit tracks' },
-  { view: 'scan', label: 'Scan Track', icon: ScanLine, description: 'Unavailable — track scanning integration pending' },
+  { view: 'library', label: 'Track Library', icon: Map, description: 'Browse shared circuits and your saved scans' },
+  { view: 'scan', label: 'Scan Track', icon: ScanLine, description: 'Capture a private circuit scan with GPS' },
 ] as const;
 
 export default function TrackTraceMenu({ onSelect, canRecord = true }: { onSelect: (view: TrackTraceView) => void; canRecord?: boolean }) {

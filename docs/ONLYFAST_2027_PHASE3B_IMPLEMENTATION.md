@@ -4,7 +4,7 @@ Target launch: **January 1, 2027, 12:00 AM Pacific / `2027-01-01T08:00:00Z`**.
 
 Repository/branch: `Apex88Vent/onlyfast`, `develop/onlyfast-2027`, primary checkout. Base HEAD: `613c25d9f22616db4e218ace268c742b08868204`. Reference: [Phase 3A audit](ONLYFAST_2027_PHASE3A_BILLING_AUDIT.md).
 
-**Status: local implementation and review artifacts prepared. Nothing has been installed or deployed. Production billing is not activated.** Store configuration, actual native sandbox acceptance, hosted installation and release approval remain outstanding. The earlier Phase 2 hosted acceptance status is not changed by this work.
+**Historical local implementation checkpoint: code and review artifacts prepared; no installation/deployment had occurred at that checkpoint.** See the [hosted acceptance follow-up](ONLYFAST_2027_PHASE3B_HOSTED_ACCEPTANCE.md) for the subsequently verified installation, Preview, compatibility repair and remaining blockers. Production billing remains inactive.
 
 ## Implemented architecture
 

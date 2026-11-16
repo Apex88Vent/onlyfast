@@ -1,0 +1,131 @@
+{
+  "mode": "read-only-plan",
+  "sourceProjectRef": "thpyjvwtfvfxiufchrxn",
+  "sourceCommit": "22f372508582fb43d56b66947c26740233bcdb19",
+  "strategy": "Publish the existing canonical row IDs in place after approval. No per-user import, clone or automatic source update.",
+  "entries": [
+    {
+      "trackId": "df8e5007-baef-4d0e-b829-bb48f314104b",
+      "trackName": "Barona",
+      "sourceVersion": 1,
+      "sourceRowSha256": "5125c1ae32c1eeae1ce1c035f5fb83cba40343b3353e4609542e40d9baa627f1",
+      "sourceSectorSha256": "9c5ad8e2d039e8db963ea34959c26f8c120006a8d02a7f2dfa68f479e4689431",
+      "areaKey": "32.98_-116.84",
+      "facilityKey": "32.980_-116.836",
+      "sourcePublicationStatus": "not-installed",
+      "geometryEligible": true,
+      "reasons": [],
+      "identityReviewRequired": false,
+      "sectorDefinitions": [
+        {
+          "id": "46b4f86b-7f9e-459f-8a5e-b81a21df11ab",
+          "version": 1,
+          "sectorCount": 2
+        }
+      ],
+      "cornerDetectionVersion": null,
+      "supersedesTrackId": null,
+      "proposedLayout": null,
+      "proposedLocation": null,
+      "publicationApproved": false,
+      "requiredReview": [
+        "Confirm publication authority and source-owner permission",
+        "Assign the exact facility layout and human-readable location",
+        "Review scan/start-finish/sector/corner geometry",
+        "Recheck source hashes before publishing the same track ID in place"
+      ]
+    },
+    {
+      "trackId": "1e2784a8-e9ff-40bb-9df5-ed5f8beb502a",
+      "trackName": "Marysville",
+      "sourceVersion": 3,
+      "sourceRowSha256": "406c431db46a7e5ddcaa68ce6099b90396d9b35dc0d8f2e86b88ade16a21667a",
+      "sourceSectorSha256": "5b35245865b295b53ed65e873e3ee2dcadec38dc590f27efb03a04589ff61ed8",
+      "areaKey": "39.14_-121.56",
+      "facilityKey": "39.137_-121.558",
+      "sourcePublicationStatus": "not-installed",
+      "geometryEligible": true,
+      "reasons": [],
+      "identityReviewRequired": false,
+      "sectorDefinitions": [
+        {
+          "id": "e67e5b68-36f6-45e7-8820-a55d09de8b49",
+          "version": 2,
+          "sectorCount": 2
+        }
+      ],
+      "cornerDetectionVersion": null,
+      "supersedesTrackId": null,
+      "proposedLayout": null,
+      "proposedLocation": null,
+      "publicationApproved": false,
+      "requiredReview": [
+        "Confirm publication authority and source-owner permission",
+        "Assign the exact facility layout and human-readable location",
+        "Review scan/start-finish/sector/corner geometry",
+        "Recheck source hashes before publishing the same track ID in place"
+      ]
+    },
+    {
+      "trackId": "ebb60a56-13e1-408c-84f3-a31f5751d1ab",
+      "trackName": "Test",
+      "sourceVersion": 2,
+      "sourceRowSha256": "75225c8a4b84148f8fac94f7653c75e0949ada5010fe3c2c32be380402976141",
+      "sourceSectorSha256": "39e9ee87fdb7c5800475da25bea064295c5a6ebb65f84bac36dd7a47163acad1",
+      "areaKey": "32.58_-117.12",
+      "facilityKey": "32.577_-117.122",
+      "sourcePublicationStatus": "not-installed",
+      "geometryEligible": true,
+      "reasons": [],
+      "identityReviewRequired": true,
+      "sectorDefinitions": [
+        {
+          "id": "70dc7a40-50a5-4212-9bef-9658786fe99d",
+          "version": 3,
+          "sectorCount": 2
+        }
+      ],
+      "cornerDetectionVersion": "onlylaps_corner_detection_v1",
+      "supersedesTrackId": "4874f84c-2bef-4e0b-8caa-78a6cf5b337d",
+      "proposedLayout": null,
+      "proposedLocation": null,
+      "publicationApproved": false,
+      "requiredReview": [
+        "Confirm publication authority and source-owner permission",
+        "Assign the exact facility layout and human-readable location",
+        "Review scan/start-finish/sector/corner geometry",
+        "Recheck source hashes before publishing the same track ID in place"
+      ]
+    },
+    {
+      "trackId": "4874f84c-2bef-4e0b-8caa-78a6cf5b337d",
+      "trackName": "Track Scan - 2026-07-06",
+      "sourceVersion": 1,
+      "sourceRowSha256": "b22c02ecef2d67673ab4a3460ee8151334ecc8a96354928f89d1dfc29f36a1dd",
+      "sourceSectorSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "areaKey": "32.58_-117.12",
+      "facilityKey": "32.577_-117.122",
+      "sourcePublicationStatus": "not-installed",
+      "geometryEligible": false,
+      "reasons": [
+        "outside_path has too few distinct points",
+        "inside_path has too few distinct points",
+        "start_finish_path has too few distinct points",
+        "Retired source version: retain for history, do not publish as current."
+      ],
+      "identityReviewRequired": true,
+      "sectorDefinitions": [],
+      "cornerDetectionVersion": null,
+      "supersedesTrackId": null,
+      "proposedLayout": null,
+      "proposedLocation": null,
+      "publicationApproved": false,
+      "requiredReview": [
+        "Confirm publication authority and source-owner permission",
+        "Assign the exact facility layout and human-readable location",
+        "Review scan/start-finish/sector/corner geometry",
+        "Recheck source hashes before publishing the same track ID in place"
+      ]
+    }
+  ]
+}

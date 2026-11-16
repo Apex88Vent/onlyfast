@@ -1,5 +1,12 @@
 # OnlyFast Track Trace — Phase 2B
 
+Current testing status: [Phase 2D live GPS and scanning](ONLYFAST_2027_TRACK_TRACE_PHASE2D.md).
+Recording/scanning pending statements in this earlier audit are historical.
+
+Latest follow-up: [UI refinements and independent session preparation](ONLYFAST_2027_TRACK_TRACE_REFINEMENTS.md).
+This adds owned unlinked preparation and exact discipline badge/card styling;
+the report below records the earlier Phase 2B delivery and audit.
+
 Verified November 14, 2026 on `develop/onlyfast-2027`. Release target: OnlyFast
 1.2, Tulsa Shootout, **BETA**. This is an incremental extension of the existing
 Track Trace route, authorization, tables, session preparation and review.
