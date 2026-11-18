@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import { trackEvent } from '@/lib/analytics';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { safeBack } from '@/lib/safeBack';
 import { supabase } from '@/lib/supabase';
@@ -11,6 +12,12 @@ import NativeSubscriptionControls from '@/components/NativeSubscriptionControls'
 
 const Upgrade: React.FC = () => {
   const navigate = useNavigate();
+  const analyticsOpened = useRef(false);
+  useEffect(() => {
+    if (analyticsOpened.current) return;
+    analyticsOpened.current = true;
+    trackEvent('upgrade_viewed');
+  }, []);
   const [user, setUser] = useState<User | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [authModalOpen, setAuthModalOpen] = useState(false);

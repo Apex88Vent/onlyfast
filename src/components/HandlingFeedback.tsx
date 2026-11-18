@@ -1,3 +1,5 @@
+import { useAnalyticsVisibility } from '@/hooks/useAnalyticsVisibility';
+import { trackEvent } from '@/lib/analytics';
 import { useMembershipRevision } from '@/hooks/useMembershipRevision';
 import LockedFeatureNotice from './LockedFeatureNotice';
 import React, { useEffect, useLayoutEffect, useId, useRef, useState } from 'react';
@@ -166,6 +168,8 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
     : [{ label: 'Entry', value: entryHandling }, { label: 'Mid', value: midHandling }, { label: 'Exit', value: exitHandling }];
   const hasHandling = handlingSummary.some(item => !!item.value);
   const toggleWhatIf = () => setWhatIfMode(mode => !mode);
+  const assistAnalytics = () => ({ car_class: raceClass, racing_discipline: discipline, telemetry_available: telemetryStatus.state === 'available' });
+  const analyticsRef = useAnalyticsVisibility('setup_assist_opened', 'Setup Assist');
 
   const importantFields = [
     'cross_weight', 'toe', 'front_ride_height', 'rear_ride_height', 'stagger',
@@ -390,6 +394,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
         return;
       }
       const identity = requestIdentity({ session: onlyfastSessionId, setupData, entryHandling, midHandling, exitHandling, question: '' });
+      trackEvent('setup_assist_requested', assistAnalytics());
       const { data, error } = await supabase.functions.invoke('get-suggestions', {
         headers: { Authorization: `Bearer ${accessToken}` },
         body: {
@@ -404,6 +409,8 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
         }
       });
       if (data?.suggestion) {
+        if (!error && typeof data.suggestion === 'string' && data.suggestion.trim()) trackEvent('setup_assist_completed', assistAnalytics(), 'assist:' + identity.request_id);
+        else trackEvent('setup_assist_failed', assistAnalytics());
         pendingRequestIds.current.delete(identity.request_key);
         setSuggestions(data.suggestion);
         setSuggestionsReady(true);
@@ -417,6 +424,8 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
         );
       } else if (error) {
         const diag = await describeInvokeError(error);
+        trackEvent('setup_assist_failed', assistAnalytics());
+        if (diag.status === 429) trackEvent('setup_assist_limit_reached', assistAnalytics());
         // eslint-disable-next-line no-console
         console.error('[get-suggestions] invoke failed:', error, diag);
         if (diag.status === 400 || diag.status === 429) {
@@ -426,11 +435,13 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
           setSuggestions(buildErrorMessage(diag));
         }
       } else {
+        trackEvent('setup_assist_failed', assistAnalytics());
         setSuggestions('No response from the suggestion service. Please try again.');
       }
     } catch (e: any) {
       // eslint-disable-next-line no-console
       console.error('[get-suggestions] threw:', e);
+      trackEvent('setup_assist_failed', assistAnalytics());
       const diag = await describeInvokeError(e);
       setSuggestions(buildErrorMessage(diag));
     }
@@ -459,6 +470,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
         return;
       }
       const identity = requestIdentity({ session: onlyfastSessionId, setupData, entryHandling, midHandling, exitHandling, question: whatIfQuestion.trim() });
+      trackEvent('setup_assist_requested', assistAnalytics());
       const { data, error } = await supabase.functions.invoke('get-suggestions', {
         headers: { Authorization: `Bearer ${accessToken}` },
         body: {
@@ -474,6 +486,8 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
         }
       });
       if (data?.suggestion) {
+        if (!error && typeof data.suggestion === 'string' && data.suggestion.trim()) trackEvent('setup_assist_completed', assistAnalytics(), 'assist:' + identity.request_id);
+        else trackEvent('setup_assist_failed', assistAnalytics());
         pendingRequestIds.current.delete(identity.request_key);
         setWhatIfResponse(data.suggestion);
         setWhatIfReady(true);
@@ -487,6 +501,8 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
         );
       } else if (error) {
         const diag = await describeInvokeError(error);
+        trackEvent('setup_assist_failed', assistAnalytics());
+        if (diag.status === 429) trackEvent('setup_assist_limit_reached', assistAnalytics());
         // eslint-disable-next-line no-console
         console.error('[get-suggestions what-if] invoke failed:', error, diag);
         if (diag.status === 400 || diag.status === 429) {
@@ -496,11 +512,13 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
           setWhatIfResponse(buildErrorMessage(diag));
         }
       } else {
+        trackEvent('setup_assist_failed', assistAnalytics());
         setWhatIfResponse('No response from the suggestion service. Please try again.');
       }
     } catch (e: any) {
       // eslint-disable-next-line no-console
       console.error('[get-suggestions what-if] threw:', e);
+      trackEvent('setup_assist_failed', assistAnalytics());
       const diag = await describeInvokeError(e);
       setWhatIfResponse(buildErrorMessage(diag));
     }
@@ -523,7 +541,7 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
   };
 
   return (
-    <section className="bg-white rounded-2xl border border-[#E5E7EB] p-6 shadow-sm" aria-labelledby="setup-assist-heading"
+    <section ref={analyticsRef} className="bg-white rounded-2xl border border-[#E5E7EB] p-6 shadow-sm" aria-labelledby="setup-assist-heading"
       data-house-interstitial-unsafe={suggestionsReady || (whatIfMode && whatIfReady) ? '' : undefined}>
       {/* Header */}
       <div className="flex items-center justify-between mb-4">

@@ -70,6 +70,7 @@ function renderPage(file: string, states: Record<string, unknown> = {}, props = 
   };
   const output = { exports: {} as { default: React.ComponentType<Record<string, unknown>> } };
   new Function('require', 'module', 'exports', '__seed', js)((id: string) => {
+    if (id === '@/lib/analytics') return { trackEvent() {}, trackScreen() {} };
     if (id in modules) return modules[id];
     if (id === 'lucide-react') return require(id);
     throw Error(`Unstubbed page boundary ${file}: ${id}`);

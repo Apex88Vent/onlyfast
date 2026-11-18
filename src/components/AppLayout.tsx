@@ -1,3 +1,4 @@
+import { trackEvent } from '@/lib/analytics';
 import { useMembershipRevision } from '@/hooks/useMembershipRevision';
 import { CustomCarGate } from './CustomCarSheet';
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useSyncExternalStore } from 'react';
@@ -424,6 +425,8 @@ const AppLayout: React.FC = () => {
       if (authUserIdRef.current !== user.id) return;
       setOnboardingState(state);
       setUnlimitedClasses(state.unlimited);
+      trackEvent('onboarding_step_completed', { step: '4' }, 'onboarding-plan:' + user.id);
+      trackEvent('onboarding_complete', { car_class: state.active_class || car }, 'onboarding-complete:' + user.id);
       completeClassSelection(state.active_class || car);
     } catch {
       setClassSelectionError('Onboarding could not be completed. Please try again.');

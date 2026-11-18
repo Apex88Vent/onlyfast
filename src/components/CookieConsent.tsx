@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { getAnalyticsConsent, setAnalyticsConsent } from '@/lib/analytics';
 
 const CookieConsent: React.FC = () => {
   const [visible, setVisible] = useState(false);
@@ -7,7 +8,7 @@ const CookieConsent: React.FC = () => {
   useEffect(() => {
     try {
       const consent = localStorage.getItem('onlyfast_cookie_consent');
-      if (!consent) setVisible(true);
+      if (!consent || getAnalyticsConsent() === 'unknown') setVisible(true);
     } catch {
       setVisible(false);
     }
@@ -21,12 +22,20 @@ const CookieConsent: React.FC = () => {
   }, [visible]);
 
   const handleAccept = () => {
+    setAnalyticsConsent('denied');
     try { localStorage.setItem('onlyfast_cookie_consent', 'accepted'); } catch { /* Storage may be unavailable. */ }
     setVisible(false);
   };
 
   const handleDecline = () => {
+    setAnalyticsConsent('denied');
     try { localStorage.setItem('onlyfast_cookie_consent', 'declined'); } catch { /* Storage may be unavailable. */ }
+    setVisible(false);
+  };
+
+  const handleAnalytics = () => {
+    setAnalyticsConsent('granted');
+    try { localStorage.setItem('onlyfast_cookie_consent', 'accepted'); } catch { /* Session choice still applies. */ }
     setVisible(false);
   };
 
@@ -48,9 +57,11 @@ const CookieConsent: React.FC = () => {
             The Android and iOS apps are being prepared to offer Google AdMob ads to eligible signed-in Rookie accounts.
             AdMob may process device identifiers, IP addresses, and ad interactions. Advertising privacy choices
             are separate from essential cookies; these buttons do not grant advertising consent.
+            {' '}Optional Google Firebase Analytics measures feature use, racing class and membership tier only with your permission.
+            You can change this choice in Settings or the Privacy Policy.
           </p>
         </div>
-        <div className="flex items-center gap-3 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-3 flex-shrink-0">
           {/* Both buttons are equally prominent - no dark patterns */}
           <button
             onClick={handleDecline}
@@ -63,6 +74,10 @@ const CookieConsent: React.FC = () => {
             className="px-4 py-2 bg-[#00A8E8] hover:bg-[#0090c7] text-white rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
           >
             Accept Essential
+          </button>
+          <button onClick={handleAnalytics}
+            className="px-4 py-2 border border-[#E5E7EB] rounded-lg text-sm font-medium text-[#4B5563] hover:bg-[#F5F5F7] focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2">
+            Allow Analytics
           </button>
         </div>
       </div>

@@ -36,6 +36,8 @@ function renderUI(file: string, states: unknown[], environment: typeof environme
   });
   const module = { exports: {} as { default: React.ComponentType<Record<string, unknown>> } };
   const localRequire = (id: string) => {
+    if (id === '@/lib/analytics') return { trackEvent() {}, trackScreen() {}, enterAnalyticsScreen: () => () => {} };
+    if (id === './AnalyticsPrivacyControl') return { __esModule: true, default: () => null };
     if (id === 'react') return {
       ...React,
       useState: (initial: unknown) => [stateIndex < states.length ? states[stateIndex++] : initial, () => {}],

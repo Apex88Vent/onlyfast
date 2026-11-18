@@ -1,3 +1,4 @@
+import { trackEvent } from '@/lib/analytics';
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase, supabaseUrl } from '@/lib/supabase';
 import { useTestingAccountAccess } from '@/hooks/useTestingAccountAccess';
@@ -100,6 +101,7 @@ const RaceSchedule: React.FC<RaceScheduleProps> = ({ user, onSignInClick, onSche
           });
         if (error) throw error;
       }
+      trackEvent(entry.id ? 'race_schedule_updated' : 'race_schedule_added');
       setFormOpen(false);
       setEditing(null);
       await fetchRaces();

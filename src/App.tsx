@@ -18,6 +18,7 @@ import TermsOfService from "./pages/TermsOfService";
 import DeleteAccount from "./pages/DeleteAccount";
 import Support from "./pages/Support";
 import SafeBackHandler from "./components/SafeBackHandler";
+import AnalyticsLifecycle from './components/AnalyticsLifecycle';
 import BetaRoute from "./components/BetaRoute";
 import { BetaFeaturesProvider } from "./contexts/BetaFeaturesContext";
 import { AppProvider } from "./contexts/AppContext";
@@ -43,9 +44,11 @@ const App = () => (
           <BetaFeaturesProvider>
             <AppProvider>
             <SafeBackHandler />
+            <AnalyticsLifecycle />
             <TestingAccountAccess />
             <RouteMetadata />
             <Routes>
+              {OnboardingPreview && <Route path="/onboarding-showcase" element={<Suspense fallback={<div aria-busy="true" />}><OnboardingPreview /></Suspense>} />}
               {trackTraceEnabled && <Route path="/track-trace" element={<Suspense fallback={<p role="status">Loading OnlyFast Track Trace…</p>}><TrackTracePage /></Suspense>} />}
               <Route path="/" element={<AppEntry />} />
               <Route path="/app" element={<AppEntry />} />

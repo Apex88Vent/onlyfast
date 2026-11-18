@@ -10,8 +10,8 @@ const OnboardingPreview = () => {
   const [selectedClass, setSelectedClass] = useState('');
 
   return (
-    <div className="min-h-screen bg-slate-200 px-0 sm:px-6 sm:py-8">
-      <div className="mx-auto w-full max-w-[390px] overflow-hidden bg-[#F5F5F7] shadow-2xl sm:rounded-[2rem] sm:ring-8 sm:ring-slate-900">
+    <div className="min-h-screen bg-[#F5F5F7]">
+      <div className="w-full">
         {complete && !loginClicked && !selectedClass ? (
           <OnboardingFlow onComplete={setSelectedClass} />
         ) : complete && selectedClass && !loginClicked ? (

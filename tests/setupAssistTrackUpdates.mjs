@@ -24,6 +24,8 @@ function compile(file, modules = {}) {
   const code = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2021, esModuleInterop: true } }).outputText;
   const output = { exports: {} };
   new Function('require', 'module', 'exports', code)(name => {
+    if (name === '@/lib/analytics') return { trackEvent() {}, trackScreen() {}, enterAnalyticsScreen: () => () => {} };
+    if (name === '@/hooks/useAnalyticsVisibility') return { useAnalyticsVisibility: () => () => {} };
     if (name === 'react') return React;
     if (name.startsWith('react/')) return qaRequire(name);
     if (name === '@/lib/roadTrackFeedback') return road;

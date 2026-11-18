@@ -1,3 +1,4 @@
+import { trackEvent } from '@/lib/analytics';
 import { useMembershipRevision } from '@/hooks/useMembershipRevision';
 import LockedFeatureNotice from './LockedFeatureNotice';
 import { setupClassLabel } from '@/lib/setupLibrary';
@@ -99,6 +100,7 @@ const ShareSetupModal: React.FC<ShareSetupModalProps> = ({ isOpen, onClose, setu
   const handleCopyCode = async () => {
     try {
       await navigator.clipboard.writeText(shareCode);
+      trackEvent('race_setup_shared');
       setCopied(true);
       setTimeout(() => setCopied(false), 3000);
     } catch {
@@ -106,7 +108,8 @@ const ShareSetupModal: React.FC<ShareSetupModalProps> = ({ isOpen, onClose, setu
       input.value = shareCode;
       document.body.appendChild(input);
       input.select();
-      document.execCommand('copy');
+      const copiedSuccessfully = document.execCommand('copy');
+      if (copiedSuccessfully) trackEvent('race_setup_shared');
       document.body.removeChild(input);
       setCopied(true);
       setTimeout(() => setCopied(false), 3000);

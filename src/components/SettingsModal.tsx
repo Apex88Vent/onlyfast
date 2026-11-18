@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
+import { enterAnalyticsScreen } from '@/lib/analytics';
+import AnalyticsPrivacyControl from './AnalyticsPrivacyControl';
 import { nativeAds, NATIVE_ADS_ROLLOUT_USER_ID } from '@/lib/nativeAds';
 import NativeSubscriptionControls from '@/components/NativeSubscriptionControls';
 import { supabase } from '@/lib/supabase';
@@ -49,6 +51,7 @@ const clearDeletedAccountLocalState = (userId: string) => {
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) => {
   useLayoutEffect(() => { if (isOpen) return nativeAds.suspend('settings'); }, [isOpen]);
+  useEffect(() => { if (isOpen) return enterAnalyticsScreen('Settings'); }, [isOpen]);
   const { betaIndicatorLabel, hasBetaFeature, testerKind } = useBetaFeatures();
   const hasExperimentalFullAccess =
     testerKind === 'experimental' &&
@@ -436,6 +439,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user }) 
           </section>
 
           {/* Subscription */}
+          <AnalyticsPrivacyControl />
           <section>
             <h3 className="text-sm font-bold text-[#1A1B23] mb-2">Subscription</h3>
 

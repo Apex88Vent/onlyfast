@@ -15,7 +15,8 @@
     "qa:fixtures": "node --experimental-strip-types qa/automation/runner.mjs fixtures",
     "qa:check": "node --experimental-strip-types qa/automation/runner.mjs check",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "analytics:check": "node scripts/verify-analytics-integration.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -54,6 +55,7 @@
     "cmdk": "^1.0.0",
     "date-fns": "^3.6.0",
     "embla-carousel-react": "^8.3.0",
+    "firebase": "13.2.0",
     "highlight.js": "^11.9.0",
     "input-otp": "^1.2.4",
     "lucide-react": "^0.462.0",

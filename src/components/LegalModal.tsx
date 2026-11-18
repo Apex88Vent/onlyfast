@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import TermsOfServiceContent from './TermsOfServiceContent';
+import AnalyticsPrivacyControl from './AnalyticsPrivacyControl';
 
 interface LegalModalProps {
   isOpen: boolean;
@@ -77,7 +78,13 @@ const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type }) => {
         <div className="flex-1 overflow-y-auto px-6 py-6 text-sm text-[#4B5563] leading-relaxed space-y-4">
           {type === 'privacy' ? (
             <>
-              <p className="text-xs text-[#9CA3AF]">Last updated: October 26, 2026</p>
+              <p className="text-xs text-[#9CA3AF]">Last updated: November 15, 2026</p>
+              <p>Optional Google Firebase Analytics measures feature usage, screens, racing class and membership tier only with your permission.
+                Web analytics may use your account UUID; native analytics uses an app-instance identifier. Setup values, notes, AI conversations,
+                timing images, raw GPS and telemetry are not included. Essential-cookie acceptance does not grant analytics consent.
+                You can withdraw permission below. This stops future collection, without automatically deleting earlier data.{' '}
+                <a href="/privacy-policy" className="underline">Read the full Privacy Policy</a>.</p>
+              <AnalyticsPrivacyControl />
               <h3 className="text-base font-bold text-[#1A1B23]">1. Information We Collect</h3>
               <p>OnlyFast collects the following information when you create an account: email address, password (encrypted), and selected subscription plan. When you use the app, we store your chassis setup data, track information, and session notes.</p>
               <h3 className="text-base font-bold text-[#1A1B23]">2. How We Use Your Information</h3>

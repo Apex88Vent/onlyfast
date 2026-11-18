@@ -12,6 +12,7 @@ function load(file: string): { default: React.ComponentType<Record<string, unkno
   const js = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, esModuleInterop: true } }).outputText;
   const mod = { exports: {} };
   new Function('require', 'exports', js)((name: string) => {
+    if (name === './AnalyticsPrivacyControl') return { __esModule: true, default: () => null };
     if (name === 'react') return { ...React, useEffect: () => {} };
     if (name === 'react-router-dom') return { Link: ({ to, children, ...props }: { to: string; children: React.ReactNode }) => React.createElement('a', { ...props, href: to }, children) };
     if (name.endsWith('TermsOfServiceContent')) return load('components/TermsOfServiceContent.tsx');

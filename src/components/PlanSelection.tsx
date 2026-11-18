@@ -1,3 +1,4 @@
+import { trackEvent } from '@/lib/analytics';
 import React, { useEffect, useRef, useState } from 'react';
 import { PLANS } from '@/lib/membership';
 import MembershipComparison from './MembershipComparison';
@@ -27,6 +28,7 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userI
   const handleContinue = async (paid = false) => {
     if (submitting.current) return;
     submitting.current = true;
+    if (!paid) trackEvent('subscription_plan_selected', { subscription_tier: 'rookie' });
     setSaving(true);
     setSaveError('');
     try { await (paid ? onPaidComplete || onComplete : onComplete)(); }
@@ -53,7 +55,7 @@ const PlanSelection: React.FC<PlanSelectionProps> = ({ onComplete, onBack, userI
             if ((event.target as HTMLElement).closest('button, a, input, select, textarea')) return;
             event.currentTarget.querySelector<HTMLButtonElement | HTMLAnchorElement>('[data-plan-action]')?.click();
           } : undefined}>
-          {plan.tier !== 'rookie' && userId ? <MembershipPaidAction key={`${userId}:${plan.tier}`} userId={userId} tier={plan.tier} onboarding={onboarding} allowWebCheckout={allowWebCheckout} onVerified={() => handleContinue(true)} checkoutSelected={checkoutTier === plan.tier} onSelect={() => setCheckoutTier(plan.tier as 'pro' | 'team')} /> : <button
+          {plan.tier !== 'rookie' && userId ? <MembershipPaidAction key={`${userId}:${plan.tier}`} userId={userId} tier={plan.tier} onboarding={onboarding} allowWebCheckout={allowWebCheckout} onVerified={() => handleContinue(true)} checkoutSelected={checkoutTier === plan.tier} onSelect={() => { trackEvent('subscription_plan_selected', { subscription_tier: plan.tier }); setCheckoutTier(plan.tier as 'pro' | 'team'); }} /> : <button
             data-plan-action onClick={plan.tier === 'rookie' ? () => void handleContinue() : undefined}
             disabled={saving || plan.tier !== 'rookie'} className="membership-cta">
             {saving ? 'Saving…' : plan.tier !== 'rookie' ? 'Sign in to choose this plan' : plan.buttonText}

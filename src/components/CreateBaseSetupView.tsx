@@ -1,4 +1,5 @@
 import LockedFeatureNotice from './LockedFeatureNotice';
+import { trackEvent } from '@/lib/analytics';
 import { setupClassLabel } from '@/lib/setupLibrary';
 import CustomCarSetupForm, { useCustomCarTemplate } from './CustomCarSheet';
 import { CUSTOM_CAR, CUSTOM_SHEET_KEY, customSheetFromRow, readCustomSheet, snapshotCustomSheet, emptyCustomSheet } from '@/lib/customCar';
@@ -324,6 +325,8 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
     try {
       const payload = buildPayload(template);
       const result = await dbWrite(payload, editingId);
+      trackEvent('race_setup_saved', { car_class: template.raceClass || selectedCar });
+      trackEvent(editingId ? 'race_setup_updated' : 'race_setup_created', { car_class: template.raceClass || selectedCar });
       setEditingId(result.id);
       setMessage(editingId ? `Updated "${template.setup_name}"` : `Saved "${template.setup_name}"`);
       setTimeout(() => setMessage(''), 3000);
@@ -385,6 +388,7 @@ const CreateBaseSetupView: React.FC<CreateBaseSetupViewProps> = ({
   const handleEdit = (t: any) => {
     if (!canAccessSetupClass(t.race_class)) return;
     const loaded = loadTemplateIntoState(t);
+    trackEvent('race_setup_opened', { car_class: t.race_class });
     if (t.custom_fields) {
       Object.entries(t.custom_fields).forEach(([key, value]) => {
         const existing = customFields.find(f => f.name === key);

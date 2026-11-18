@@ -16,6 +16,7 @@ function renderPlans(native: boolean, allowWebCheckout = false, enabled = false,
     const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, esModuleInterop: true } }).outputText;
     const mod = { exports: {} };
     new Function('require', 'module', 'exports', js)((name: string) => {
+      if (name === '@/lib/analytics') return { trackEvent() {}, trackScreen() {}, enterAnalyticsScreen: () => () => {} };
       if (name === 'react') return { ...React, useEffect: () => {} };
       if (name === '@/lib/paymentVisibility') return { hideExternalPayments: native };
       if (name === '@/lib/nativePurchases') return { nativePurchasesEnabled: enabled };

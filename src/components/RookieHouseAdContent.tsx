@@ -1,3 +1,5 @@
+import { trackEvent } from '@/lib/analytics';
+import { useAnalyticsVisibility } from '@/hooks/useAnalyticsVisibility';
 import React, { type CSSProperties, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -786,6 +788,7 @@ const RookieHouseAdContent: React.FC<RookieAdSlotProps> = ({
   onContinue,
 }) => {
   const navigate = useNavigate();
+  const analyticsRef = useAnalyticsVisibility('house_upgrade_ad_viewed', undefined, placement);
   const [dismissed, setDismissed] = useState(false);
   const [slideIndex, setSlideIndex] = useState(0);
   const prefersReducedMotion = usePrefersReducedMotion();
@@ -826,6 +829,7 @@ const RookieHouseAdContent: React.FC<RookieAdSlotProps> = ({
   }
 
   const handleUpgrade = () => {
+    trackEvent('house_upgrade_ad_clicked', { placement });
     if (isInterstitial) {
       onContinue?.();
       navigate(HOUSE_AD_PLANS_PATH);
@@ -861,6 +865,7 @@ const RookieHouseAdContent: React.FC<RookieAdSlotProps> = ({
   const inlineContent = !isInterstitial && (
     <button
       type="button"
+      ref={analyticsRef}
       data-placement={placement}
       data-car-type={config.carType}
       data-slide-tone={inlineTone}
@@ -1063,7 +1068,7 @@ const RookieHouseAdContent: React.FC<RookieAdSlotProps> = ({
   );
 
   return (
-    <div className="w-full max-w-xl rounded-lg bg-[#1A1B23] p-3 shadow-2xl">
+    <div ref={analyticsRef} className="w-full max-w-xl rounded-lg bg-[#1A1B23] p-3 shadow-2xl">
       {content}
     </div>
   );

@@ -20,6 +20,9 @@ function compile(file, modules) {
   } }).outputText;
   const module = { exports: {} };
   new Function('require', 'module', 'exports', code)(name => {
+    if (name === '@/lib/analytics') return { trackEvent() {}, trackScreen() {}, enterAnalyticsScreen: () => () => {} };
+    if (name === '@/hooks/useAnalyticsVisibility') return { useAnalyticsVisibility: () => () => {} };
+    if (name === './AnalyticsPrivacyControl') return { __esModule: true, default: () => null };
     if (name in modules) return modules[name];
     if (name === 'react' || name.startsWith('react/')) return qaRequire(name);
     throw Error(`Unstubbed Settings dependency: ${name}`);

@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import AnalyticsPrivacyControl from '@/components/AnalyticsPrivacyControl';
 
 const LOGO_URL = '/onlyfast-logo.png';
 
@@ -16,10 +17,23 @@ const PrivacyPolicy: React.FC = () => {
             <img src={LOGO_URL} alt="OnlyFast" className="h-12 w-auto" />
           </Link>
           <h1 className="mt-5 text-3xl font-bold text-[#1A1B23]">Privacy Policy</h1>
-          <p className="mt-2 text-sm text-[#9CA3AF]">Last updated: October 29, 2026</p>
+          <p className="mt-2 text-sm text-[#9CA3AF]">Last updated: November 15, 2026</p>
         </header>
 
         <div className="space-y-5 text-sm leading-relaxed text-[#4B5563]">
+          <section aria-labelledby="analytics-privacy-heading">
+            <h2 id="analytics-privacy-heading" className="text-base font-bold text-[#1A1B23]">Optional Google Firebase Analytics</h2>
+            <p className="mt-2">With your permission, Google Firebase Analytics processes feature events, screen names, racing discipline,
+              car class, membership tier and standard device/browser information to help us understand use of OnlyFast. Web analytics may use your OnlyFast account UUID;
+              native analytics uses an app-instance identifier. We do not send setup measurements, notes, email addresses, names,
+              timing screenshots, raw location or telemetry, authentication tokens, payment data, or AI prompts and answers to analytics.</p>
+            <p className="mt-2">Analytics is optional. Accepting essential cookies, signing in, or creating an account does not grant analytics permission.
+              You can decline or withdraw permission here or in Settings. Withdrawal stops future collection by this integration;
+              it does not automatically erase previously collected data. Contact admin@onlyfast.app for data requests.
+              Advertising privacy choices are managed separately. Google processes analytics under its{' '}
+              <a href="https://policies.google.com/privacy" className="underline" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.</p>
+          </section>
+          <AnalyticsPrivacyControl />
           <section>
             <h2 className="text-base font-bold text-[#1A1B23]">1. Information We Collect</h2>
             <p className="mt-2">

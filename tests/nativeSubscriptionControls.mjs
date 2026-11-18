@@ -23,6 +23,7 @@ function setup(status, enabled = false, platform = 'android') {
     return mod.exports;
   }
   function resolve(name) {
+    if (name === '@/lib/analytics') return { trackEvent() {}, trackScreen() {} };
     if (name === 'react' || name.startsWith('react/')) return require(name);
     if (name === '@/hooks/useNativeSubscription') return compile('hooks/useNativeSubscription.ts');
     if (name === '@/lib/supabase') return { supabase: { auth: { getSession: async () => ({ data: { session: { user: { id: f.identity } } } }) } } };

@@ -1,5 +1,10 @@
 import { createRoot } from 'react-dom/client';
 import './index.css';
+import { startAnalytics } from './lib/analytics';
+
+// Shared by the current app, the verified 2027 app, and the January release entry.
+// The service itself denies collection in isolated Preview builds.
+startAnalytics();
 
 const rootEl = document.getElementById('root');
 if (!rootEl) {

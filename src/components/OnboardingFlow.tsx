@@ -1,3 +1,4 @@
+import { trackEvent, trackScreen } from '@/lib/analytics';
 import { getClassIcon } from '@/lib/classIcons';
 import { CUSTOM_CAR, CUSTOM_CAR_DISCIPLINES } from '@/lib/customCar';
 import React, { useState, useRef, useEffect } from 'react';
@@ -113,6 +114,24 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error, user
   const [saving, setSaving] = useState(false);
   const [progressError, setProgressError] = useState('');
   const pending = useRef(false);
+  const analyticsAttempt = useRef('');
+  const analyticsStep = useRef(step);
+  const analyticsMount = useRef(0);
+  analyticsStep.current = step;
+  useEffect(() => {
+    const mountState = analyticsMount;
+    const mount = ++mountState.current;
+    // A local dedupe token only; analytics must not require Web Crypto support.
+    analyticsAttempt.current ||= Date.now().toString(36) + Math.random().toString(36).slice(2);
+    trackScreen('Onboarding');
+    trackEvent('onboarding_started', {}, 'onboarding-start:' + analyticsAttempt.current);
+    const abandoned = () => trackEvent('onboarding_abandoned', { step: String(analyticsStep.current) }, 'onboarding-abandon:' + analyticsAttempt.current);
+    window.addEventListener('pagehide', abandoned);
+    return () => {
+      window.removeEventListener('pagehide', abandoned);
+      queueMicrotask(() => { if (mountState.current === mount) abandoned(); });
+    };
+  }, []);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -134,6 +153,11 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error, user
     setProgressError('');
     try {
       await onProgress?.(next === 2 ? 'discipline' : next === 3 ? 'vehicle' : 'plan', disciplines.find(d => d.name === discipline)?.key, next === 4 ? car : undefined);
+      if (next > step) {
+        const fields = { racing_discipline: disciplines.find(d => d.name === discipline)?.key || '', ...(next === 4 ? { car_class: car } : {}) };
+        trackEvent('onboarding_step_completed', { ...fields, step: String(step) }, 'onboarding-step:' + analyticsAttempt.current + ':' + step);
+        trackEvent(next === 3 ? 'racing_discipline_selected' : 'car_class_selected', fields);
+      }
       setSelectedDiscipline(discipline);
       setSelectedClass(next === 4 ? car : '');
       setStep(next);

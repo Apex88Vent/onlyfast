@@ -1,3 +1,4 @@
+import { trackEvent, trackScreen, setAnalyticsRacingContext } from '@/lib/analytics';
 import { useMembershipRevision } from '@/hooks/useMembershipRevision';
 import { useTestingAccountAccess, testingClassReadOnly } from '@/hooks/useTestingAccountAccess';
 import LockedFeatureNotice from './LockedFeatureNotice';
@@ -361,6 +362,9 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     supabaseUrl !== 'https://mfzajhnfonrfuiwxgvhe.supabase.co' &&
     testerKind === 'experimental' &&
     hasBetaFeature(BETA_FEATURES.testAccountFullAccess);
+  useEffect(() => {
+    setAnalyticsRacingContext(selectedCar, EXPANDED_CLASS_CONFIGS[selectedCar]?.category || 'dirt_oval');
+  }, [selectedCar]);
   const [activeTab, setActiveTab] = useState<SetupType>('base');
   // Always keep ALL 6 slot keys present so reads like setups[activeTab] are never
   // undefined (extra slots stay blank until the user adds them).
@@ -895,6 +899,9 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   // Broadcast view changes so Header's menu highlights the right item
   useEffect(() => {
     window.dispatchEvent(new CustomEvent('onlyfast-view-changed', { detail: { view: activeView } }));
+    const screen = { home: 'Dashboard', setup: 'Setup Notebook', saved: 'Setup Notebook', schedule: 'Race Schedule', parts: 'Parts Reference' }[activeView];
+    if (screen) trackScreen(screen);
+    if (activeView === 'schedule') trackEvent('race_schedule_opened');
   }, [activeView]);
 
   useEffect(() => {
@@ -1468,6 +1475,10 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       }
       // Preserve the truthy success result for queued saves and existing callers,
       // while distinguishing a confirmed database save for advertising only.
+      if (persistedAny && !queuedAny) {
+        trackEvent('race_setup_saved');
+        trackEvent(Object.values(savedMeta.ids).some(Boolean) ? 'race_setup_updated' : 'race_setup_created');
+      }
       return { persisted: persistedAny && !queuedAny, queued: queuedAny };
     } catch (err: any) {
       setSaveMessage('Error saving: ' + (err.message || 'Unknown error'));
@@ -1774,6 +1785,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
         )
       )
       .sort((a, b) => (newOrders[a] ?? DEFAULT_ORDER[a]) - (newOrders[b] ?? DEFAULT_ORDER[b]));
+    trackEvent('race_setup_opened', { car_class: setup.race_class || selectedCar });
     setActiveTab(displayable.includes(clickedType) ? clickedType : (displayable[0] || clickedType));
     setActiveView('setup');
   };

@@ -607,6 +607,7 @@ test('actual save routine distinguishes persisted, queued, failed and empty save
   for (const mode of ['persisted', 'queued', 'failed', 'empty']) {
     const queued: unknown[] = []; const noop = () => {};
     const save = dashboardFunction('performSave', {
+      trackEvent: () => {},
       user: { id: 'a' }, effectiveTier: 'team', sportsmanReadOnly: false, currentClassSaveRestricted: false, setSaving: noop, setSaveMessage: noop,
       savedMeta: { ids: {} }, ALL_SLOTS: mode === 'empty' ? [] : ['base'], deletedSessionSlots: {},
       isRealSession: () => true, tabHasData: () => true, setups: { base: {} }, activeTab: 'base',

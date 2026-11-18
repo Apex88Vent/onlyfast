@@ -1,3 +1,4 @@
+import { trackEvent } from '@/lib/analytics';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { RaceEntry } from './RaceScheduleForm';
 
@@ -172,6 +173,7 @@ const RaceScheduleExport: React.FC<RaceScheduleExportProps> = ({ isOpen, races, 
     document.body.appendChild(a);
     a.click();
     a.remove();
+    trackEvent('race_schedule_exported');
     setMsg('Schedule image saved.');
   };
 
@@ -181,6 +183,7 @@ const RaceScheduleExport: React.FC<RaceScheduleExportProps> = ({ isOpen, races, 
     if (file && nav.canShare && nav.canShare({ files: [file] })) {
       try {
         await nav.share({ files: [file], title: 'Race Schedule', text: 'My Race Schedule' });
+        trackEvent('race_schedule_exported');
         setMsg('Shared!');
         return;
       } catch {

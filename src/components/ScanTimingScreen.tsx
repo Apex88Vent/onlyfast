@@ -1,3 +1,4 @@
+import { trackEvent, enterAnalyticsScreen } from '@/lib/analytics';
 import React, { useState, useRef, useCallback, useEffect, useId } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -214,6 +215,12 @@ const ScanTimingScreen: React.FC<Props> = ({
   onSaved,
 }) => {
 
+  const analyticsOpened = useRef(false);
+  useEffect(() => {
+    const restore = enterAnalyticsScreen('Timing Scan');
+    if (!analyticsOpened.current) { analyticsOpened.current = true; trackEvent('timing_scan_opened'); }
+    return restore;
+  }, []);
   const [step, setStep] = useState<Step>('idle');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [scan, setScan] = useState<ScanResult | null>(null);
@@ -542,6 +549,8 @@ const ScanTimingScreen: React.FC<Props> = ({
 
   const processBatchImage = async (item: BatchImageItem): Promise<ScanResult | null> => {
     const { file } = item;
+    const analyticsParams = { number_of_images: 1, scan_session_type: currentSetupType || 'unknown' };
+    trackEvent('timing_scan_started', analyticsParams);
     try {
       if (!fileHasSupportedImageType(file)) {
         throw new Error('Unsupported file type. Choose a PNG, JPG, WEBP, HEIC, or HEIF image.');
@@ -570,8 +579,10 @@ const ScanTimingScreen: React.FC<Props> = ({
         lap_times: mapped.lap_times.map(lap => ({ ...lap, session_id: item.sessionId })),
       };
       updateBatchImage(item.id, { status: 'success', result: sessionResult, error: undefined });
+      trackEvent('timing_scan_completed', analyticsParams);
       return sessionResult;
     } catch (err: any) {
+      trackEvent('timing_scan_failed', analyticsParams);
       devError('[ScanTimingScreen] Screenshot processing failed:', err);
       const message = err?.message === 'FRONTEND_TIMEOUT'
         ? 'Scan timed out. Try a smaller or clearer screenshot.'

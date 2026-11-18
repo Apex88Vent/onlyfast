@@ -1,3 +1,4 @@
+import { trackEvent } from '@/lib/analytics';
 import { useEffect, useRef, useState } from 'react';
 import { fetchUserSubscription, deriveAccountStatus, syncMembershipFromSubscription, type AccountStatus } from '@/lib/subscription';
 import { nativePurchases, nativePurchasesEnabled, syncNativeSubscription } from '@/lib/nativePurchases';
@@ -110,6 +111,10 @@ export function useNativeSubscription(userId: string, { onVerified, onboardingTi
         }
         await nativePurchases.setUser(userId);
         if (generation.current !== revision) return;
+        if (action === 'purchase') {
+          trackEvent('subscription_plan_selected', selectedTier ? { subscription_tier: selectedTier } : {});
+          trackEvent('upgrade_started', selectedTier ? { subscription_tier: selectedTier } : {});
+        }
         await nativePurchases.run(userId, action, action === 'purchase' && selectedTier ? NATIVE_MONTHLY_PACKAGES[selectedTier] : undefined);
       }
       if (nativePurchasesEnabled || account?.row?.subscription_source === 'revenuecat') await syncNativeSubscription(userId);
@@ -124,6 +129,7 @@ export function useNativeSubscription(userId: string, { onVerified, onboardingTi
       if (generation.current === revision && selectedTier && error instanceof NativeOfferingError) {
         setOffering('unavailable'); setOfferingError(error.message);
       }
+      if (generation.current === revision && action === 'purchase' && error instanceof NativePurchaseError && error.cancelled) trackEvent('upgrade_cancelled');
       if (generation.current === revision) setMessage(error instanceof NativePurchaseError && error.cancelled ?
         'Purchase cancelled.' : error instanceof Error ? error.message : 'Unable to complete the request. Please try again.');
     } finally { pending.current = false; if (generation.current === revision) setBusy(false); }
