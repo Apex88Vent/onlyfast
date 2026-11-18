@@ -25,7 +25,7 @@ for(const interval of ['month','year'])for(const store of ['app_store','play_sto
   assert.equal(mapRevenueCat2027({...body,request_date_ms:now+14*86400000},products,now+14*86400000).subscriptions[0].status,'expired');
   const paid=nativeFixture(p,{period_type:'normal'});assert.equal(mapRevenueCat2027(paid,products,now).subscriptions[0].status,'active');
   assert.equal(mapRevenueCat2027(nativeFixture(p,{refunded_at:new Date(now).toISOString()}),products,now).subscriptions[0].status,'refunded');
-  const grace=nativeFixture(p,{period_type:'normal',expires_date:new Date(now-1000).toISOString(),grace_period_expires_date:new Date(now+86400000).toISOString()});
+  const grace=nativeFixture(p,{period_type:'normal',purchase_date:new Date(now-30*86400000).toISOString(),original_purchase_date:new Date(now-30*86400000).toISOString(),expires_date:new Date(now-1000).toISOString(),grace_period_expires_date:new Date(now+86400000).toISOString()});
   assert.equal(mapRevenueCat2027(grace,products,now).subscriptions[0].status,'grace');
   const bad=nativeFixture(p,{expires_date:new Date(now+7*86400000).toISOString()});
   assert.throws(()=>mapRevenueCat2027(bad,products,now),/TRIAL_TERMS/);

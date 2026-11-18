@@ -1,0 +1,501 @@
+{
+  "schema_version": 1,
+  "state": "reviewed_catalog_not_installed_in_database",
+  "project_ref": "mfzajhnfonrfuiwxgvhe",
+  "revenuecat_project": "proj79983fe3",
+  "offering_identifier": "onlyfast_2027_v1",
+  "offering_id": "ofrng8a104c3869",
+  "is_current": false,
+  "installation_authorized": false,
+  "function_deployment_authorized": false,
+  "live_purchases_authorized": false,
+  "credential_status": "Approved sandbox provider credentials unavailable; dependent deployments blocked",
+  "plans": [
+    {
+      "key": "sportsman_monthly",
+      "package_identifier": "$rc_custom_sportsman_monthly",
+      "package_id": "pkgeecdd1361b2",
+      "tier": "sportsman",
+      "interval": "month",
+      "usd": 4.99,
+      "intro_days": 0,
+      "entitlement": "OnlyFast Sportsman",
+      "products": [
+        {
+          "revenuecat_id": "prod94524e0912",
+          "app_id": "app82192c9834",
+          "store": "app_store",
+          "product_id": "app.onlyfast.2027.sportsman",
+          "base_plan": "",
+          "duration": "P1M",
+          "store_status": "READY_TO_SUBMIT",
+          "store_fetched_at": "2026-11-16T02:32:00Z",
+          "us_price": {
+            "amount_micros": 4990000,
+            "currency": "USD"
+          },
+          "intro": []
+        },
+        {
+          "revenuecat_id": "prod01fa8df53f",
+          "app_id": "appd348665a60",
+          "store": "play_store",
+          "product_id": "onlyfast2027sportsman:monthly",
+          "base_plan": "monthly",
+          "duration": "P1M",
+          "store_status": "DRAFT",
+          "store_fetched_at": "2026-11-16T02:32:00Z",
+          "us_price": {
+            "amount_micros": 4990000,
+            "currency": "USD"
+          },
+          "intro": {}
+        }
+      ]
+    },
+    {
+      "key": "pro_monthly",
+      "package_identifier": "$rc_monthly",
+      "package_id": "pkge3e2521240f",
+      "tier": "pro",
+      "interval": "month",
+      "usd": 7.99,
+      "intro_days": 14,
+      "entitlement": "OnlyFast Pro",
+      "products": [
+        {
+          "revenuecat_id": "prod6cb1efb920",
+          "app_id": "app82192c9834",
+          "store": "app_store",
+          "product_id": "app.onlyfast.2027.pro_monthly",
+          "base_plan": "",
+          "duration": "P1M",
+          "store_status": "READY_TO_SUBMIT",
+          "store_fetched_at": "2026-11-16T02:32:00Z",
+          "us_price": {
+            "amount_micros": 7990000,
+            "currency": "USD"
+          },
+          "intro": [
+            {
+              "offer_mode": "FREE_TRIAL",
+              "duration": "P2W",
+              "number_of_periods": 1,
+              "start_date": "2027-01-01",
+              "end_date": null
+            }
+          ]
+        },
+        {
+          "revenuecat_id": "prodb72565e303",
+          "app_id": "appd348665a60",
+          "store": "play_store",
+          "product_id": "onlyfast2027promonthly:monthly",
+          "base_plan": "monthly",
+          "duration": "P1M",
+          "store_status": "DRAFT",
+          "store_fetched_at": "2026-11-16T02:32:00Z",
+          "us_price": {
+            "amount_micros": 7990000,
+            "currency": "USD"
+          },
+          "intro": {
+            "pro14day2027": {
+              "state": "DRAFT",
+              "phases": [
+                {
+                  "recurrence_count": 1,
+                  "duration": "P14D",
+                  "regional_configs": {
+                    "AE": {
+                      "free": true
+                    },
+                    "AR": {
+                      "free": true
+                    },
+                    "AT": {
+                      "free": true
+                    },
+                    "AU": {
+                      "free": true
+                    },
+                    "BE": {
+                      "free": true
+                    },
+                    "BR": {
+                      "free": true
+                    },
+                    "CA": {
+                      "free": true
+                    },
+                    "DE": {
+                      "free": true
+                    },
+                    "DK": {
+                      "free": true
+                    },
+                    "ES": {
+                      "free": true
+                    },
+                    "FI": {
+                      "free": true
+                    },
+                    "FR": {
+                      "free": true
+                    },
+                    "GB": {
+                      "free": true
+                    },
+                    "IE": {
+                      "free": true
+                    },
+                    "IT": {
+                      "free": true
+                    },
+                    "JP": {
+                      "free": true
+                    },
+                    "MC": {
+                      "free": true
+                    },
+                    "MX": {
+                      "free": true
+                    },
+                    "NL": {
+                      "free": true
+                    },
+                    "NZ": {
+                      "free": true
+                    },
+                    "US": {
+                      "free": true
+                    }
+                  }
+                }
+              ],
+              "regional_configs": {
+                "AE": {
+                  "new_subscriber_availability": true
+                },
+                "AR": {
+                  "new_subscriber_availability": true
+                },
+                "AT": {
+                  "new_subscriber_availability": true
+                },
+                "AU": {
+                  "new_subscriber_availability": true
+                },
+                "BE": {
+                  "new_subscriber_availability": true
+                },
+                "BR": {
+                  "new_subscriber_availability": true
+                },
+                "CA": {
+                  "new_subscriber_availability": true
+                },
+                "DE": {
+                  "new_subscriber_availability": true
+                },
+                "DK": {
+                  "new_subscriber_availability": true
+                },
+                "ES": {
+                  "new_subscriber_availability": true
+                },
+                "FI": {
+                  "new_subscriber_availability": true
+                },
+                "FR": {
+                  "new_subscriber_availability": true
+                },
+                "GB": {
+                  "new_subscriber_availability": true
+                },
+                "IE": {
+                  "new_subscriber_availability": true
+                },
+                "IT": {
+                  "new_subscriber_availability": true
+                },
+                "JP": {
+                  "new_subscriber_availability": true
+                },
+                "MC": {
+                  "new_subscriber_availability": true
+                },
+                "MX": {
+                  "new_subscriber_availability": true
+                },
+                "NL": {
+                  "new_subscriber_availability": true
+                },
+                "NZ": {
+                  "new_subscriber_availability": true
+                },
+                "US": {
+                  "new_subscriber_availability": true
+                }
+              },
+              "other_regions_config": {
+                "other_regions_new_subscriber_availability": false
+              },
+              "targeting": {
+                "acquisition_rule": {
+                  "scope": {
+                    "anySubscriptionInApp": {}
+                  }
+                }
+              },
+              "offer_tags": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "key": "pro_annual",
+      "package_identifier": "$rc_annual",
+      "package_id": "pkge5107a201bc",
+      "tier": "pro",
+      "interval": "year",
+      "usd": 60,
+      "intro_days": 14,
+      "entitlement": "OnlyFast Pro",
+      "products": [
+        {
+          "revenuecat_id": "prodc0b7d866be",
+          "app_id": "app82192c9834",
+          "store": "app_store",
+          "product_id": "app.onlyfast.2027.pro_annual",
+          "base_plan": "",
+          "duration": "P1Y",
+          "store_status": "READY_TO_SUBMIT",
+          "store_fetched_at": "2026-11-16T02:32:00Z",
+          "us_price": {
+            "amount_micros": 60000000,
+            "currency": "USD"
+          },
+          "intro": [
+            {
+              "offer_mode": "FREE_TRIAL",
+              "duration": "P2W",
+              "number_of_periods": 1,
+              "start_date": "2027-01-01",
+              "end_date": null
+            }
+          ]
+        },
+        {
+          "revenuecat_id": "prod2e5726de34",
+          "app_id": "appd348665a60",
+          "store": "play_store",
+          "product_id": "onlyfast2027proannual:annual",
+          "base_plan": "annual",
+          "duration": "P1Y",
+          "store_status": "DRAFT",
+          "store_fetched_at": "2026-11-16T02:32:00Z",
+          "us_price": {
+            "amount_micros": 60000000,
+            "currency": "USD"
+          },
+          "intro": {
+            "pro14day2027": {
+              "state": "DRAFT",
+              "phases": [
+                {
+                  "recurrence_count": 1,
+                  "duration": "P14D",
+                  "regional_configs": {
+                    "AE": {
+                      "free": true
+                    },
+                    "AR": {
+                      "free": true
+                    },
+                    "AT": {
+                      "free": true
+                    },
+                    "AU": {
+                      "free": true
+                    },
+                    "BE": {
+                      "free": true
+                    },
+                    "BR": {
+                      "free": true
+                    },
+                    "CA": {
+                      "free": true
+                    },
+                    "DE": {
+                      "free": true
+                    },
+                    "DK": {
+                      "free": true
+                    },
+                    "ES": {
+                      "free": true
+                    },
+                    "FI": {
+                      "free": true
+                    },
+                    "FR": {
+                      "free": true
+                    },
+                    "GB": {
+                      "free": true
+                    },
+                    "IE": {
+                      "free": true
+                    },
+                    "IT": {
+                      "free": true
+                    },
+                    "JP": {
+                      "free": true
+                    },
+                    "MC": {
+                      "free": true
+                    },
+                    "MX": {
+                      "free": true
+                    },
+                    "NL": {
+                      "free": true
+                    },
+                    "NZ": {
+                      "free": true
+                    },
+                    "US": {
+                      "free": true
+                    }
+                  }
+                }
+              ],
+              "regional_configs": {
+                "AE": {
+                  "new_subscriber_availability": true
+                },
+                "AR": {
+                  "new_subscriber_availability": true
+                },
+                "AT": {
+                  "new_subscriber_availability": true
+                },
+                "AU": {
+                  "new_subscriber_availability": true
+                },
+                "BE": {
+                  "new_subscriber_availability": true
+                },
+                "BR": {
+                  "new_subscriber_availability": true
+                },
+                "CA": {
+                  "new_subscriber_availability": true
+                },
+                "DE": {
+                  "new_subscriber_availability": true
+                },
+                "DK": {
+                  "new_subscriber_availability": true
+                },
+                "ES": {
+                  "new_subscriber_availability": true
+                },
+                "FI": {
+                  "new_subscriber_availability": true
+                },
+                "FR": {
+                  "new_subscriber_availability": true
+                },
+                "GB": {
+                  "new_subscriber_availability": true
+                },
+                "IE": {
+                  "new_subscriber_availability": true
+                },
+                "IT": {
+                  "new_subscriber_availability": true
+                },
+                "JP": {
+                  "new_subscriber_availability": true
+                },
+                "MC": {
+                  "new_subscriber_availability": true
+                },
+                "MX": {
+                  "new_subscriber_availability": true
+                },
+                "NL": {
+                  "new_subscriber_availability": true
+                },
+                "NZ": {
+                  "new_subscriber_availability": true
+                },
+                "US": {
+                  "new_subscriber_availability": true
+                }
+              },
+              "other_regions_config": {
+                "other_regions_new_subscriber_availability": false
+              },
+              "targeting": {
+                "acquisition_rule": {
+                  "scope": {
+                    "anySubscriptionInApp": {}
+                  }
+                }
+              },
+              "offer_tags": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "key": "factory_monthly",
+      "package_identifier": "$rc_custom_factory_monthly",
+      "package_id": "pkge7b7b8ecd1a",
+      "tier": "factory",
+      "interval": "month",
+      "usd": 14.99,
+      "intro_days": 0,
+      "entitlement": "OnlyFast Teams",
+      "products": [
+        {
+          "revenuecat_id": "prod97071559b6",
+          "app_id": "app82192c9834",
+          "store": "app_store",
+          "product_id": "app.onlyfast.2027.factory",
+          "base_plan": "",
+          "duration": "P1M",
+          "store_status": "READY_TO_SUBMIT",
+          "store_fetched_at": "2026-11-16T02:32:00Z",
+          "us_price": {
+            "amount_micros": 14990000,
+            "currency": "USD"
+          },
+          "intro": []
+        },
+        {
+          "revenuecat_id": "prod883c88a2f5",
+          "app_id": "appd348665a60",
+          "store": "play_store",
+          "product_id": "onlyfast2027factory:monthly",
+          "base_plan": "monthly",
+          "duration": "P1M",
+          "store_status": "DRAFT",
+          "store_fetched_at": "2026-11-16T02:32:00Z",
+          "us_price": {
+            "amount_micros": 14990000,
+            "currency": "USD"
+          },
+          "intro": {}
+        }
+      ]
+    }
+  ]
+}

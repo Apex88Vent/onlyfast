@@ -1,4 +1,5 @@
 // Server-only catalog contracts. Prices and display labels never authorize access.
+import { SANDBOX_PRO_TRIALS_2027, validateSandboxTrial2027, type SandboxTrialEvidence2027 } from './revenuecat-sandbox-2027.ts';
 export const TESTING_BILLING_URL = 'https://mfzajhnfonrfuiwxgvhe.supabase.co';
 export const LAUNCH_2027 = '2027-01-01T08:00:00Z';
 export const ROOKIE_CLAIM_END = '2027-01-31T08:00:00Z';
@@ -56,30 +57,47 @@ const date = (v: unknown) => {
 
 // Input is fetched by server secret for ONE authenticated UUID. Never a request body.
 // A full native snapshot replaces this user's native stream atomically in SQL.
-export function mapRevenueCat2027(body: any, rows: RegistryProduct[], now = Date.now()): VerifiedSnapshot {
+export function mapRevenueCat2027(body: any, rows: RegistryProduct[], now = Date.now(),
+  trialContext: { user_id: string; evidence: SandboxTrialEvidence2027[] } | null = null): VerifiedSnapshot {
   if (!record(body?.subscriber?.entitlements) || !record(body?.subscriber?.subscriptions) ||
       !Number.isSafeInteger(body.request_date_ms) || Math.abs(body.request_date_ms - now) > 300_000) {
     throw new Error('INVALID_REVENUECAT_SNAPSHOT');
   }
   const subscriptions: VerifiedSubscription[] = [];
-  for (const [sku, raw] of Object.entries(body.subscriber.subscriptions)) {
+  for (const [key, raw] of Object.entries(body.subscriber.subscriptions)) {
     if (!record(raw) || !['app_store','play_store'].includes(raw.store)) continue;
     if (raw.is_sandbox !== true) throw new Error('WRONG_BILLING_ENVIRONMENT');
     const store = raw.store;
     const app_id = store === 'app_store' ? 'app82192c9834' : 'appd348665a60';
-    const base_plan = store === 'play_store' ? sku.split(':')[1] || '' : '';
+    // REST v1 may omit the plan suffix from the dictionary key. A conflicting
+    // suffix/explicit plan must never select a different registry row.
+    const suffix = key.split(':')[1] || '';
+    if (raw.product_plan_identifier != null && (typeof raw.product_plan_identifier !== 'string' ||
+      suffix && raw.product_plan_identifier !== suffix)) throw new Error('MISMATCHED_PRODUCT_PLAN');
+    const base_plan = store === 'play_store' ? raw.product_plan_identifier || suffix : '';
+    const sku = store === 'play_store' && base_plan ? key.split(':')[0] + ':' + base_plan : key;
     const p = registryProduct(rows, { provider:'revenuecat', environment:'sandbox', app_id, store, product_id:sku, base_plan });
     const entitlement = body.subscriber.entitlements[p.entitlement || ''];
-    const matched = record(entitlement) && entitlement.product_identifier === sku;
+    const matched = record(entitlement) && [key,sku].includes(entitlement.product_identifier) &&
+      (entitlement.product_plan_identifier == null || entitlement.product_plan_identifier === base_plan);
     const expiration = date(raw.expires_date);
     const started_at = date(raw.original_purchase_date || raw.purchase_date);
     const lastPurchase = date(raw.purchase_date);
     const grace = raw.grace_period_expires_date ? date(raw.grace_period_expires_date) : null;
     const end = matched && entitlement.grace_period_expires_date ? date(entitlement.grace_period_expires_date) : null;
     const expires_at = new Date(Math.max(Date.parse(expiration), ...[grace,end].filter(Boolean).map(x=>Date.parse(x!)))).toISOString();
-    const trial = String(raw.period_type).toLowerCase() === 'trial';
-    if (trial && !p.legacy && (p.tier !== 'pro' || Date.parse(expiration)-Date.parse(lastPurchase) !== 14*DAY_MS)) {
-      throw new Error('UNEXPECTED_INTRODUCTORY_TRIAL_TERMS');
+    const period = String(raw.period_type).toLowerCase();
+    if (!['normal','trial','intro'].includes(period) || Date.parse(expiration) <= Date.parse(lastPurchase) ||
+      Date.parse(started_at) > Date.parse(lastPurchase) || Date.parse(lastPurchase) > now + 300000 ||
+      !p.legacy && period === 'intro') throw new Error('INVALID_PROVIDER_PURCHASE_STATE');
+    const trial = period === 'trial';
+    if (trial && !p.legacy) {
+      if (p.tier !== 'pro') throw new Error('UNEXPECTED_INTRODUCTORY_TRIAL_TERMS');
+      if (SANDBOX_PRO_TRIALS_2027[sku]) {
+        validateSandboxTrial2027(sku,raw,trialContext?.user_id,trialContext?.evidence || [],now);
+      } else if (Date.parse(expiration)-Date.parse(lastPurchase) !== 14*DAY_MS) {
+        throw new Error('UNEXPECTED_INTRODUCTORY_TRIAL_TERMS');
+      }
     }
     const active = matched && Date.parse(expires_at) > now;
     subscriptions.push({ registry_id:p.id, provider_key:store+':'+sku,

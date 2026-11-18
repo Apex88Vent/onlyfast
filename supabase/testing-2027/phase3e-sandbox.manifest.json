@@ -1,0 +1,27 @@
+{
+  "project_ref": "mfzajhnfonrfuiwxgvhe",
+  "organization_id": "wxswxtsewczfijycqnwi",
+  "migration_name": "onlyfast_2027_phase3e_sandbox_billing_testing",
+  "version": "20261117235314",
+  "migration_status": "prepared_not_installed",
+  "deployment_status": "blocked_pending_credentials_and_isolation",
+  "sandbox_transactions_authorized": false,
+  "files": {
+    "20261117235314_onlyfast_2027_phase3e_sandbox_billing_testing.sql": {
+      "sha256": "5E4283346E4A3D64E07EE2FBD3D772664E8D49CE190BCEA1023D70D832340125",
+      "bytes": 5208
+    },
+    "phase3e-sandbox-verify.sql": {
+      "sha256": "7D96F8C34FC2B3DFFF590A8C07BCD7D505499A8D0F079E9EDA23DDF7ADAAA50A",
+      "bytes": 1616
+    },
+    "phase3e-functions.plan.json": {
+      "sha256": "864EEE8459C361D364F234DCB233006D3CCB9FD827555615CF0E79E6E8D1F18A",
+      "bytes": 2996
+    },
+    "phase3d-revenuecat-products.plan.json": {
+      "sha256": "DC4BF87A408903171972D944F1244923EB6BEC99CDB58E34C3611CCD8566EFBC",
+      "bytes": 15003
+    }
+  }
+}

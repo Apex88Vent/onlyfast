@@ -1,0 +1,37 @@
+{
+  "project_ref": "mfzajhnfonrfuiwxgvhe",
+  "organization_id": "wxswxtsewczfijycqnwi",
+  "state": "prepared_not_deployed",
+  "deployment_authorized": false,
+  "sandbox_transactions_authorized": false,
+  "migration": "20261117235314_onlyfast_2027_phase3e_sandbox_billing_testing.sql",
+  "nonsecret_defaults": {
+    "ONLYFAST_2027_BILLING_ENABLED": "false",
+    "BILLING_2027_ENVIRONMENT": "sandbox",
+    "BILLING2027_SANDBOX_ISOLATION_CONFIRMED": "false",
+    "BILLING2027_TEST_USER_IDS": ""
+  },
+  "approved_synthetic_supabase_ids": [
+    "88848d42-e5c0-4945-b777-c25575c39ee5",
+    "5ddd8687-5c01-4bd9-8281-d61065162bb2",
+    "f10daf2f-759c-491a-ae0a-78c4fd506599",
+    "6109dc9b-9553-45dc-8cd6-fb1fe2e30247"
+  ],
+  "managed_environment": ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"],
+  "functions": [
+    {"name":"billing-2027-sync","verify_jwt":false,"authorization":"Supabase auth.getUser(bearer) plus synthetic UUID allowlist","required_secrets":["BILLING2027_REVENUECAT_SECRET_API_KEY"]},
+    {"name":"billing-2027-revenuecat-webhook","verify_jwt":false,"authorization":"Separate constant-time Authorization secret, SANDBOX/app/store/product checks and UUID allowlist","required_secrets":["BILLING2027_REVENUECAT_SECRET_API_KEY","BILLING2027_REVENUECAT_WEBHOOK_AUTHORIZATION"]},
+    {"name":"billing-2027-stripe-webhook","verify_jwt":false,"authorization":"Five-minute Stripe HMAC plus test key, fetched account identity and UUID ownership/allowlist","required_secrets":["BILLING2027_STRIPE_SECRET_KEY","BILLING2027_STRIPE_WEBHOOK_SECRET","BILLING2027_STRIPE_ACCOUNT_ID"]},
+    {"name":"billing-2027-reconcile","verify_jwt":false,"authorization":"Separate constant-time worker Authorization plus explicit synthetic UUID/provider binding","required_secrets":["BILLING2027_RECONCILE_AUTHORIZATION"],"provider_specific_secrets":{"revenuecat":["BILLING2027_REVENUECAT_SECRET_API_KEY"],"stripe":["BILLING2027_STRIPE_SECRET_KEY","BILLING2027_STRIPE_ACCOUNT_ID"]}}
+  ],
+  "deployment_preconditions": [
+    "Independently verify exact testing project and organization; never use linked-project defaults or Primary.",
+    "Review migration fingerprint, install once in testing, and verify all original retention aggregates.",
+    "Resolve RevenueCat production webhook isolation under separately approved configuration before any provider transaction.",
+    "Supply new approved testing credentials through Supabase Secrets; never copy production keys or commit env values.",
+    "Verify RevenueCat project access and Stripe test-account identity using synthetic IDs only; no purchase calls.",
+    "Keep disabled defaults until evidence of routing isolation and native-profile safety is reviewed.",
+    "Deploy only individually credential-complete functions to explicit --project-ref mfzajhnfonrfuiwxgvhe with gateway JWT verification disabled; handlers implement their own authentication.",
+    "Do not deploy or redeploy the existing claim or Track Trace functions as part of this plan."
+  ]
+}
