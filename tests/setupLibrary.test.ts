@@ -25,7 +25,7 @@ const loadRace = componentFunction('SetupDashboard.tsx', 'loadSetupIntoState');
 test('production registries remain unchanged and all new class IDs are development-only', () => {
   assert.deepEqual(configs.AVAILABLE_CAR_CLASSES, ['Custom Car', 'Dwarf Cars', 'Modified', 'Sport Mod', 'Lightning Sprints', 'Pro Stock', 'Pure Stock']);
   assert.equal(configs.CAR_CLASSES.length, 11);
-  assert.equal(library.EXPANDED_CAR_CLASSES.length, 48);
+  assert.equal(library.EXPANDED_CAR_CLASSES.length, 52);
   for (const [name, config] of Object.entries(library.EXPANDED_CLASS_CONFIGS)) {
     assert.equal(config.developmentOnly, true);
     assert.equal(configs.CLASS_CONFIGS[name], undefined);
@@ -40,20 +40,20 @@ test('production registries remain unchanged and all new class IDs are developme
   }
 });
 
-test('all configured sheets are released while experimental account privileges remain gated', () => {
+test('existing sheets stay released; new small oval sheets require experimental account privileges', () => {
   for (const tier of ['rookie', 'pro', 'team', 'admin']) {
     const snapshot = { ...CLOSED_BETA_ACCESS, tier };
-    assert.deepEqual(access.getSelectableSetupClasses(snapshot), [...configs.CAR_CLASSES, ...library.EXPANDED_CAR_CLASSES]);
-    for (const name of library.EXPANDED_CAR_CLASSES) assert.equal(access.canAccessSetupClass(name, snapshot), true);
+    assert.deepEqual(access.getSelectableSetupClasses(snapshot), [...configs.CAR_CLASSES, ...library.EXPANDED_CAR_CLASSES.filter(c => library.EXPANDED_CLASS_CONFIGS[c].releaseStatus !== 'test')]);
+    for (const name of library.EXPANDED_CAR_CLASSES) assert.equal(access.canAccessSetupClass(name, snapshot), library.EXPANDED_CLASS_CONFIGS[name].releaseStatus !== 'test');
   }
   for (const snapshot of [CLOSED_BETA_ACCESS, { ...experimentalAccess, testerKind: 'personal' as const },
     { ...experimentalAccess, betaFeaturesEnabled: false }, { ...experimentalAccess, isBetaTester: false }, { ...experimentalAccess, enabledFeatures: [] }]) {
     assert.equal(access.canAccessSetupLibrary(snapshot), false);
   }
-  assert.equal(access.getSelectableSetupClasses(experimentalAccess).length, 59);
+  assert.equal(access.getSelectableSetupClasses(experimentalAccess).length, 63);
   for (const category of Object.keys(library.SETUP_CATEGORY_LABELS)) {
     const classes = access.getDisciplineSetupClasses(category as library.SetupCategory, experimentalAccess);
-    for (const name of classes.filter(library.isDevelopmentClass)) assert.equal(library.EXPANDED_CLASS_CONFIGS[name].category, category);
+    for (const name of classes.filter(library.isDevelopmentClass)) assert.ok((library.EXPANDED_CLASS_CONFIGS[name].categories || [library.EXPANDED_CLASS_CONFIGS[name].category]).includes(category));
   }
   clearCachedBetaAccess();
   assert.equal(saveBase(populatedLibraryState('GT3')).race_class, 'GT3');
@@ -77,7 +77,7 @@ for (const name of library.EXPANDED_CAR_CLASSES) test(`${name}: actual base/race
     const reopenedRace = loadRace(JSON.parse(JSON.stringify(race)));
     const heat = saveRace({ ...reopenedRace }, 'heat', 'Race QA');
     assert.deepEqual(heat.custom_fields, row.custom_fields);
-    const first = library.EXPANDED_CLASS_CONFIGS[name].extraSections[0].fields[0].key;
+    const first = library.EXPANDED_CLASS_CONFIGS[name].extraSections[0].fields.find(f => !f.required)!.key;
     reopenedRace[first] = 'edited';
     assert.equal(storage.libraryFieldsFromRow(saveRace(reopenedRace, 'main'))[first], 'edited');
     assert.equal(loaded[first], state[first], 'copies do not mutate source');
@@ -119,7 +119,8 @@ test('real form renders existing sheets for normal accounts and keeps class arch
     const html = renderForm(name);
     for (const f of library.EXPANDED_CLASS_CONFIGS[name].extraSections.flatMap(s => s.fields)) assert.ok(html.includes(`-${f.key}"`), `${name}: ${f.key}`);
     const released = renderForm(name, CLOSED_BETA_ACCESS);
-    assert.match(released, /<input/);
+    if (library.EXPANDED_CLASS_CONFIGS[name].releaseStatus === 'test') assert.match(released, /available only to the OnlyFast test account/);
+    else assert.match(released, /<input/);
   }
   assert.doesNotMatch(renderForm('Formula Ford 1600 / FF1600'), /wing|Aero/i);
   assert.match(renderForm('Formula Continental'), /Front wing/);
@@ -166,6 +167,14 @@ test('actual onboarding and class-change selectors filter by discipline for ever
   const onboarding = loadUI('components/OnboardingFlow.tsx', CLOSED_BETA_ACCESS, [3, 'Dirt Track Oval']).default;
   const normal = renderToStaticMarkup(React.createElement(onboarding, { onComplete: () => {} }));
   assert.doesNotMatch(normal, /Shifter Kart|Clutch Kart|GT3|Legends|Superbike/);
+  assert.match(normal, /Micro Sprint/);
+  assert.doesNotMatch(normal, /Quarter Midget|Junior Sprint|Mini Dwarf/);
+  for (const category of ['dirt_oval', 'pavement_oval']) {
+    const modal = loadUI('components/ClassChangeModal.tsx', CLOSED_BETA_ACCESS, ['selector', '', category, null, '', false, true, true]).default;
+    const html = renderToStaticMarkup(React.createElement(modal, { isOpen: true, currentClass: 'Dwarf Cars', tier: 'team' }));
+    assert.doesNotMatch(html, /Quarter Midget|Junior Sprint|Mini Dwarf/);
+    if (category === 'dirt_oval') assert.match(html, /Micro Sprint/);
+  }
   const testOnboarding = loadUI('components/OnboardingFlow.tsx', experimentalAccess, [3, 'Road Racing']).default;
   const expanded = renderToStaticMarkup(React.createElement(testOnboarding, { onComplete: () => {} }));
   assert.match(expanded, /GT3|Formula Ford/);

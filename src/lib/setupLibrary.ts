@@ -1,4 +1,5 @@
 import { ROAD_RACING_CLASS_CONFIGS } from './roadRacingSetupSchemas.ts';
+import { SMALL_OVAL_CLASS_CONFIGS, SMALL_OVAL_FIELD_GROUPS } from './smallOvalSetupSchemas.ts';
 import type { ClassConfig, ClassSection, FieldDef } from './classConfigs.ts';
 import { PAVEMENT_FIELD_GROUPS, pavementLegendsSchema, pavementLateModelSchema, pavementModifiedSchema, pavementCompactSchema } from './pavementSetupSchemas.ts';
 
@@ -22,6 +23,7 @@ const atCorners = (fields: FieldDef[], frontOnly = false): FieldDef[] => (frontO
 const ends = (fields: FieldDef[]) => ['front', 'rear'].flatMap(end => fields.map(f => ({ ...f, key: `${end}_${f.key}`, label: `${end === 'front' ? 'Front' : 'Rear'} ${f.label}` })));
 
 export const SETUP_FIELD_GROUPS: Record<string, ClassSection> = {
+  ...SMALL_OVAL_FIELD_GROUPS,
   ...PAVEMENT_FIELD_GROUPS,
   session: section('session', 'Session & Conditions', [text('session_track', 'Track'), text('session_name', 'Session'), text('session_weather', 'Weather'), field('ambient_temperature', 'Ambient temperature', '°F'), field('track_temperature', 'Track temperature', '°F'), field('fuel_load', 'Fuel load', 'gal'), field('driver_weight', 'Driver weight', 'lb')]),
   ovalWeights: section('oval-weights', 'Weights & Balance', [...atCorners([field('corner_weight', 'Corner weight', 'lb')]), field('total_weight', 'Total weight', 'lb'), field('front_weight_pct', 'Front weight', '%'), field('rear_weight_pct', 'Rear weight', '%'), field('left_side_pct', 'Left side weight', '%'), field('cross_weight', 'Cross weight', '%')]),
@@ -157,6 +159,7 @@ add('RC Oval', 'rc', 'rc', [...rc.filter(g => g !== 'antiRollBars'), 'rcDiff2wd'
 add('Winged Sprint Cars', 'dirt_oval', 'oval', ['session', 'ovalWeights', 'sprintChassis', 'sprintCorners', 'sprintWing', 'gearing', 'brakes'], 'Winged sprint car referenced by the existing class icon registry');
 
 Object.assign(EXPANDED_CLASS_CONFIGS, ROAD_RACING_CLASS_CONFIGS);
+Object.assign(EXPANDED_CLASS_CONFIGS, SMALL_OVAL_CLASS_CONFIGS);
 
 export const EXPANDED_CAR_CLASSES = Object.keys(EXPANDED_CLASS_CONFIGS);
 export function isDevelopmentClass(name?: string | null): boolean {
@@ -168,5 +171,5 @@ export function areSetupSheetsCompatible(source?: string, target?: string): bool
 }
 
 export function setupClassLabel(id?: string | null): string {
-  return ROAD_RACING_CLASS_CONFIGS[id || '']?.name || id || '';
+  return EXPANDED_CLASS_CONFIGS[id || '']?.name || id || '';
 }

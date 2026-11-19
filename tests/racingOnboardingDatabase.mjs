@@ -186,6 +186,7 @@ test('onboarding, 30-day changes, RLS locks, historical associations and paid en
     }
     // Canonical class/discipline mapping includes all existing sheets.
     for (const [name,config] of Object.entries(EXPANDED_CLASS_CONFIGS)) {
+      if (config.family === 'small_oval') continue; // Later migration covered by smallOvalDatabase.test.ts.
       const result = (await db.query('select public.onlyfast_canonical_race_class($1) as name,public.onlyfast_race_discipline($1) as discipline',[name])).rows[0];
       assert.equal(result.name,name); assert.equal(result.discipline,config.category);
     }

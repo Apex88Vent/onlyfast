@@ -167,6 +167,25 @@ async function mount(component = App) {
 }
 const heading = (root, label) => root.findAll(n => ['h1', 'h2', 'h3'].includes(n.type) && text(n) === label).length > 0;
 const landing = root => root.findAll(n => n.props['data-landing']).length > 0;
+
+for (const [id, label, discipline] of [
+  ['micro_sprint', 'Micro Sprint', 'Dirt Track Oval'], ['quarter_midget', 'Quarter Midget', 'Dirt Track Oval'],
+  ['quarter_midget', 'Quarter Midget', 'Pavement Oval'], ['junior_sprint', 'Junior Sprint', 'Dirt Track Oval'],
+  ['mini_dwarf', 'Mini Dwarf', 'Dirt Track Oval'],
+]) test(`${label} from ${discipline}: successful initialization ends at landing without opening a setup`, async () => {
+  reset({ access: id === 'micro_sprint' ? CLOSED_BETA_ACCESS : experiment });
+  const view = await mount();
+  await skipIntro(view.root);
+  await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith(discipline + ' -')).props.onClick());
+  await act(async () => buttons(view.root).find(b => b.props['aria-label']?.startsWith(label + ' -')).props.onClick());
+  assert.equal(landing(view.root), false);
+  await click(view.root, 'Continue Free');
+  assert.ok(landing(view.root));
+  assert.equal(text(view.root.findByProps({ 'data-landing': true })), `Landing: ${id}`);
+  assert.deepEqual(fixture.initializations, [id]);
+  assert.equal(view.root.findAllByType('input').length, 0);
+  await act(async () => view.unmount());
+});
 async function requiredSlides(root) {
   await click(root, 'Let’s Get Faster');
   for (let i = 0; i < 4; i++) await click(root, 'Continue');
@@ -241,7 +260,7 @@ test('B/E: new user ignores stale class/membership; Skip exits to discipline sel
   await act(async () => categories[0].props.onClick());
   assert.ok(heading(view.root, 'Select Your Car'));
   assert.equal(buttons(view.root).some(b => /GT3|Legends/.test(text(b))), false);
-  assert.equal(buttons(view.root).filter(b => / - /.test(b.props['aria-label'] || '')).length, 12);
+  assert.equal(buttons(view.root).filter(b => / - /.test(b.props['aria-label'] || '')).length, 13);
   await act(async () => view.unmount());
 });
 

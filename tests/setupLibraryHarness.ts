@@ -31,6 +31,6 @@ export function componentFunction(file: string, name: string, state: Record<stri
 export function populatedLibraryState(name: string): Record<string, string> {
   const fields = library.EXPANDED_CLASS_CONFIGS[name].extraSections.flatMap(s => s.fields);
   return { raceClass: name, setup_name: 'Library QA', raceDate: '2026-09-30', trackName: 'QA circuit',
-    ...Object.fromEntries(fields.map((f, i) => [f.key, i % 11 === 0 ? '' : i % 7 === 0 ? '0' : f.type === 'number' ? '-2.125' : `setting ${i} / note\nsecond line`])),
+    ...Object.fromEntries(fields.map((f, i) => [f.key, f.required ? f.options![1].value : i % 11 === 0 ? '' : i % 7 === 0 ? '0' : f.type === 'number' ? '-2.125' : `setting ${i} / note\nsecond line`])),
   };
 }

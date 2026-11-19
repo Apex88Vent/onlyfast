@@ -10,19 +10,18 @@ export function canAccessSetupLibrary(access: BetaAccessSnapshot = getCachedBeta
     && access.enabledFeatures.includes(BETA_FEATURES.testAccountFullAccess);
 }
 export function canAccessSetupClass(name: string, access: BetaAccessSnapshot = getCachedBetaAccess()): boolean {
-  // The existing class sheets are now available across all five disciplines.
-  // Beta access still controls experimental account privileges, not sheet access.
-  void access;
+  const status = EXPANDED_CLASS_CONFIGS[name]?.releaseStatus;
+  if (status === 'disabled') return false;
+  if (status === 'test') return canAccessSetupLibrary(access);
   // Keep legacy names readable; new selections are validated by the server RPC.
   return !isDevelopmentClass(name) || EXPANDED_CAR_CLASSES.includes(name);
 }
 export function getSelectableSetupClasses(access: BetaAccessSnapshot = getCachedBetaAccess()): string[] {
-  void access;
-  return [...CAR_CLASSES, ...EXPANDED_CAR_CLASSES];
+  return [...CAR_CLASSES, ...EXPANDED_CAR_CLASSES].filter(name => canAccessSetupClass(name, access));
 }
 export function getDisciplineSetupClasses(category: SetupCategory, access: BetaAccessSnapshot = getCachedBetaAccess()): string[] {
-  void access;
   if (category === 'road_course') return [...ROAD_RACING_CLASSES];
   return [...(category === 'dirt_oval' ? CAR_CLASSES : []),
-    ...EXPANDED_CAR_CLASSES.filter(c => EXPANDED_CLASS_CONFIGS[c].category === category)];
+    ...EXPANDED_CAR_CLASSES.filter(c => (EXPANDED_CLASS_CONFIGS[c].categories || [EXPANDED_CLASS_CONFIGS[c].category]).includes(category))]
+    .filter(name => canAccessSetupClass(name, access));
 }

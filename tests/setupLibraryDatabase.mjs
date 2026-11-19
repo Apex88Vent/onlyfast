@@ -80,7 +80,7 @@ test('PostgreSQL: every new sheet saves/reopens/copies; gating, sharing, cooldow
     const kartIds = [];
     // This fixture verifies the historical, pre-release migration sequence.
     // Current Road Racing IDs are covered by racingOnboardingDatabase.mjs.
-    for (const name of EXPANDED_CAR_CLASSES.filter(name => !name.startsWith('road_'))) {
+    for (const name of EXPANDED_CAR_CLASSES.filter(name => !name.startsWith('road_') && EXPANDED_CLASS_CONFIGS[name].family !== 'small_oval')) {
       await db.query('select public.change_active_race_class($1)', [name]);
       const state = populatedLibraryState(name);
       if (EXPANDED_CLASS_CONFIGS[name].category === 'pavement_oval') Object.assign(state, {

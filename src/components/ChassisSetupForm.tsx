@@ -125,6 +125,12 @@ const ChassisSetupForm: React.FC<ChassisSetupFormProps> = ({ data, customFields,
   const betaAccess = useBetaFeatures();
   const config = getClassConfig(raceClass || '');
   const isPavement = config.category === 'pavement_oval';
+  const isSmallOval = config.family === 'small_oval';
+  const suggestedWeights = useMemo(() => isSmallOval ? calculatePavementWeights(data) : {}, [isSmallOval, data]);
+  const driveSprocket = Number(data.front_sprocket), axleSprocket = Number(data.rear_sprocket);
+  const ratio = axleSprocket / driveSprocket;
+  const suggestedRatio = Number.isFinite(driveSprocket) && driveSprocket > 0 && Number.isFinite(axleSprocket) && axleSprocket > 0
+    && Number.isFinite(ratio) && ratio > 0 ? String(Number(ratio.toFixed(4))) : null;
   const calculatedWeights = useMemo(() => isPavement ? calculatePavementWeights(data) : {}, [isPavement, data]);
   const pavementToe = useMemo(() => isPavement ? normalizePavementToe(data) : {}, [isPavement, data]);
 
@@ -211,7 +217,7 @@ const ChassisSetupForm: React.FC<ChassisSetupFormProps> = ({ data, customFields,
       return (
         <div key={fieldKey}>
           <label htmlFor={fieldId} className={curLabelClass}>{field.label}{changed && <ChangedBadge />}</label>
-          <select id={fieldId} value={value} onChange={(e) => onChange(fieldKey, e.target.value)} className={curInputClass}>
+          <select id={fieldId} required={field.required} value={value} onChange={(e) => onChange(fieldKey, e.target.value)} className={curInputClass}>
             {field.options.map(opt => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
@@ -252,10 +258,30 @@ const ChassisSetupForm: React.FC<ChassisSetupFormProps> = ({ data, customFields,
 
   return (
     <div className="space-y-6">
-      {config.developmentOnly && config.category !== 'road_course' && <p className="text-xs font-semibold text-[#00A8E8]">Development setup sheet · {config.name}</p>}
+      {config.developmentOnly && config.releaseStatus !== 'production' && config.category !== 'road_course' && <p className="text-xs font-semibold text-[#00A8E8]">Development setup sheet · {config.name}</p>}
       {isPavement && <p id={`${prefix}-weight-calculation-note`} className="text-xs text-[#6B7280]">
         Weight totals calculate from all four corner weights when complete. With incomplete weights, enter totals manually.
       </p>}
+      {isSmallOval && <div className="bg-white rounded-2xl border border-[#E5E7EB] p-4 text-sm space-y-2">
+        <p className="text-[#6B7280]">Measured totals and ratios stay editable. Calculate from complete corner weights or sprocket counts when needed.</p>
+        <div className="flex flex-wrap gap-3">
+          <button type="button" className="text-[#007AA8] font-semibold disabled:text-gray-400 disabled:cursor-not-allowed"
+            disabled={suggestedWeights.total_weight === undefined} onClick={() => {
+              const keys = new Set(config.extraSections.flatMap(s => s.fields.map(f => f.key)));
+              Object.entries(suggestedWeights).forEach(([key, value]) => { if (keys.has(key)) onChange(key, value); });
+              const lf = Number(data.lf_corner_weight), rf = Number(data.rf_corner_weight);
+              const lr = Number(data.lr_corner_weight), rr = Number(data.rr_corner_weight);
+              const total = lf + rf + lr + rr;
+              const measured = { left_weight: lf + lr, rear_weight: lr + rr, front_weight: lf + rf, right_weight: rf + rr };
+              Object.entries(measured).forEach(([key, value]) => { if (keys.has(key)) onChange(key, String(Number(value.toFixed(2)))); });
+              if (keys.has('right_weight_pct') && total > 0) onChange('right_weight_pct', String(Number((100 * (rf + rr) / total).toFixed(2))));
+            }}>Calculate weights</button>
+          {config.extraSections.some(s => s.fields.some(f => f.key === 'final_drive')) && <button type="button"
+            className="text-[#007AA8] font-semibold disabled:text-gray-400 disabled:cursor-not-allowed"
+            disabled={suggestedRatio === null}
+            onClick={() => { if (suggestedRatio !== null) onChange('final_drive', suggestedRatio); }}>Calculate gear ratio</button>}
+        </div>
+      </div>}
       {baseSetup && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 flex items-center gap-2 text-xs text-amber-900">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -323,7 +349,11 @@ const ChassisSetupForm: React.FC<ChassisSetupFormProps> = ({ data, customFields,
       </section>}
 
       {/* Extra Class-Specific Sections */}
-      {config.extraSections.map(section => (
+      {config.extraSections.map(section => {
+        const inactive = Boolean(section.activeWhen && data[section.activeWhen.key] !== section.activeWhen.value);
+        const activeLabel = section.activeWhen && config.extraSections.flatMap(s => s.fields)
+          .find(f => f.key === section.activeWhen.key)?.options?.find(o => o.value === section.activeWhen.value)?.label;
+        return (
         <section key={section.id} className="bg-white rounded-2xl border border-[#E5E7EB] p-6 shadow-sm" aria-labelledby={`${section.id}-heading`}>
           <h3 id={`${section.id}-heading`} className={sectionHeaderClass}>
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00A8E8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -339,6 +369,12 @@ const ChassisSetupForm: React.FC<ChassisSetupFormProps> = ({ data, customFields,
             </svg>
             {section.title}
           </h3>
+          {section.activeWhen && <p className="text-xs text-[#6B7280] mb-3" id={`${prefix}-${section.id}-status`}>
+            {inactive ? `Inactive — select ${activeLabel || section.activeWhen.value} to edit. Saved values are preserved.` : `Active for ${activeLabel || section.activeWhen.value}.`}
+          </p>}
+          <fieldset disabled={inactive} aria-describedby={section.activeWhen ? `${prefix}-${section.id}-status` : undefined}
+            className={inactive ? 'opacity-50 [&_input]:bg-gray-200 [&_select]:bg-gray-200 [&_input]:cursor-not-allowed [&_select]:cursor-not-allowed' : undefined}>
+          <legend className="sr-only">{section.title}</legend>
           {section.layout === 'four-corners' ? <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {(['lf', 'rf', 'lr', 'rr'] as const).map(corner => <CornerCard key={corner}
               title={section.cornerTitles?.[corner] || { lf: 'Left Front (LF)', rf: 'Right Front (RF)', lr: 'Left Rear (LR)', rr: 'Right Rear (RR)' }[corner]}
@@ -352,8 +388,9 @@ const ChassisSetupForm: React.FC<ChassisSetupFormProps> = ({ data, customFields,
               {section.fields.map(f => renderField(f))}
             </div>
           </fieldset>}
+          </fieldset>
         </section>
-      ))}
+      ); })}
 
       {/* Custom Fields */}
       {customFields.length > 0 && (

@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { isMedianIOSApp } from '@/lib/paymentVisibility';
 import type { User } from '@supabase/supabase-js';
 import type { MembershipTier } from '@/lib/membership';
-import { getDisciplineSetupClasses } from '@/lib/setupLibraryAccess';
+import { canAccessSetupClass, getDisciplineSetupClasses } from '@/lib/setupLibraryAccess';
+import { useBetaFeatures } from '@/hooks/useBetaFeatures';
 import { EXPANDED_CLASS_CONFIGS, SETUP_CATEGORY_LABELS, type SetupCategory } from '@/lib/setupLibrary';
 import { changeActiveClass, formatEligibleDate, getActiveClassState, sameClass } from '@/lib/activeClass';
 
@@ -20,6 +21,7 @@ interface ClassChangeModalProps {
 const categoryFor = (car: string): SetupCategory => (EXPANDED_CLASS_CONFIGS[car]?.category || 'dirt_oval') as SetupCategory;
 const disciplineEnabled = (category: string) => category !== 'rc' && category !== 'motorcycle';
 const ClassChangeModal: React.FC<ClassChangeModalProps> = ({ isOpen, user, currentClass, onClose, onChanged, onUpgrade }) => {
+  const betaAccess = useBetaFeatures();
   const [step, setStep] = useState<Step>('loading');
   const [selectedClass, setSelectedClass] = useState(currentClass);
   const [discipline, setDiscipline] = useState<SetupCategory>(categoryFor(currentClass));
@@ -36,8 +38,9 @@ const ClassChangeModal: React.FC<ClassChangeModalProps> = ({ isOpen, user, curre
   const mounted = useRef(false);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   // Previously used class IDs remain selectable alongside the current sheets.
-  const availableClasses = disciplineEnabled(discipline) ? [...new Set([...getDisciplineSetupClasses(discipline),
-    ...Object.keys(EXPANDED_CLASS_CONFIGS).filter(car => EXPANDED_CLASS_CONFIGS[car].category === discipline)])] : [];
+  const availableClasses = disciplineEnabled(discipline) ? [...new Set([...getDisciplineSetupClasses(discipline, betaAccess),
+    ...Object.keys(EXPANDED_CLASS_CONFIGS).filter(car => EXPANDED_CLASS_CONFIGS[car].category === discipline
+      && canAccessSetupClass(car, betaAccess))])] : [];
 
   useEffect(() => {
     if (!isOpen) return;

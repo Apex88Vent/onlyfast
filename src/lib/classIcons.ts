@@ -13,6 +13,7 @@ const wingedFormula = iconVariants('road-course/winged-open-wheel-formula/winged
 const nonWingedFormula = iconVariants('road-course/non-winged-open-wheel-formula/non-winged-open-wheel-formula');
 const karts = iconVariants('road-course/go-karts/go-karts');
 const touringCar = iconVariants('road-course/touring-car-tcr/touring-car-tcr');
+const lightningSprint = iconVariants('lightning-sprint/lightning-sprint');
 
 // The pre-existing Dirt Track paths below are preserved verbatim.
 export const CLASS_ICONS: Record<string, { blue: string; white: string }> = {
@@ -24,10 +25,8 @@ export const CLASS_ICONS: Record<string, { blue: string; white: string }> = {
     blue: '/onlyfast-class-icons/dirt-late-model/dirt-late-model-blue.png',
     white: '/onlyfast-class-icons/dirt-late-model/dirt-late-model-white.png',
   },
-  'Lightning Sprints': {
-    blue: '/onlyfast-class-icons/lightning-sprint/lightning-sprint-blue.png',
-    white: '/onlyfast-class-icons/lightning-sprint/lightning-sprint-white.png',
-  },
+  'Lightning Sprints': lightningSprint,
+  micro_sprint: lightningSprint,
   'Midgets': {
     blue: '/onlyfast-class-icons/midget/midget-blue.png',
     white: '/onlyfast-class-icons/midget/midget-white.png',

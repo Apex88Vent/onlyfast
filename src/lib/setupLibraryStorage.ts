@@ -31,6 +31,9 @@ export function libraryFieldsFromRow(row: { race_class?: string; custom_fields?:
 export function buildLibraryCustomFields(raceClass: string, state: Record<string, string>, customFields: Record<string, string> = {}): Record<string, unknown> {
   const config = EXPANDED_CLASS_CONFIGS[raceClass];
   if (!config) throw new Error('Unknown development setup class.');
+  if (raceClass === 'micro_sprint' && !['winged', 'non_winged'].includes(state.micro_configuration)) {
+    throw new Error('Select Winged or Non-Winged for this Micro Sprint setup before saving.');
+  }
   let prior: LibrarySnapshot | null = null;
   if (state[SETUP_LIBRARY_KEY]) {
     try { prior = readLibrarySnapshot(JSON.parse(state[SETUP_LIBRARY_KEY]), raceClass); } catch { /* old drafts have no snapshot */ }

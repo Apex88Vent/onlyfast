@@ -15,6 +15,7 @@ export interface FieldDef {
   applicableCategory?: string;
   // A companion value rendered by its existing compound input (e.g. toe).
   pairedWith?: string;
+  required?: boolean;
 }
 
 export interface ClassSection {
@@ -24,10 +25,15 @@ export interface ClassSection {
   fields: FieldDef[];
   layout?: 'four-corners';
   cornerTitles?: Partial<Record<'lf' | 'rf' | 'lr' | 'rr', string>>;
+  // Inactive sections remain visible and serialized; only editing is disabled.
+  activeWhen?: { key: string; value: string };
 }
 
 export interface ClassConfig {
   category?: string;
+  categories?: string[];
+  schemaId?: string;
+  releaseStatus?: 'production' | 'test' | 'disabled';
   family?: string;
   fieldGroups?: string[];
   developmentOnly?: boolean;

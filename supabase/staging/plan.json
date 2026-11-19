@@ -15,7 +15,9 @@
     "20261002030004_add_development_kart_classes.sql",
     "202610130001_restore_racing_onboarding.sql",
     "20261013183621_enable_road_racing.sql",
-    "20261015235847_secure_membership_authorization.sql"
+    "20261015235847_secure_membership_authorization.sql",
+    "20261119175239_add_small_oval_setup_classes.sql",
+    "20261119182714_release_micro_sprint_production.sql"
   ],
   "excluded": {
     "202607280005_enable_cmar_test_account_full_access.sql": "Account-specific data grant; requires a named existing Auth user. No schema is defined. Staging starts with empty Auth and grants no real-user access.",
