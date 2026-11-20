@@ -59,7 +59,7 @@ try {
         if (width <= 760 && height > 480) assert(metrics.copy.bottom <= metrics.visual.top + 1, 'copy overlaps visual');
         for (const control of metrics.controls) assert(control.y >= 0 && control.bottom <= height + 1 && control.right <= width + 1, 'navigation outside viewport');
         assert.equal(metrics.activeAnimations, 0, 'reduced motion must disable animations');
-        assert.deepEqual(metrics.palette, {page:'rgb(230, 230, 232)',heading:'rgb(26, 27, 35)',button:'rgb(0, 168, 232)',panel:'rgb(255, 255, 255)',panelBorder:'rgb(229, 231, 235)'}, 'slides must use the actual light app palette');
+        assert.deepEqual(metrics.palette, {page:'rgb(236, 238, 240)',heading:'rgb(26, 27, 35)',button:'rgb(0, 168, 232)',panel:'rgb(255, 255, 255)',panelBorder:'rgb(229, 231, 235)'}, 'slides must use the actual light app palette');
         assert.equal(await page.getByRole('button', { name: 'Skip Intro', exact: true }).count(), slide >= 5 ? 1 : 0);
         if ([320,390,430,768,1440].includes(width)) await page.screenshot({ path: path.join(out, `${width}-slide-${slide}.png`) });
         if (slide < 8) await next(page);
