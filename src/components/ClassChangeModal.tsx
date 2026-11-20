@@ -117,7 +117,11 @@ const ClassChangeModal: React.FC<ClassChangeModalProps> = ({ isOpen, user, curre
           </select>
           <label htmlFor="active-class-select" className="mt-5 block text-sm font-semibold text-[#374151]">Vehicle class</label>
           <div className="mt-2 flex items-center gap-3">
-            <ClassArtwork raceClass={selectedClass} variant="blue" className="class-artwork--choice class-artwork--selected" />
+            <ClassArtwork
+              raceClass={selectedClass}
+              variant="blue"
+              className={`class-artwork--choice rounded-xl [&>img]:rounded-3xl ${discipline === 'pavement_oval' || discipline === 'road_course' ? 'bg-[#DDEFFE]' : 'bg-[#00A8E8]/10'}`}
+            />
             <select id="active-class-select" value={selectedClass} disabled={saving || !checked}
               onChange={event => setSelectedClass(event.target.value)}
               className="min-w-0 flex-1 rounded-xl border border-[#D1D5DB] bg-white px-3 py-3 text-sm text-[#1A1B23] focus:outline-none focus:ring-2 focus:ring-[#00A8E8]">

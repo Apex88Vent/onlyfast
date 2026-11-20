@@ -2957,7 +2957,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   const baseLabelForDiff = previousSessionForDiff ? labelForTab(previousSessionForDiff) : 'previous session';
 
   return (
-    <div className="min-h-screen bg-app-background">
+    <div className="min-h-screen bg-[#F5F5F7]">
       {/* Sub Navigation — stacked: row 1 = views, row 2 = setup type (only on setup view) */}
       <nav className={`bg-white border-b border-[#E5E7EB] sticky top-16 z-40 ${activeView === 'home' ? 'hidden' : ''}`} aria-label="Dashboard navigation">
         <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">

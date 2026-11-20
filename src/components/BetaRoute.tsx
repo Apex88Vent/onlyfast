@@ -16,7 +16,7 @@ const BetaRoute: React.FC<BetaRouteProps> = ({
   const { loading, hasBetaFeature } = useBetaFeatures();
 
   if (loading) {
-    return <div className="min-h-screen bg-app-background" aria-busy="true" />;
+    return <div className="min-h-screen bg-[#F5F5F7]" aria-busy="true" />;
   }
 
   if (!hasBetaFeature(feature)) {

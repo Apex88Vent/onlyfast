@@ -135,7 +135,7 @@ export default function TrackTracePage() {
   function openRecorder(id:string) {const next=new URLSearchParams(params);next.set('view','start');next.set('record',id);setParams(next);}
   function reviewRecording(id:string) {const next=new URLSearchParams(params);next.delete('record');next.delete('setup');next.set('view','review');next.set('session',id);setParams(next);}
   const workspace = (unlinked=false) => <TraceWorkspace key={userId + ':' + permissionKey + ':' + (unlinked ? 'unlinked' : setupId) + ':' + view+':'+params.get('session')} userId={userId!} revision={permissionKey} setupId={unlinked ? null : setupId} canRecord={canRecord} trackId={trackId} unlinked={unlinked} onRecord={openRecorder} initialSessionId={params.get('session')} onSelectTrack={id => {const next=new URLSearchParams(params);if(id)next.set('track',id);else next.delete('track');setParams(next);}} mode={view === 'review' ? 'review' : view === 'start' ? 'start' : 'all'} />;
-  return <main className="min-h-screen bg-app-background px-4 py-6 text-[#1A1B23]">
+  return <main className="min-h-screen bg-[#F5F5F7] px-4 py-6 text-[#1A1B23]">
     <div className="mx-auto max-w-3xl space-y-5">
       <Link to="/app" className="inline-block py-2 text-[#007DAE] underline">Back to OnlyFast</Link>
       <div className="flex flex-wrap items-center gap-2"><h1 className="text-2xl font-bold">{TRACK_TRACE_NAME}</h1><TrackTraceBetaBadge /></div>

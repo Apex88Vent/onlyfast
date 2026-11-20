@@ -48,7 +48,7 @@
 .membership-comparison[open] { padding-bottom: 1rem; }
 .membership-disclosures { max-width: 55rem; margin: 1rem auto 0; color: #4b5563; font-size: .75rem; line-height: 1.5; text-align: center; }
 .membership-disclosures p + p { margin-top: .5rem; }
-.membership-page { background: var(--app-background); padding: max(1.25rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1.5rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left)); }
+.membership-page { background: #f5f5f7; padding: max(1.25rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1.5rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left)); }
 @media (min-width: 1024px) {
   .membership-plans { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.25rem; }
   .membership-card { padding: 1.25rem; }

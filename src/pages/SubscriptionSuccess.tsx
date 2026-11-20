@@ -70,7 +70,7 @@ const SubscriptionSuccess: React.FC = () => {
   }, [navigate]);
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-app-background px-4 text-center">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#F5F5F7] px-4 text-center">
       <img src={LOGO} alt="OnlyFast" className="h-[72px] mb-6" />
 
 
