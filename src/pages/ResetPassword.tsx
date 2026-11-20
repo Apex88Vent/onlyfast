@@ -91,7 +91,7 @@ const ResetPassword: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F5F7] flex items-center justify-center p-4">
+    <div className="min-h-screen bg-app-background flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md border border-[#E5E7EB] overflow-hidden">
         <div className="bg-[#F5F5F7] px-6 py-6 text-center border-b border-[#E5E7EB]">
           <h1 className="text-lg font-bold text-[#1A1B23] mb-1">Reset Your Password</h1>

@@ -39,6 +39,7 @@ import {
   isBlankScheduleFinishingPosition,
 } from '@/lib/scheduleFinishingPosition';
 import HomeLanding, { HomeAction } from './HomeLanding';
+import ClassArtwork from './ClassArtwork';
 import PartsReference from './PartsReference';
 import RaceSchedule from './RaceSchedule';
 
@@ -2957,7 +2958,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   const baseLabelForDiff = previousSessionForDiff ? labelForTab(previousSessionForDiff) : 'previous session';
 
   return (
-    <div className="min-h-screen bg-[#F5F5F7]">
+    <div className="min-h-screen bg-app-background">
       {/* Sub Navigation — stacked: row 1 = views, row 2 = setup type (only on setup view) */}
       <nav className={`bg-white border-b border-[#E5E7EB] sticky top-16 z-40 ${activeView === 'home' ? 'hidden' : ''}`} aria-label="Dashboard navigation">
         <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
@@ -3150,6 +3151,7 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
                     {activeTab === 'main' && 'Final setup for the main event feature'}
                   </p>
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    <ClassArtwork raceClass={currentSetup.raceClass || selectedCar} variant="white" className="class-artwork--current" />
                     <span className="inline-flex items-center bg-[#F5F5F7] text-[#4B5563] px-2.5 py-1 rounded-full text-xs font-semibold border border-[#E5E7EB]">
                       Class: {setupClassLabel(currentSetup.raceClass || selectedCar)}
                     </span>

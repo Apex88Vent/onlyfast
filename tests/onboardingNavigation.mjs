@@ -35,6 +35,7 @@ function compile(file, modules = {}) {
   new Function('require', 'module', 'exports', code)(name => {
     if (name.endsWith('.css')) return {};
     if (name === './OnboardingVisual') return { __esModule: true, default: compile('components/OnboardingVisual.tsx') };
+    if (name === './ClassArtwork') return { __esModule: true, default: compile('components/ClassArtwork.tsx') };
     if (name === './homeActionStyles') return homeActionStyles;
     if (name === '@/lib/analytics') return { trackEvent() {}, trackScreen() {}, enterAnalyticsScreen: () => () => {} };
     if (name === '@/hooks/useAnalyticsVisibility') return { useAnalyticsVisibility: () => () => {} };

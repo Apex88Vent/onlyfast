@@ -69,7 +69,7 @@ const App = () => (
                 path="/onboarding-preview"
                 element={
                   <BetaRoute feature={BETA_FEATURES.onboardingPreviewRoute}>
-                    <Suspense fallback={<div className="min-h-screen bg-[#F5F5F7]" aria-busy="true" />}>
+                    <Suspense fallback={<div className="min-h-screen bg-app-background" aria-busy="true" />}>
                       <OnboardingPreview />
                     </Suspense>
                   </BetaRoute>
@@ -79,7 +79,7 @@ const App = () => (
                 path="/rookie-ad-slot-preview"
                 element={
                   <BetaRoute feature={BETA_FEATURES.rookieAdSlotPreviewRoute}>
-                    <Suspense fallback={<div className="min-h-screen bg-[#F5F5F7]" aria-busy="true" />}>
+                    <Suspense fallback={<div className="min-h-screen bg-app-background" aria-busy="true" />}>
                       <RookieAdSlotPreview />
                     </Suspense>
                   </BetaRoute>

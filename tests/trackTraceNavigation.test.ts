@@ -32,7 +32,7 @@ function entry(allowed:boolean|undefined,enabled=true,readOnly=false) {
 
 test('landing preserves all six original actions and places telemetry last across both columns',()=>{
   const Home=component('components/HomeLanding.tsx',{
-    '@/lib/classIcons':{getClassIcon:()=>null},'@/lib/setupLibrary':{setupClassLabel:(s:string)=>s,EXPANDED_CLASS_CONFIGS:{},SETUP_CATEGORY_LABELS:{}},
+    './ClassArtwork':{__esModule:true,default:()=>null},'@/lib/setupLibrary':{setupClassLabel:(s:string)=>s,EXPANDED_CLASS_CONFIGS:{},SETUP_CATEGORY_LABELS:{}},
   });
   const output=html(Home,{selectedCar:'',onChangeClass(){},onAction(){},actionGridSlot:React.createElement(entry(true),{userId:'owner',variant:'landing'})});
   const labels=['New Setup','Continue Saved Setup','Schedule','To-Do List','Parts Reference','Setup Library','Track Trace Telemetry'];

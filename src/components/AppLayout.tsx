@@ -42,7 +42,7 @@ function DashboardWithHouseAds({ user, children }: { user: User | null; children
   const bannerSpace = banner ? 'calc(3rem + env(safe-area-inset-bottom))' : '0px';
 
   return (
-    <div className="min-h-screen bg-[#F5F5F7] flex flex-col"
+    <div className="min-h-screen bg-app-background flex flex-col"
       style={{ '--house-banner-space': bannerSpace, paddingBottom: bannerSpace } as React.CSSProperties}>
       {children}
       {banner && <HouseBottomBanner />}
@@ -462,13 +462,13 @@ const AppLayout: React.FC = () => {
   }
 
   if (!authChecked || isLoadingSavedCar || classSelectionUserId !== authenticatedUserId) {
-    return <div className="min-h-screen bg-[#F5F5F7]" role="status" aria-label="Loading your racing profile" />;
+    return <div className="min-h-screen bg-app-background" role="status" aria-label="Loading your racing profile" />;
   }
 
   if (!user && guestTutorialFinished) {
     return (
       <AnnouncerProvider>
-        <div className="min-h-screen bg-[#F5F5F7]">
+        <div className="min-h-screen bg-app-background">
           <AuthModal isOpen onClose={returnToGuestTutorial} />
           <CookieConsent />
         </div>
@@ -503,7 +503,7 @@ const AppLayout: React.FC = () => {
     return (
       <AnnouncerProvider>
         <SkipLink />
-        <div className="min-h-screen bg-[#F5F5F7]" />
+        <div className="min-h-screen bg-app-background" />
         <CookieConsent />
       </AnnouncerProvider>
     );

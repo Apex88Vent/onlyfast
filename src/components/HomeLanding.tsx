@@ -1,4 +1,4 @@
-import { getClassIcon } from '@/lib/classIcons';
+import ClassArtwork from './ClassArtwork';
 import { setupClassLabel } from '@/lib/setupLibrary';
 import React from 'react';
 import { homeActionCardClassName, homeActionIconContainerClassName, homeActionIconClassName, homeActionLabelClassName } from './homeActionStyles';
@@ -220,7 +220,6 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
   const displayedWeekendTitle = currentWeekendTitle || 'Current Race Weekend';
   const topInfoCount = (selectedCar ? 1 : 0) + (showNextEvent ? 1 : 0);
   const formattedCarNumber = formatCarNumber(carNumber);
-  const selectedCarIcon = getClassIcon(selectedCar, 'white');
   const actionGridRef = React.useRef<HTMLElement | null>(null);
   React.useEffect(() => {
     if (!actionGridSlot) return;
@@ -263,20 +262,11 @@ const HomeLanding: React.FC<HomeLandingProps> = ({
               <button
                 type="button"
                 onClick={onChangeClass}
-                className="flex items-center justify-center gap-2 sm:gap-3 px-1 sm:px-2 rounded-lg hover:bg-[#F9FAFB] focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
+                className="flex min-w-0 items-center justify-center gap-1.5 sm:gap-3 sm:px-2 rounded-lg hover:bg-[#F9FAFB] focus:outline-none focus:ring-2 focus:ring-[#00A8E8]"
                 aria-label={`Change current class from ${setupClassLabel(selectedCar)}`}
               >
-                {selectedCarIcon && (
-                  <img
-                    src={selectedCarIcon}
-                    alt=""
-                    width={32}
-                    height={32}
-                    className="h-6 w-6 sm:h-8 sm:w-8 object-contain flex-shrink-0"
-                    aria-hidden="true"
-                  />
-                )}
-                <div className="text-left min-w-0">
+                <ClassArtwork raceClass={selectedCar} variant="white" className="class-artwork--current" />
+                <div className="text-left min-w-0 max-[339px]:[overflow-wrap:anywhere] max-[339px]:[&>.truncate]:whitespace-normal">
                   <div className="text-[#00A8E8] text-[12px] sm:text-sm font-semibold tracking-[0.08em] uppercase leading-tight">Current Car</div>
                   <div className="text-[#1A1B23] text-sm sm:text-lg font-medium truncate">{setupClassLabel(selectedCar)}</div>
                   <div className="text-[#6B7280] text-xs truncate">{SETUP_CATEGORY_LABELS[(EXPANDED_CLASS_CONFIGS[selectedCar]?.category || 'dirt_oval') as SetupCategory]}</div>

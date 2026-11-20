@@ -118,7 +118,7 @@ const DeleteAccount: React.FC = () => {
   };
 
   return (
-    <main className="min-h-screen bg-[#F5F5F7] px-4 py-8 sm:py-12">
+    <main className="min-h-screen bg-app-background px-4 py-8 sm:py-12">
       <section className="mx-auto max-w-3xl rounded-2xl border border-[#E5E7EB] bg-white p-6 shadow-sm sm:p-8">
         <header className="mb-6 border-b border-[#E5E7EB] pb-5">
           <Link to="/" className="inline-flex items-center">

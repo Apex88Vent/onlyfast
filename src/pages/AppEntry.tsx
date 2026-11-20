@@ -12,7 +12,7 @@ function BrowserEntry() {
   const navigate = useNavigate();
   if (checking)
     return (
-      <div className="min-h-screen bg-[#f5f5f7] flex items-center justify-center" role="status">
+      <div className="min-h-screen bg-app-background flex items-center justify-center" role="status">
         <span className="text-sm text-slate-600">Loading OnlyFast…</span>
       </div>
     );
@@ -39,7 +39,7 @@ function BrowserEntry() {
   }
   if (location.pathname === '/') return <PublicHome />;
   return (
-    <div className="min-h-screen bg-[#f5f5f7] flex flex-col items-center justify-center p-6">
+    <div className="min-h-screen bg-app-background flex flex-col items-center justify-center p-6">
       <Link to="/" aria-label="OnlyFast homepage">
         <img src="/onlyfast-logo.png" alt="OnlyFast" className="w-52 mb-6" />
       </Link>

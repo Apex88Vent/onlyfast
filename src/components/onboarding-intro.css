@@ -4,7 +4,6 @@
   --of-blue: #00A8E8;
   --of-blue-hover: #0090C7;
   --of-blue-ink: #007DAE;
-  --of-page: #F5F5F7;
   --of-surface: #FFFFFF;
   --of-field: #F9FAFB;
   --of-panel-blue: #DDEFFE;
@@ -16,7 +15,7 @@
   --of-bottom: max(20px, env(safe-area-inset-bottom, 0px));
   box-sizing: border-box; height: calc(100vh - var(--of-offset-top, 0px)); height: calc(100dvh - var(--of-offset-top, 0px)); min-height: 420px;
   padding: var(--of-top) max(24px, env(safe-area-inset-right, 0px)) var(--of-bottom) max(24px, env(safe-area-inset-left, 0px));
-  color: var(--of-ink); background: var(--of-page); font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  color: var(--of-ink); background: var(--app-background); font-family: Inter, ui-sans-serif, system-ui, sans-serif;
   isolation: isolate; position: relative;
 }
 .of-intro::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: linear-gradient(120deg, var(--of-surface), transparent 65%), linear-gradient(120deg, transparent 66%, rgb(0 168 232 / .05) 66.1%, transparent 85%); }

@@ -5,6 +5,7 @@ import type { MembershipTier } from '@/lib/membership';
 import { getDisciplineSetupClasses } from '@/lib/setupLibraryAccess';
 import { EXPANDED_CLASS_CONFIGS, SETUP_CATEGORY_LABELS, type SetupCategory } from '@/lib/setupLibrary';
 import { changeActiveClass, formatEligibleDate, getActiveClassState, sameClass } from '@/lib/activeClass';
+import ClassArtwork from './ClassArtwork';
 
 type Step = 'loading' | 'warning' | 'selector' | 'cooldown';
 interface ClassChangeModalProps {
@@ -115,12 +116,15 @@ const ClassChangeModal: React.FC<ClassChangeModalProps> = ({ isOpen, user, curre
             {Object.entries(SETUP_CATEGORY_LABELS).map(([key, name]) => <option key={key} value={key} disabled={!disciplineEnabled(key)}>{key === 'rc' ? 'RC Racing' : key === 'motorcycle' ? 'Motorcycle Racing' : name}{!disciplineEnabled(key) ? ' — COMING SOON' : key === 'road_course' || key === 'pavement_oval' ? ' — BETA' : ''}</option>)}
           </select>
           <label htmlFor="active-class-select" className="mt-5 block text-sm font-semibold text-[#374151]">Vehicle class</label>
-          <select id="active-class-select" value={selectedClass} disabled={saving || !checked}
-            onChange={event => setSelectedClass(event.target.value)}
-            className="mt-2 w-full rounded-xl border border-[#D1D5DB] bg-white px-3 py-3 text-sm text-[#1A1B23] focus:outline-none focus:ring-2 focus:ring-[#00A8E8]">
-            <option value="" disabled>Select a vehicle class</option>
-            {availableClasses.map(car => <option key={car} value={car}>{EXPANDED_CLASS_CONFIGS[car]?.name || car}{sameClass(car, currentClass) ? ' (Current)' : ''}</option>)}
-          </select>
+          <div className="mt-2 flex items-center gap-3">
+            <ClassArtwork raceClass={selectedClass} variant="blue" className="class-artwork--choice class-artwork--selected" />
+            <select id="active-class-select" value={selectedClass} disabled={saving || !checked}
+              onChange={event => setSelectedClass(event.target.value)}
+              className="min-w-0 flex-1 rounded-xl border border-[#D1D5DB] bg-white px-3 py-3 text-sm text-[#1A1B23] focus:outline-none focus:ring-2 focus:ring-[#00A8E8]">
+              <option value="" disabled>Select a vehicle class</option>
+              {availableClasses.map(car => <option key={car} value={car}>{EXPANDED_CLASS_CONFIGS[car]?.name || car}{sameClass(car, currentClass) ? ' (Current)' : ''}</option>)}
+            </select>
+          </div>
           {!unlimited && nextEligibleAt && <p className="mt-3 text-xs text-[#6B7280]">Next available change date: {formatEligibleDate(nextEligibleAt)}</p>}
         </>}
         {step === 'warning' && <div className="mt-3 space-y-3 text-sm leading-6 text-[#6B7280]">

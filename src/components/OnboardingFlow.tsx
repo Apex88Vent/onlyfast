@@ -1,5 +1,5 @@
 import { trackEvent, trackScreen } from '@/lib/analytics';
-import { getClassIcon } from '@/lib/classIcons';
+import ClassArtwork from './ClassArtwork';
 import { CUSTOM_CAR, CUSTOM_CAR_DISCIPLINES } from '@/lib/customCar';
 import React, { useState, useRef, useEffect } from 'react';
 import { CLASS_CONFIGS } from '@/lib/classConfigs';
@@ -111,6 +111,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error, user
   const [step, setStep] = useState<2 | 3 | 4>(unavailableSelection || !validDiscipline ? 2 : initialStep === 'plan' && validClass ? 4 : initialStep === 'vehicle' || initialStep === 'plan' ? 3 : 2);
   const [selectedDiscipline, setSelectedDiscipline] = useState(unavailableSelection ? '' : savedDiscipline?.name || initialDiscipline || '');
   const [selectedClass, setSelectedClass] = useState(unavailableSelection ? '' : savedClass);
+  const [highlightedClass, setHighlightedClass] = useState({ discipline: savedDiscipline?.name, car: savedClass });
   const [saving, setSaving] = useState(false);
   const [progressError, setProgressError] = useState('');
   const pending = useRef(false);
@@ -160,6 +161,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error, user
       }
       setSelectedDiscipline(discipline);
       setSelectedClass(next === 4 ? car : '');
+      if (next === 4) setHighlightedClass({ discipline, car });
       setStep(next);
     } catch { setProgressError('Your selection could not be saved. Please try again.'); }
     finally { pending.current = false; setSaving(false); }
@@ -167,7 +169,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error, user
 
 
   return (
-    <div className={`min-h-screen flex items-center justify-center ${step === 4 ? 'membership-page bg-[#F5F5F7]' : 'bg-[#F5F5F7] px-4 py-8 sm:py-12'}`} role="main">
+    <div className={`min-h-screen bg-app-background flex items-center justify-center ${step === 4 ? 'membership-page' : 'px-4 py-8 sm:py-12'}`} role="main">
       <div className={`w-full ${step === 4 ? 'relative max-w-6xl' : 'max-w-4xl'}`} id="main-content">
         {/* Keep the existing brand header compact on the plan selection step. */}
         <div className={step === 4 ? 'membership-brand' : 'text-center mb-7 sm:mb-9'}>
@@ -305,7 +307,6 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error, user
               {getDisciplineSetupClasses((disciplines.find(d => d.name === selectedDiscipline)?.key || 'dirt_oval') as SetupCategory, betaAccess).map((className) => {
                 const config = EXPANDED_CLASS_CONFIGS[className] || CLASS_CONFIGS[className];
                 const discipline = disciplines.find(d => d.name === selectedDiscipline);
-                const hasBakedBlueTile = discipline?.key === 'pavement_oval' || discipline?.key === 'road_course';
                 const isEnabled = className === CUSTOM_CAR
                   ? CUSTOM_CAR_DISCIPLINES[discipline?.key || ''] === true
                   : Boolean(config);
@@ -316,19 +317,11 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error, user
                       key={className}
                       onClick={() => advance(4, selectedDiscipline, className)}
                       disabled={saving}
-                      className="bg-white rounded-2xl border-2 border-[#E5E7EB] hover:border-[#00A8E8] p-6 transition-all group shadow-sm hover:shadow-lg hover:shadow-[#00A8E8]/10 text-left focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
+                      className="class-choice rounded-2xl border-2 border-[#E5E7EB] hover:border-[#00A8E8] p-6 transition-all group shadow-sm hover:shadow-lg hover:shadow-[#00A8E8]/10 text-left focus:outline-none focus:ring-2 focus:ring-[#00A8E8] focus:ring-offset-2"
                       aria-label={`${config?.name || className} - ${config?.description || ''}`}
+                      aria-current={highlightedClass.discipline === selectedDiscipline && highlightedClass.car === className ? true : undefined}
                     >
-                      {/* Match the baked-in blue at rest; only the surround darkens on highlight. */}
-                      <div className={`w-16 h-16 ${hasBakedBlueTile ? 'bg-[#DDEFFE]' : 'bg-[#00A8E8]/10'} rounded-xl overflow-hidden flex items-center justify-center mb-4 group-hover:bg-[#00A8E8]/20 transition-colors`} aria-hidden="true">
-                        <img
-                          src={getClassIcon(className, 'blue') || getClassIcon('Dwarf Cars', 'blue')}
-                          alt=""
-                          width={40}
-                          height={40}
-                          className="h-10 w-10 rounded-xl object-contain"
-                        />
-                      </div>
+                      <ClassArtwork raceClass={className} variant="blue" className="class-artwork--choice mb-4" fallbackClass="Dwarf Cars" />
                       <h3 className="text-lg font-bold text-[#1A1B23] group-hover:text-[#00A8E8] transition-colors">
                         {config?.name || className}
                       </h3>
@@ -356,15 +349,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, error, user
                         Coming Soon
                       </div>
                     </div>
-                    <div className="w-16 h-16 bg-gray-200 rounded-xl flex items-center justify-center mb-4 text-gray-400" aria-hidden="true">
-                      <img
-                        src={getClassIcon(className, 'white') || getClassIcon('Dwarf Cars', 'white')}
-                        alt=""
-                        width={40}
-                        height={40}
-                        className="h-10 w-10 object-contain"
-                      />
-                    </div>
+                    <ClassArtwork raceClass={className} variant="white" className="class-artwork--choice class-artwork--disabled mb-4" fallbackClass="Dwarf Cars" />
                     <h3 className="text-lg font-bold text-gray-400">
                       {className}
                     </h3>

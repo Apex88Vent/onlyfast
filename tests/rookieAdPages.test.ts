@@ -45,7 +45,7 @@ function renderPage(file: string, states: Record<string, unknown> = {}, props = 
     react: fakeReact, '@/lib/supabase': { supabase: {} }, '@/lib/setupLibrary': library,
     '@/lib/setupLibraryStorage': storage, '@/lib/customCar': custom,
     '@/lib/raceWeekendSessions': sessions, '@/lib/scheduleSelection': schedule,
-    '@/lib/classIcons': { getClassIcon: () => null },
+    './ClassArtwork': component(() => null),
     '@/lib/setupLibraryAccess': { canAccessSetupClass: () => true },
     '@/lib/paymentVisibility': { isMedianIOSApp: false },
     '@/components/ui/alert-dialog': {
