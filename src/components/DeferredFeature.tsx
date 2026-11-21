@@ -1,4 +1,30 @@
 import React, { Component, lazy, Suspense, type ComponentType } from 'react';
+import { logStartupFailure } from '@/lib/startupRecovery';
+
+const exportId = 'onlyfastDeferredFeature';
+
+// Rollup can group dynamic entries and export their module namespaces as
+// named bindings. A retry can then identify its own component without
+// depending on generated export names or picking a neighboring component.
+export function deferredFeatureExport<Props extends object>(component: ComponentType<Props>, label: string) {
+  return Object.assign(component, { [exportId]: label });
+}
+
+function isComponent(value: unknown): value is ComponentType<object> {
+  if (typeof value === 'function') return true;
+  const kind = (value as { $$typeof?: symbol } | null)?.$$typeof;
+  return kind === Symbol.for('react.memo') || kind === Symbol.for('react.forward_ref');
+}
+
+export function resolveRetriedFeature(module: Record<string, unknown>, label: string) {
+  for (const value of [module.default, ...Object.values(module).map(value =>
+    value && typeof value === 'object' && (value as Record<symbol, unknown>)[Symbol.toStringTag] === 'Module'
+      ? (value as { default?: unknown }).default
+      : undefined)]) {
+    if (isComponent(value) && (value as unknown as Record<string, unknown>)[exportId] === label) return value;
+  }
+  throw new Error('Unexpected deferred feature export');
+}
 
 /** Declare at module scope. Only code is shared; account data stays in its existing owner. */
 export function deferredFeature<Props extends object>(
@@ -16,8 +42,10 @@ export function deferredFeature<Props extends object>(
       // import an arbitrary URL from an error or retry a module evaluation error.
       const request = failedUrl
         ? import(/* @vite-ignore */ `${failedUrl.href}?onlyfast_retry=${++retry}`)
+            .then(module => ({ default: resolveRetriedFeature(module, label) as ComponentType<Props> }))
         : loader();
       pending = request.then(module => {
+        if (!isComponent(module.default)) throw new Error('Missing deferred feature export');
         ready = module.default;
         return module;
       }).catch(error => {
@@ -31,6 +59,7 @@ export function deferredFeature<Props extends object>(
           } catch { /* Other engines may omit the failed URL; retain the normal loader. */ }
         }
         pending = undefined;
+        logStartupFailure('feature-module', error);
         // A later visit must not reuse the rejected lazy identity from this visit.
         InitialFeature = lazy(load);
         throw error;
@@ -45,8 +74,12 @@ export function deferredFeature<Props extends object>(
     // Suspense round trip. Keep this identity for the lifetime of the instance.
     state = { failed: false, Feature: ready || InitialFeature };
 
-    componentDidCatch() {
-      this.setState({ failed: true });
+    static getDerivedStateFromError() {
+      return { failed: true };
+    }
+
+    componentDidCatch(error: unknown) {
+      if (ready) logStartupFailure('feature-render', error);
     }
 
     retry = () => {

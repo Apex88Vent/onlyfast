@@ -7,7 +7,7 @@ import Index from './Index';
 import PublicHome from './PublicHome';
 
 function BrowserEntry() {
-  const { session, checking, error, recovery } = useEntrySession();
+  const { session, checking, error, recovery, retry } = useEntrySession();
   const location = useLocation();
   const navigate = useNavigate();
   if (checking)
@@ -26,7 +26,7 @@ function BrowserEntry() {
         <p>Please check your connection and try again.</p>
         <button
           className="rounded-lg bg-sky-700 px-5 py-3 text-white"
-          onClick={() => window.location.reload()}
+          onClick={retry}
         >
           Try again
         </button>

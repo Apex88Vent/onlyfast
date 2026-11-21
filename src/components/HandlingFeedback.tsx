@@ -1,4 +1,5 @@
 import { useAnalyticsVisibility } from '@/hooks/useAnalyticsVisibility';
+import { deferredFeatureExport } from './DeferredFeature';
 import { trackEvent } from '@/lib/analytics';
 import { useMembershipRevision } from '@/hooks/useMembershipRevision';
 import LockedFeatureNotice from './LockedFeatureNotice';
@@ -797,4 +798,4 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
   );
 };
 
-export default HandlingFeedback;
+export default deferredFeatureExport(HandlingFeedback, 'Setup Assist');

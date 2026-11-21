@@ -33,13 +33,13 @@ export function validateTestingConnection(input: {
   return { url: expected, publishableKey: input.publishableKey, storageKey: 'onlyfast-2027-' + ONLYFAST_TEST_PROJECT + '-auth' };
 }
 
-export async function verifyTestingConnection(input: Parameters<typeof validateTestingConnection>[0], fetcher: typeof fetch = fetch) {
+export async function verifyTestingConnection(input: Parameters<typeof validateTestingConnection>[0], fetcher: typeof fetch = fetch, signal?: AbortSignal) {
   const config = validateTestingConnection(input);
   const response = await fetcher(config.url + '/rest/v1/rpc/get_onlyfast_2027_environment', {
     method: 'POST', headers: { apikey: config.publishableKey, 'Content-Type': 'application/json' }, body: '{}',
-    signal: AbortSignal.timeout(10000),
+    signal: signal ?? AbortSignal.timeout(10000),
   });
-  if (!response.ok) throw new Error('2027_TEST_BACKEND_VERIFICATION_FAILED');
+  if (!response.ok) throw Object.assign(new Error('2027_TEST_BACKEND_VERIFICATION_FAILED'), { status: response.status });
   const evidence = await response.json();
   if (evidence?.project_ref !== ONLYFAST_TEST_PROJECT || evidence?.schema_version !== ONLYFAST_TEST_SCHEMA) {
     throw new Error('2027_TEST_BACKEND_IDENTITY_OR_SCHEMA_MISMATCH');

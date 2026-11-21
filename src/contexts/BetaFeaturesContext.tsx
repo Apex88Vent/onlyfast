@@ -6,6 +6,7 @@ import React, {
   useState,
 } from 'react';
 import { supabase } from '@/lib/supabase';
+import { failedRead, restoreStartupSession, startupRead } from '@/lib/startupRecovery';
 import {
   buildBetaAccessSnapshot,
   clearCachedBetaAccess,
@@ -27,6 +28,7 @@ export const BetaFeaturesProvider: React.FC<{ children: React.ReactNode }> = ({
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const requestNumber = useRef(0);
+  const loadingFlags = useRef<{ userId: string; controller: AbortController }>();
 
   const closeBetaAccess = useCallback((nextLoading = false) => {
     clearCachedBetaAccess();
@@ -35,6 +37,9 @@ export const BetaFeaturesProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const loadForUser = useCallback(async (userId: string | null) => {
+    if (loadingFlags.current?.userId === userId) return;
+    loadingFlags.current?.controller.abort();
+    loadingFlags.current = undefined;
     const requestId = ++requestNumber.current;
 
     if (!userId) {
@@ -45,39 +50,47 @@ export const BetaFeaturesProvider: React.FC<{ children: React.ReactNode }> = ({
     // Revalidation also fails closed: stale beta permission is never retained
     // while a fresh authorization lookup is in flight.
     closeBetaAccess(true);
+    const controller = new AbortController();
+    loadingFlags.current = { userId, controller };
 
     try {
-      const [accountResult, flagsResult] = await Promise.all([
-        supabase
-          .from('beta_tester_accounts')
-          .select('user_id, is_test_account, beta_features_enabled, tester_kind')
-          .eq('user_id', userId)
-          .maybeSingle(),
-        supabase
-          .from('user_feature_flags')
-          .select('feature_key, enabled')
-          .eq('user_id', userId)
-          .eq('enabled', true),
-      ]);
+      const [accountResult, flagsResult] = await startupRead('feature-flags', async signal => {
+        const [account, flags] = await Promise.all([
+          supabase
+            .from('beta_tester_accounts')
+            .select('user_id, is_test_account, beta_features_enabled, tester_kind')
+            .eq('user_id', userId)
+            .retry(false)
+            .abortSignal(signal)
+            .maybeSingle(),
+          supabase
+            .from('user_feature_flags')
+            .select('feature_key, enabled')
+            .eq('user_id', userId)
+            .eq('enabled', true)
+            .retry(false)
+            .abortSignal(signal),
+        ]);
+        if (account.error) throw failedRead(account.error, account.status);
+        if (flags.error) throw failedRead(flags.error, flags.status);
+        return [account, flags] as const;
+      }, controller.signal);
 
       if (requestId !== requestNumber.current) return;
-      if (accountResult.error) throw accountResult.error;
-      if (flagsResult.error) throw flagsResult.error;
-
       const nextSnapshot = buildBetaAccessSnapshot(
         accountResult.data as BetaTesterAccountRow | null,
         (flagsResult.data || []) as UserFeatureFlagRow[],
       );
       setCachedBetaAccess(nextSnapshot);
       setSnapshot(nextSnapshot);
-    } catch (error) {
-      if (requestId !== requestNumber.current) return;
+    } catch {
+      if (controller.signal.aborted || requestId !== requestNumber.current) return;
       closeBetaAccess(false);
-      // Useful in development, while the normal production experience remains
-      // fully usable if the migration/network is unavailable.
-      console.error('[beta-features] Failed to load account feature flags; using production defaults.', error);
     } finally {
-      if (requestId === requestNumber.current) setLoading(false);
+      if (requestId === requestNumber.current) {
+        loadingFlags.current = undefined;
+        setLoading(false);
+      }
     }
   }, [closeBetaAccess]);
 
@@ -87,26 +100,28 @@ export const BetaFeaturesProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     let active = true;
+    let revision = 0;
+    const controller = new AbortController();
 
-    supabase.auth
-      .getSession()
-      .then(({ data }) => {
-        if (!active) return;
-        const userId = data.session?.user?.id ?? null;
+    const initial = revision;
+    void restoreStartupSession(supabase.auth, controller.signal)
+      .then(session => {
+        if (!active || initial !== revision) return;
+        const userId = session?.user?.id ?? null;
         setCurrentUserId(userId);
         void loadForUser(userId);
       })
-      .catch((error) => {
-        if (!active) return;
+      .catch(() => {
+        if (!active || initial !== revision) return;
         setCurrentUserId(null);
         closeBetaAccess(false);
-        console.error('[beta-features] Failed to read the authenticated session; using production defaults.', error);
       });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!active) return;
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!active || (event === 'INITIAL_SESSION' && !session)) return;
+      revision++;
       const userId = session?.user?.id ?? null;
       setCurrentUserId(userId);
       void loadForUser(userId);
@@ -114,7 +129,10 @@ export const BetaFeaturesProvider: React.FC<{ children: React.ReactNode }> = ({
 
     return () => {
       active = false;
+      controller.abort();
       requestNumber.current += 1;
+      loadingFlags.current?.controller.abort();
+      loadingFlags.current = undefined;
       subscription.unsubscribe();
       clearCachedBetaAccess();
     };

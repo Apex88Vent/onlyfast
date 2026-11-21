@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { withSessionFetchDeadline } from './startupRecovery';
 import { assertLocalSandboxConfiguration } from './nativeSandboxPolicy';
 import { testingConnectionInput, testingFetch, validateTestingConnection } from './testingEnvironment';
 
@@ -117,11 +118,12 @@ if (typeof window !== 'undefined' && !phase2027) {
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey, testing
-  ? { auth: { storageKey: testing.storageKey }, global: { fetch: testingFetch(testing.url) } }
+  ? { auth: { storageKey: testing.storageKey }, global: { fetch: testingFetch(testing.url, withSessionFetchDeadline(fetch)) } }
   : phase2027
   ? { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'onlyfast-2027-disabled' },
       global: { fetch: async () => { throw new Error('Isolated 2027 backend is not configured. No request was sent.'); } } }
   : import.meta.env.MODE === 'native-sandbox'
-  ? { auth: { storageKey: 'onlyfast-native-sandbox-auth' } } : undefined);
+  ? { auth: { storageKey: 'onlyfast-native-sandbox-auth' }, global: { fetch: withSessionFetchDeadline(fetch) } }
+  : { global: { fetch: withSessionFetchDeadline(fetch) } });
 
 export { supabase, supabaseUrl, supabaseKey };

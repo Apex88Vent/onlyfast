@@ -56,6 +56,7 @@ function linkHarness(tier='pro') {
   const Dialog=({open,children}:any)=>open?React.createElement('div',{role:'dialog'},children):null;
   const pass=({children}:any)=>React.createElement('div',{},children);
   const link=module('features/track-trace/TrackTraceSessionLink.tsx',{
+    '@/components/DeferredFeature':{deferredFeatureExport:(component:React.ComponentType)=>component},
     'react-router-dom':{Link:({to,children,...props}:any)=>React.createElement('a',{href:to,...props},children)},
     '@/components/ui/dialog':{Dialog,DialogContent:pass,DialogHeader:pass,DialogTitle:pass,DialogDescription:pass},
     '@/lib/onlylapsSessionScope':{notifyOnlyLapsSessionLinkChanged:(id:string)=>calls.push({event:id})},

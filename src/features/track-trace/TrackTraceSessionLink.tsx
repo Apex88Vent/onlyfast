@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { deferredFeatureExport } from '@/components/DeferredFeature';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -17,7 +18,7 @@ function Summary({ session }: { session: TraceLinkCandidate }) {
   </div>;
 }
 
-export default function TrackTraceSessionLink({ userId, setupId }: { userId: string | null; setupId: string | null }) {
+function TrackTraceSessionLink({ userId, setupId }: { userId: string | null; setupId: string | null }) {
   const access = useTrackTracePermission(userId);
   const queryClient = useQueryClient();
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -84,3 +85,5 @@ export default function TrackTraceSessionLink({ userId, setupId }: { userId: str
     </DialogContent></Dialog>
   </section>;
 }
+
+export default deferredFeatureExport(TrackTraceSessionLink, 'OnlyFast Track Trace telemetry linking');
