@@ -153,6 +153,7 @@ function evaluate<T = Record<string, unknown>>(file: string, env: Record<string,
   const { outputText } = ts.transpileModule(input, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } });
   const module = { exports: {} as T };
   new Function('require', 'module', 'exports', '__env', outputText)((id: string) => {
+    if (id === './startupRecovery') return evaluate('startupRecovery.ts', env, {});
     assert.ok(id in modules, 'Unexpected dependency: ' + id);
     return modules[id];
   }, module, module.exports, env);
@@ -169,7 +170,10 @@ test('real Supabase client fails before fallback creation and isolates local Aut
   }
   assert.equal(calls.length, 0);
   evaluate('supabase.ts', { MODE: 'native-sandbox', VITE_SUPABASE_URL: 'http://127.0.0.1:54321', VITE_SUPABASE_ANON_KEY: anon }, modules);
-  assert.deepEqual(calls[0], ['http://127.0.0.1:54321', anon, { auth: { storageKey: 'onlyfast-native-sandbox-auth' } }]);
+  assert.deepEqual(calls[0].slice(0, 2), ['http://127.0.0.1:54321', anon]);
+  const options = calls[0][2] as { auth: { storageKey: string }; global: { fetch: typeof fetch } };
+  assert.equal(options.auth.storageKey, 'onlyfast-native-sandbox-auth');
+  assert.equal(typeof options.global.fetch, 'function');
   evaluate('supabase.ts', { MODE: 'production' }, modules);
   assert.equal(calls[1][0], production); // Existing web configuration is preserved.
 });

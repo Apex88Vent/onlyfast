@@ -1,0 +1,46 @@
+{
+  "deployments": [
+    {
+      "deployment": "dpl_GvK8WnMhHVNtwpzT9z9PjbotvBAD",
+      "commit": "0568dadbe8c30457058eb7c7ef1984e2a08a9abe",
+      "assets": [
+        "HandlingFeedback-DrWwqjS-.js",
+        "RookieHouseAdContent-BdUnNv4c.js",
+        "ScanTimingScreen-CuP054yY.js",
+        "SetupDashboard-BcH-Rr2W.js",
+        "circle-check-Dj1pt4Jp.js",
+        "main-C-h0AwlO.js",
+        "main-CJ_3VrK6.css"
+      ]
+    },
+    {
+      "deployment": "dpl_8NFvGedoKHaMQXRpbqmqgAy11yte",
+      "commit": "46f7552adb51dae89bd9d9616be646e39f232c44",
+      "assets": [
+        "HandlingFeedback-DsfOarHV.js",
+        "RookieHouseAdContent-Bem5wu_F.js",
+        "ScanTimingScreen-DCHPsV5h.js",
+        "SetupDashboard-8rxrSZ1w.js",
+        "circle-check-C7nhXXVw.js",
+        "main-CF9ttvAY.js",
+        "main-Cf1is65x.css"
+      ]
+    }
+  ],
+  "files": {
+    "HandlingFeedback-DrWwqjS-.js": "50b1d72b802371e14921589f4746ebb81e1bb4f2f9a0423ce432bc7d9b8580fa",
+    "RookieHouseAdContent-BdUnNv4c.js": "e49fee115ddf32eaf005bad8bbb624c942031fdcfccf0030d74b6323d13db777",
+    "ScanTimingScreen-CuP054yY.js": "ff4509a9de05699dd56eb790af1ed3fb5bd6e28a70da3ccf6864f08ed8168381",
+    "SetupDashboard-BcH-Rr2W.js": "ae89ba4ba301f597e337caf308c3ec5f4b0f402df54d365f783a7c20d3638e94",
+    "circle-check-Dj1pt4Jp.js": "de3837d145379196f920b1fa389b603b2b1f93ea5e9381e7f0ee884e5e353e07",
+    "main-C-h0AwlO.js": "959403ec7c1682fdfd03c5ea7608672fff88bfe7c072a4a6869251d154ae7481",
+    "main-CJ_3VrK6.css": "e3caa3dae1781185def729efe57ddd256b04b8aa2ebf845056a3b10d9f9466a6",
+    "HandlingFeedback-DsfOarHV.js": "75168e88d40265762654293ed91a81de9b5ccdbb4c1ae71a7da5a0b665c248f2",
+    "RookieHouseAdContent-Bem5wu_F.js": "b62e16845f631212cd0a02d7d6ff77e489e556b06a82ce2f52ac3abf971b1665",
+    "ScanTimingScreen-DCHPsV5h.js": "588131de27efb4e7fb00c756a34b4e97de5ef971465b2190cbb002f7c6abc7b0",
+    "SetupDashboard-8rxrSZ1w.js": "ca4f4b54a17c13e883f94df9f99a6a1e73aa934611f3135209a28452fd82ac15",
+    "circle-check-C7nhXXVw.js": "725e3956a2bb67f8a3d9d16ca299aa98f2f3083d553824aaf564cf486ca279b7",
+    "main-CF9ttvAY.js": "d9e7b7495ce44b83bd26201c75291e7149988523ecc9b0ce052429d98d92ec55",
+    "main-Cf1is65x.css": "aa0dee90492b2e4306b26196be0f51b06de69bea0ba502409c505c4bbe4641b7"
+  }
+}

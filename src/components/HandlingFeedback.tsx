@@ -1,3 +1,4 @@
+import { deferredFeatureExport } from './DeferredFeature';
 import { useMembershipRevision } from '@/hooks/useMembershipRevision';
 import LockedFeatureNotice from './LockedFeatureNotice';
 import React, { useEffect, useLayoutEffect, useId, useRef, useState } from 'react';
@@ -774,4 +775,4 @@ const HandlingFeedback: React.FC<HandlingFeedbackProps> = ({
   );
 };
 
-export default HandlingFeedback;
+export default deferredFeatureExport(HandlingFeedback, 'Setup Assist');

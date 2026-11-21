@@ -1,4 +1,5 @@
 import { supabase, supabaseUrl, supabaseKey } from '@/lib/supabase';
+import { failedRead } from './startupRecovery';
 
 export interface ActiveClassState {
   active_class: string | null;
@@ -62,11 +63,12 @@ export async function completeRacingOnboarding(expectedUserId?: string): Promise
 export const sameClass = (a?: string | null, b?: string | null) =>
   (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase();
 
-export async function getActiveClassState(): Promise<ActiveClassState> {
-  const { data, error } = await supabase.rpc('get_active_race_class_state');
+export async function getActiveClassState(signal?: AbortSignal): Promise<ActiveClassState> {
+  const query = supabase.rpc('get_active_race_class_state');
+  const { data, error, status } = await (signal ? query.retry(false).abortSignal(signal) : query);
   if (error) {
     if (import.meta.env.DEV) console.error('[class-change] get state failed', { code: error.code, message: error.message });
-    throw error;
+    throw signal ? failedRead(error, status) : error;
   }
   return asState(data);
 }

@@ -54,6 +54,7 @@ import { SAFE_BACK_DASHBOARD_EVENT, consumePendingSafeBackDashboardView } from '
 import { isOnlyFastFilePickerOpen } from '@/lib/filePickerState';
 import { useBetaFeatures } from '@/hooks/useBetaFeatures';
 import { BETA_FEATURES } from '@/lib/betaFeatures';
+import { failedRead, startupRead, watchStartupResume } from '@/lib/startupRecovery';
 
 import {
   enqueue as enqueuePending,
@@ -623,9 +624,50 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
   }, [selectedCar, stateLoaded, classLocksEnabled]);
 
 
+  const dashboardOwner = user?.id;
+  const [setupsUnavailable, setSetupsUnavailable] = useState(false);
+  const [scheduleUnavailable, setScheduleUnavailable] = useState(false);
+  const retrySetupRead = useRef(() => {});
+  const scheduleRead = useRef<(afterMutation?: boolean) => Promise<void>>(async () => {});
   useEffect(() => {
-    if (user) fetchSavedForCopy();
-  }, [user, refreshTrigger, selectedCar]);
+    if (!dashboardOwner) return;
+    const controller = new AbortController();
+    let pending = false;
+    let failed = false;
+    const load = () => {
+      if (pending) return;
+      pending = true;
+      setSetupsUnavailable(false);
+      void startupRead('dashboard-setups', async signal => {
+        const { data, error, status } = await supabase
+          .from('race_setups')
+          .select('*')
+          .eq('user_id', dashboardOwner)
+          .order('created_at', { ascending: false })
+          .limit(30)
+          .retry(false)
+          .abortSignal(signal);
+        if (error) throw failedRead(error, status);
+        return data;
+      }, controller.signal).then(data => {
+        failed = false;
+        if (!controller.signal.aborted && data) setSavedSetupsList(data);
+      }).catch(() => {
+        if (!controller.signal.aborted) {
+          failed = true;
+          setSetupsUnavailable(true);
+        }
+      }).finally(() => { pending = false; });
+    };
+    load();
+    retrySetupRead.current = load;
+    const stopResume = watchStartupResume(() => { if (failed) load(); });
+    return () => {
+      controller.abort();
+      stopResume();
+      retrySetupRead.current = () => {};
+    };
+  }, [dashboardOwner, refreshTrigger, selectedCar]);
 
   useEffect(() => {
     setCarNumberOverride(readCarNumber(user));
@@ -642,44 +684,74 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
     return () => window.removeEventListener('car-number-updated', handler);
   }, [user]);
 
-  const loadScheduleRows = useCallback(async () => {
-    if (!user) {
+  const loadScheduleRows = useCallback(() => scheduleRead.current(true), []);
+  useEffect(() => {
+    if (!dashboardOwner) {
       setScheduleRows([]);
       return;
     }
 
-    try {
+    const controller = new AbortController();
+    let pending: Promise<void> | undefined;
+    let refreshQueued = false;
+    let failed = false;
+    const read = async (signal: AbortSignal) => {
       const currentSchema = await supabase
         .from('race_schedule')
         .select('id,race_date,race_end_date,track,organization,finishing_position')
-        .eq('user_id', user.id)
-        .order('race_date', { ascending: true });
+        .eq('user_id', dashboardOwner)
+        .order('race_date', { ascending: true })
+        .retry(false)
+        .abortSignal(signal);
 
-      if (!currentSchema.error) {
-        setScheduleRows(currentSchema.data || []);
-        return;
-      }
+      if (!currentSchema.error) return currentSchema.data || [];
 
       // Keep existing accounts usable while the optional multi-day column is
       // rolling out. PostgREST returns schema errors instead of throwing them.
       const errorText = `${currentSchema.error.code || ''} ${currentSchema.error.message || ''}`;
-      if (!/race_end_date|42703|pgrst204/i.test(errorText)) throw currentSchema.error;
+      if (!/race_end_date|42703|pgrst204/i.test(errorText)) throw failedRead(currentSchema.error, currentSchema.status);
 
       const legacySchema = await supabase
         .from('race_schedule')
         .select('id,race_date,track,organization,finishing_position')
-        .eq('user_id', user.id)
-        .order('race_date', { ascending: true });
-      if (legacySchema.error) throw legacySchema.error;
-      setScheduleRows((legacySchema.data || []).map(row => ({ ...row, race_end_date: null })));
-    } catch {
-      setScheduleRows([]);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    void loadScheduleRows();
-  }, [loadScheduleRows]);
+        .eq('user_id', dashboardOwner)
+        .order('race_date', { ascending: true })
+        .retry(false)
+        .abortSignal(signal);
+      if (legacySchema.error) throw failedRead(legacySchema.error, legacySchema.status);
+      return (legacySchema.data || []).map(row => ({ ...row, race_end_date: null }));
+    };
+    const load = (afterMutation = false) => {
+      if (pending) {
+        refreshQueued ||= afterMutation;
+        return pending;
+      }
+      setScheduleUnavailable(false);
+      pending = startupRead('dashboard-schedule', read, controller.signal).then(rows => {
+        failed = false;
+        if (!controller.signal.aborted) setScheduleRows(rows);
+      }).catch(() => {
+        if (!controller.signal.aborted) {
+          failed = true;
+          setScheduleUnavailable(true);
+        }
+      }).finally(() => {
+        pending = undefined;
+        if (refreshQueued && !controller.signal.aborted) {
+          refreshQueued = false;
+          return load();
+        }
+      });
+      return pending;
+    };
+    scheduleRead.current = load;
+    void load();
+    const stopResume = watchStartupResume(() => { if (failed) void load(); });
+    return () => {
+      controller.abort();
+      stopResume();
+    };
+  }, [dashboardOwner]);
 
   useEffect(() => {
     let midnightTimer: ReturnType<typeof setTimeout> | null = null;
@@ -739,19 +811,6 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
 
     return () => { cancelled = true; };
   }, [user, selectedSessionId]);
-
-  const fetchSavedForCopy = async () => {
-    if (!user) return;
-    try {
-      const { data } = await supabase
-        .from('race_setups')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(30);
-      if (data) setSavedSetupsList(data);
-    } catch {}
-  };
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -2975,6 +3034,16 @@ const SetupDashboard: React.FC<SetupDashboardProps> = ({
       </nav>
 
       <div id="view-panel" role="tabpanel" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-[calc(6rem+env(safe-area-inset-bottom))]">
+        {(setupsUnavailable || scheduleUnavailable) && (
+          <p role="alert" className="mb-3 text-sm">
+            {setupsUnavailable && scheduleUnavailable ? 'Saved setups and race schedule are temporarily unavailable. '
+              : setupsUnavailable ? 'Saved setups are temporarily unavailable. ' : 'Race schedule is temporarily unavailable. '}
+            <button type="button" className="underline" onClick={() => {
+              if (setupsUnavailable) retrySetupRead.current();
+              if (scheduleUnavailable) void scheduleRead.current();
+            }}>Try again</button>
+          </p>
+        )}
         <RookieHouseAdPage user={user} view={activeView}>
         {activeView === 'home' ? (
           <HomeLanding

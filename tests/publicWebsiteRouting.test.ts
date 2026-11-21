@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import test from 'node:test';
 import React from 'react';
 import ts from 'typescript';
+import * as startupRecovery from '../src/lib/startupRecovery.ts';
 
 const require = createRequire(import.meta.url);
 const { create, act } = require('react-test-renderer');
@@ -33,6 +34,7 @@ function compile<T>(file: string, mocks: Record<string, unknown>, env = {}): T {
   new Function('require', 'module', 'exports', code)(
     (name: string) => {
       if (name in mocks) return mocks[name];
+      if (name === '@/lib/startupRecovery') return startupRecovery;
       return require(name);
     },
     output,

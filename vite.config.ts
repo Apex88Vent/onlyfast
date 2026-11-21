@@ -15,6 +15,7 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [react()].filter(Boolean),
   define: {
+    'import.meta.env.ONLYFAST_BUILD_VERSION': JSON.stringify(process.env.VERCEL_GIT_COMMIT_SHA || process.env.ONLYFAST_BUILD_VERSION || 'local'),
     // Vite PROD alone is also true in preview builds. Never use it alone to
     // authorize live ads, and never trust a URL/localStorage mode override.
     'import.meta.env.ONLYFAST_ADS_DEPLOYMENT': JSON.stringify(process.env.VERCEL_ENV || 'local'),

@@ -1,3 +1,4 @@
+import { deferredFeatureExport } from './DeferredFeature';
 import React, { useState, useRef, useCallback, useEffect, useId } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -1678,4 +1679,4 @@ const DiagnosticBanner: React.FC<{
   );
 };
 
-export default ScanTimingScreen;
+export default deferredFeatureExport(ScanTimingScreen, 'timing scanner');

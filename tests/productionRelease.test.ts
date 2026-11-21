@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
-import { verifyReleaseEnvironment, verifyReleaseOutput } from '../scripts/verify-production-release.mjs';
+import { fileURLToPath } from 'node:url';
+import { verifyReleaseEnvironment, verifyReleaseOutput, verifyRetainedWebAssets } from '../scripts/verify-production-release.mjs';
 
 const chunk = (module: string, code = 'production code') => ({ type: 'chunk', fileName: 'app.js', modules: { [module]: {} }, code });
 
@@ -15,7 +20,31 @@ test('production artifact check rejects reachable custom bridges, QA controls an
     assert.throws(() => verifyReleaseOutput([chunk('src/App.tsx', code)]), /QA endpoint or identity/);
   }
   assert.throws(() => verifyReleaseOutput([chunk('src/lib/nativeAds.ts', 'onlyfast-admob-v1-android-release')]), /Experimental AdMob bridge/);
+  assert.throws(() => verifyReleaseOutput([chunk('src/App.tsx', 'get_onlyfast_2027_environment')]), /2027 preview code/);
   assert.equal(verifyReleaseOutput([chunk('C:/onlyfast/src/lib/nativePurchaseController.ts')])[0].sha256.length, 64);
+});
+
+test('production sources contain both archived dashboard graphs with their original bytes', async () => {
+  const manifest = JSON.parse(await readFile(new URL('../scripts/retained-web-assets.json', import.meta.url), 'utf8'));
+  assert(manifest.deployments.every(deployment => deployment.assets.some(asset => asset.startsWith('SetupDashboard-'))));
+  assert.equal(await verifyRetainedWebAssets(fileURLToPath(new URL('../public', import.meta.url)), manifest), Object.keys(manifest.files).length);
+});
+
+test('the build gate rejects a missing or overwritten retained asset', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'onlyfast-retained-'));
+  try {
+    const asset = 'SetupDashboard-12345678.js';
+    const bytes = 'export default function Dashboard() {}';
+    const manifest = { deployments: [{ assets: [asset] }], files: { [asset]: createHash('sha256').update(bytes).digest('hex') } };
+    await mkdir(join(directory, 'assets'));
+    await assert.rejects(verifyRetainedWebAssets(directory, manifest), { code: 'ENOENT' });
+    await writeFile(join(directory, 'assets', asset), bytes);
+    assert.equal(await verifyRetainedWebAssets(directory, manifest), 1);
+    await writeFile(join(directory, 'assets', asset), '<!DOCTYPE html>');
+    await assert.rejects(verifyRetainedWebAssets(directory, manifest), /Retained asset changed/);
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
 });
 
 test('release environment rejects QA backend, diagnostic logging and missing or wrong-store SDK keys', () => {

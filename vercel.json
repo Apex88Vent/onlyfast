@@ -5,8 +5,8 @@
     }
   },
   "framework": "vite",
-  "buildCommand": "vite build",
-  "installCommand": "npm install",
+  "buildCommand": "npm run release:check",
+  "installCommand": "npm ci",
   "outputDirectory": "dist",
   "headers": [
     {
@@ -29,7 +29,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!api/).*)",
+      "source": "/((?!api/|assets/).*)",
       "destination": "/index.html"
     }
   ]

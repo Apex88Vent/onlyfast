@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { withSessionFetchDeadline } from './startupRecovery';
 import { assertLocalSandboxConfiguration } from './nativeSandboxPolicy';
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -112,6 +113,7 @@ if (typeof window !== 'undefined') {
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey, import.meta.env.MODE === 'native-sandbox'
-  ? { auth: { storageKey: 'onlyfast-native-sandbox-auth' } } : undefined);
+  ? { auth: { storageKey: 'onlyfast-native-sandbox-auth' }, global: { fetch: withSessionFetchDeadline(fetch) } }
+  : { global: { fetch: withSessionFetchDeadline(fetch) } });
 
 export { supabase, supabaseUrl, supabaseKey };

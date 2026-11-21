@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import ts from 'typescript';
+import * as startupRecovery from '../src/lib/startupRecovery.ts';
 
 const require = createRequire(import.meta.url);
 const React = require('react');
@@ -11,9 +12,34 @@ const compiled = ts.transpileModule(readFileSync(new URL('../src/components/Defe
   compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, esModuleInterop: true },
 }).outputText;
 const module = { exports: {} as any };
-new Function('require', 'module', 'exports', compiled)(require, module, module.exports);
-const { deferredFeature } = module.exports;
+new Function('require', 'module', 'exports', compiled)(
+  (name: string) => name === '@/lib/startupRecovery' ? startupRecovery : require(name), module, module.exports,
+);
+const { deferredFeature, deferredFeatureExport, resolveRetriedFeature } = module.exports;
 const h = React.createElement;
+
+test('a successful retry import selects the expected Vite namespace rather than an undefined or unrelated default', () => {
+  const expected = deferredFeatureExport(() => h('span', null, 'expected'), 'scanner');
+  const neighbor = deferredFeatureExport(() => h('span', null, 'wrong'), 'another tool');
+  const grouped = { default: neighbor, S: { [Symbol.toStringTag]: 'Module', default: expected } };
+  assert.equal(resolveRetriedFeature(grouped, 'scanner'), expected);
+  assert.equal(resolveRetriedFeature({ default: expected }, 'scanner'), expected);
+  assert.throws(() => resolveRetriedFeature(grouped, 'unknown'), /Unexpected deferred feature export/);
+});
+
+test('an undefined import default stays in the error boundary and the next valid retry mounts', async () => {
+  const feature = deferredFeature(() => Promise.resolve({ default: ++loads === 1 ? undefined : () => h('span', null, 'mounted') }), 'fixture');
+  const original = console.error;
+  let loads = 0;
+  let tree: any;
+  console.error = () => {};
+  try {
+    await act(async () => { tree = create(h(feature.Component)); });
+    assert(tree.root.findByProps({ role: 'alert' }));
+    await act(async () => tree.root.findByType('button').props.onClick());
+    assert.equal(tree.root.findByType('span').children[0], 'mounted');
+  } finally { console.error = original; tree?.unmount(); }
+});
 
 test('deferred feature loads only on demand and shares an in-flight preload', async () => {
   let resolve: any;

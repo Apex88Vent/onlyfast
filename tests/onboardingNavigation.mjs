@@ -1,6 +1,5 @@
 // Mounted React integration checks of the actual navigation/components.
-// REACT_TEST_RENDERER_MODULE points to an external react-test-renderer 18 install;
-// no new production/test package dependencies or live account mutations.
+// Use the installed test renderer or an explicit external React 18 renderer.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -15,10 +14,11 @@ import * as pavementValues from '../src/lib/pavementSetupValues.ts';
 import { buildBetaAccessSnapshot, CLOSED_BETA_ACCESS, setCachedBetaAccess, clearCachedBetaAccess } from '../src/lib/betaFeatures.ts';
 import { componentFunction } from './setupLibraryHarness.ts';
 import { resolveAuthUiTransition } from '../src/lib/authUiTransition.ts';
+import * as startupRecovery from '../src/lib/startupRecovery.ts';
 
-const qaRequire = createRequire(process.env.REACT_TEST_RENDERER_MODULE);
+const qaRequire = createRequire(process.env.REACT_TEST_RENDERER_MODULE || import.meta.url);
 const React = qaRequire('react');
-const { create, act } = qaRequire(process.env.REACT_TEST_RENDERER_MODULE);
+const { create, act } = qaRequire(process.env.REACT_TEST_RENDERER_MODULE || 'react-test-renderer');
 const empty = () => null;
 const wrapper = ({ children }) => children;
 const icon = props => React.createElement('span', props);
@@ -39,12 +39,7 @@ function compile(file, modules = {}) {
     if (name === '@/lib/ads') return { shouldShowAds: () => false };
     if (name === './HouseAdPlacement') return { HouseBottomBanner: empty, HouseInterstitialDialog: wrapper };
     if (name === './RookieAdSlot') return { __esModule: true, default: empty };
-    // This suite stubs the dashboard; the real loading/retry boundary is covered
-    // by deferredFeature.test.ts and the compiled browser navigation checks.
-    if (name === './DeferredFeature') return { deferredFeature: () => ({
-      Component: modules['./SetupDashboard'].default,
-      preload: () => Promise.resolve(),
-    }) };
+    if (name === '@/lib/startupRecovery') return startupRecovery;
     if (name.startsWith('react/')) return qaRequire(name);
     if (name === './MembershipPlanCard') return { __esModule: true, default: compile('components/MembershipPlanCard.tsx') };
     if (name === 'lucide-react') return new Proxy({}, { get: () => icon });
@@ -85,7 +80,11 @@ const App = compile('components/AppLayout.tsx', {
       updateUser: async ({ data }) => { fixture.metadataWrites.push(data); fixture.user = { ...fixture.user, user_metadata: data }; fixture.authListener('USER_UPDATED', { user: fixture.user }); return { data: { user: fixture.user }, error: null }; },
     },
     from: () => {
-      const query = { select: () => query, eq: () => query, not: () => query, order: () => query, limit: async () => ({ data: fixture.savedClass ? [{ race_class: fixture.savedClass }] : [], error: fixture.offline ? new Error('Offline') : null }) };
+      const query = {
+        select: () => query, eq: () => query, not: () => query, order: () => query, limit: () => query, retry: () => query,
+        abortSignal: async () => ({ data: fixture.savedClass ? [{ race_class: fixture.savedClass }] : [],
+          error: fixture.offline ? new Error('Offline') : null, status: fixture.offline ? 0 : 200 }),
+      };
       return query;
     },
   } },
@@ -551,6 +550,20 @@ test('successful empty server state overrides cached class; offline fallback is 
   await act(async () => view.unmount());
   reset({ offline: true, storage: { onlyfast_car: 'GT3', 'onlyfast_car_new-id': 'Modified' } });
   view = await mount();
+  await act(async () => new Promise(resolve => setTimeout(resolve, 400)));
+  assert.equal(text(view.root.findByProps({ 'data-landing': true })), 'Landing: Modified');
+  await act(async () => view.unmount());
+});
+
+test('a failed startup shows an actionable retry and never treats an unknown profile as a new account', async () => {
+  reset({ offline: true });
+  const view = await mount();
+  await act(async () => new Promise(resolve => setTimeout(resolve, 400)));
+  assert.ok(view.root.findByProps({ role: 'alert' }));
+  assert.ok(!heading(view.root, 'Select Your Discipline'));
+  fixture.offline = false;
+  fixture.activeClass = 'Modified';
+  await act(async () => view.root.findByType('button').props.onClick());
   assert.equal(text(view.root.findByProps({ 'data-landing': true })), 'Landing: Modified');
   await act(async () => view.unmount());
 });

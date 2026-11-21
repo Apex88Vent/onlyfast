@@ -1,7 +1,7 @@
 // Builds and inspects the actual production module graph. Never deploys or changes flags.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build, loadEnv } from 'vite';
@@ -10,6 +10,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const forbiddenModules = /\/(?:qa|native)\/|\/src\/(?:lib\/(?:releaseNativeBilling|releaseNativeTransport|nativeCatalogDiagnostic)|pages\/(?:NativeSubscriptionTest|OnboardingPreview|RookieAdSlotPreview))\.[cm]?[jt]sx?$/;
 const qaContent = /(?:127\.0\.0\.1|localhost):(?:54321|54322|8086)|ngrok-free\.dev|trycloudflare\.com|ONLYFAST_QA_|5ea2a2af-876a-42bb-84cc-4e4319a90a7e|998ee471-0dab-412c-b196-4731c0c46278/;
 const experimentalAdBridge = /onlyfastAdmob|onlyfastAdOpportunity|onlyfast-admob-v1-android-release/;
+const testing2027 = /mfzajhnfonrfuiwxgvhe|onlyfast-2027\.invalid|get_onlyfast_2027_/;
 
 export function verifyReleaseOutput(output) {
   const files = [];
@@ -23,10 +24,27 @@ export function verifyReleaseOutput(output) {
     const text = typeof bytes === 'string' ? bytes : Buffer.from(bytes).toString('utf8');
     assert.ok(!qaContent.test(text), `QA endpoint or identity in ${entry.fileName}`);
     assert.ok(!experimentalAdBridge.test(text), `Experimental AdMob bridge in ${entry.fileName}`);
+    assert.ok(!testing2027.test(text), `2027 preview code in ${entry.fileName}`);
     assert.ok(!entry.fileName.endsWith('.map'), 'Do not publish release source maps');
     files.push({ file: entry.fileName, sha256: createHash('sha256').update(bytes).digest('hex') });
   }
   return files;
+}
+
+export async function verifyRetainedWebAssets(directory, manifest) {
+  const expected = new Set(manifest.deployments.flatMap(deployment => deployment.assets));
+  assert.ok(expected.size > 0, 'The retained production asset manifest is empty');
+  assert.deepEqual(new Set(Object.keys(manifest.files)), expected, 'Retained asset hashes must match the deployment lists');
+  const assetsDirectory = path.join(directory, 'assets');
+  assert.ok((await lstat(assetsDirectory)).isDirectory(), 'Expected a regular assets directory');
+  for (const [name, sha256] of Object.entries(manifest.files)) {
+    assert.match(name, /^[\w.-]+-[\w-]{8}\.(?:js|css|woff2?|png|webp|svg|jpe?g|avif)$/i);
+    assert.match(sha256, /^[a-f0-9]{64}$/);
+    const file = path.join(assetsDirectory, name);
+    assert.ok((await lstat(file)).isFile(), `Retained asset is not a regular file: ${name}`);
+    assert.equal(createHash('sha256').update(await readFile(file)).digest('hex'), sha256, `Retained asset changed: ${name}`);
+  }
+  return expected.size;
 }
 
 export function verifyReleaseEnvironment(env) {
@@ -57,6 +75,7 @@ async function inspectStaticFiles(directory, base = directory) {
       const text = bytes.toString('utf8');
       assert.ok(!qaContent.test(text), `QA content in ${file}`);
       assert.ok(!experimentalAdBridge.test(text), `Experimental AdMob bridge in ${file}`);
+      assert.ok(!testing2027.test(text), `2027 preview code in ${file}`);
     }
     files.push({ file, sha256: createHash('sha256').update(bytes).digest('hex') });
   }
@@ -65,10 +84,19 @@ async function inspectStaticFiles(directory, base = directory) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   verifyReleaseEnvironment({ ...loadEnv('production', root, ''), ...process.env });
+  const retained = JSON.parse(await readFile(path.join(root, 'scripts/retained-web-assets.json'), 'utf8'));
+  await verifyRetainedWebAssets(path.join(root, 'public'), retained);
   await build({ root, mode: 'production', plugins: [{
     name: 'onlyfast-production-release-check',
-    generateBundle(_options, bundle) { verifyReleaseOutput(Object.values(bundle)); },
+    generateBundle(_options, bundle) {
+      const output = Object.values(bundle);
+      verifyReleaseOutput(output);
+      const entry = output.find(file => file.type === 'chunk' && file.isEntry);
+      assert.ok(entry && Object.keys(entry.modules).some(id => id.endsWith('/src/components/SetupDashboard.tsx')),
+        'The core dashboard must ship in the production entry');
+    },
   }] });
+  const retainedCount = await verifyRetainedWebAssets(path.join(root, 'dist'), retained);
   const files = await inspectStaticFiles(path.join(root, 'dist'));
   const directory = path.join(root, 'tmp/final-production-release');
   await mkdir(directory, { recursive: true });
@@ -76,5 +104,5 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     checkedAt: new Date().toISOString(), mode: 'production', files,
     note: 'Local build verification only. Store artifacts, native privacy and deployment configuration require separate evidence.',
   }, null, 2) + '\n');
-  console.log(`Release output verified: ${files.length} files; manifest: tmp/final-production-release/web-build-manifest.json`);
+  console.log(`Release output verified: ${files.length} files, including ${retainedCount} retained assets; manifest: tmp/final-production-release/web-build-manifest.json`);
 }

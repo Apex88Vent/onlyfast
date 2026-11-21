@@ -1,0 +1,2 @@
+# Retained production assets must match the bytes originally served by Vercel.
+public/assets/* -text linguist-generated=true
