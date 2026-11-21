@@ -119,7 +119,7 @@ async function fixture(browser, device, scenario) {
   let passwordAttempts = 0;
   let profileAttempts = 0;
   let documents = 0;
-  const refreshedExpiry = Math.floor(Date.now() / 1000) + 120;
+  const refreshedExpiry = Math.floor(Date.now() / 1000) + 600;
   let returningFromBackground = false;
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => {
@@ -138,7 +138,20 @@ async function fixture(browser, device, scenario) {
   await context.route('**/*', async route => {
     const request = route.request();
     const url = new URL(request.url());
-    if (url.origin === origin) return route.continue();
+    if (url.origin === origin) {
+      if (scenario === 'module-retry' && /\/ScanTimingScreen-[\w-]+\.js$/.test(url.pathname)) {
+        if (!url.searchParams.has('onlyfast_retry')) return route.abort('failed');
+        const response = await route.fetch();
+        const script = await response.text();
+        const lastExport = /export\{([\w$]+) as default\};\s*$/.exec(script);
+        assert(lastExport, 'Scanner build must supply its default export before the namespace fixture rewrites it');
+        const wrapped = script.slice(0, lastExport.index) +
+          'const __retryFixture=Object.freeze({default:' + lastExport[1] +
+          ',[Symbol.toStringTag]:"Module"});export{__retryFixture as S};';
+        return route.fulfill({ status: response.status(), contentType: 'application/javascript', body: wrapped });
+      }
+      return route.continue();
+    }
     if (url.hostname !== `${projectRef}.supabase.co`) return route.abort('blockedbyclient');
     const headers = {
       'access-control-allow-origin': origin, 'access-control-allow-methods': 'GET,POST,OPTIONS',
@@ -181,8 +194,10 @@ async function fixture(browser, device, scenario) {
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded' });
     if (scenario === 'login') {
+      const essential = page.getByRole('button', { name: 'Accept Essential', exact: true });
       await page.getByLabel('Email', { exact: true }).fill(user.email);
       await page.getByLabel('Password', { exact: true }).fill('fixture-password');
+      if (await essential.isVisible()) await essential.click();
       await page.getByRole('button', { name: 'Sign In', exact: true }).click();
     }
     if (scenario === 'cutover') {
@@ -238,6 +253,15 @@ async function fixture(browser, device, scenario) {
       await page.getByRole('navigation', { name: 'App sections' }).getByRole('button', { name: /^Schedule/ }).click();
       await page.getByText('Fixture Raceway', { exact: true }).first().waitFor({ timeout: 10_000 });
     }
+    if (scenario === 'module-retry') {
+      await page.getByRole('button', { name: 'New Setup', exact: true }).first().click();
+      const track = page.getByPlaceholder('Enter track name');
+      await track.fill('Unsaved fixture draft');
+      await page.getByRole('alert').filter({ hasText: 'timing scanner could not load' })
+        .getByRole('button', { name: 'Try again', exact: true }).click();
+      await page.getByRole('heading', { name: 'Scan Timing Screen', exact: true }).waitFor();
+      assert.equal(await track.inputValue(), 'Unsaved fixture draft');
+    }
     assert.equal(documents, 1, 'Startup and recovery share the same document');
     assert.deepEqual(errors, []);
     assert.deepEqual(moduleErrors, []);
@@ -261,6 +285,7 @@ try {
     const browser = await engine.launch({ executablePath });
     try {
       const scenarios = ['baseline', 'candidate', 'cutover', 'resume', 'manual', 'login'];
+      if (engine === chromium) scenarios.push('module-retry');
       for (const scenario of scenarios.filter(value => !process.env.ONLYFAST_BROWSER_SCENARIO || value === process.env.ONLYFAST_BROWSER_SCENARIO)) {
         servedBuild = scenario === 'baseline' || scenario === 'cutover' ? baselineDir : candidateDir;
         console.log(JSON.stringify(await fixture(browser, device, scenario)));
