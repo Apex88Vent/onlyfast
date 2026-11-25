@@ -8,6 +8,10 @@ export type TelemetryRow=Record<string,unknown>;
 const object=(v:unknown):TelemetryRow=>v&&typeof v==='object'&&!Array.isArray(v)?v as TelemetryRow:{};
 const number=(v:unknown)=>typeof v==='number'&&Number.isFinite(v)?v:null;
 const text=(v:unknown,fallback='')=>typeof v==='string'?v:fallback;
+const compatibility=(l:TelemetryRow):SavedLapRecord['traceCompatibility']=>{
+ const stored=object(l.trace_compatibility),result={trackId:text(stored.trackId,text(l.track_map_id))||undefined,trackVersion:number(stored.trackVersion)??number(l.track_version)??undefined,direction:text(stored.direction,text(l.direction))||undefined,sectorVersion:number(stored.sectorVersion)??number(l.sector_definition_version)??undefined,cornerVersion:text(stored.cornerVersion,text(l.corner_definition_version))||undefined};
+ return Object.values(result).some(v=>v!==undefined)?result:undefined;
+};
 const definitions=(value:unknown):StoredCornerDefinitions|null=>{
   const d=object(value);
   return typeof d.version==='string'&&Array.isArray(d.corners)&&d.corners.every(c=>{
@@ -38,28 +42,30 @@ export function mapTelemetryRows(rows:TelemetryRow[],session:TelemetryRow,laps:S
     const assigned=number(raw.lapNumber)??number(sample.lapNumber)??laps.find(l=>l.id===lapId)?.lapNumber??laps.find(l=>Date.parse(timestamp)>=Date.parse(l.startedAt)&&Date.parse(timestamp)<Date.parse(l.endedAt))?.lapNumber??null;
     const convention=raw.gForceConvention??device.gForceConvention??'vehicle_acceleration_positive_v1';
     const longitudinal=number(row.g_force_longitudinal)??number(sample.longitudinalG);
-    return [{id:text(row.id,String(row.id)),sessionId:text(session.id),userId:text(session.user_id),trackId:text(session.track_map_id)||null,
+    return [{id:text(row.id,String(row.id)),sessionId:text(session.id),userId:text(session.user_id),trackId:text(row.track_map_id,text(sample.trackId,text(session.track_map_id)))||null,
       lapId:lapId||null,lapNumber:assigned,timestamp,latitude,longitude,
       gpsAccuracy:number(row.accuracy_meters)??number(sample.gpsAccuracy),speed:number(row.speed_mps)??number(sample.speed),heading:number(row.heading_degrees)??number(sample.heading),altitude:number(row.altitude_meters)??number(sample.altitude),
       accelX:number(raw.accelX)??number(sample.accelX),accelY:number(raw.accelY)??number(sample.accelY),accelZ:number(raw.accelZ)??number(sample.accelZ),
       gyroX:number(raw.gyroX)??number(sample.gyroX),gyroY:number(raw.gyroY)??number(sample.gyroY),gyroZ:number(raw.gyroZ)??number(sample.gyroZ),
       lateralG:number(row.g_force_lateral)??number(sample.lateralG),longitudinalG:normalizePersistedLongitudinalG(longitudinal,convention==='vehicle_braking_positive_v2'?'vehicle_braking_positive_v2':'vehicle_acceleration_positive_v1'),
+      interruptionBefore:raw.interruptionBefore===true||sample.interruptionBefore===true,
       verticalG:number(raw.verticalG)??number(sample.verticalG),sampleIndex:number(row.sample_index)??number(raw.sampleIndex)??number(sample.sampleIndex)??index}];
   });
 }
-export function mapReviewBundle(bundle:TelemetryRow,rows:TelemetryRow[]):SavedLapSession{
+export function mapReviewBundle(bundle:TelemetryRow,rows:TelemetryRow[],options:{derive?:boolean}={}):SavedLapSession{
   const s=object(bundle.session),device=object(s.device_info),recording=object(device.track_trace_recording),snapshot=object(recording.track);
   const map=object(snapshot.map),rawMap=Object.keys(map).length?map:object(bundle.map);
   const track=Object.keys(rawMap).length?{...rawMap,outside_path:rawMap.outside_path??[],inside_path:rawMap.inside_path??[],start_finish_path:rawMap.start_finish_path??[],representative_path_raw:rawMap.representative_path_raw??[],representative_path_smoothed:rawMap.representative_path_smoothed??[],revision_history:rawMap.revision_history??[],corner_definitions:definitions(rawMap.corner_definitions)} as unknown as SavedTrackMap:null;
   const sectors=(bundle.sectors??[]) as TelemetryRow[];
-  const laps=((bundle.laps??[]) as TelemetryRow[]).map((l):SavedLapRecord=>({id:text(l.id),sessionId:text(s.id),userId:text(s.user_id),trackId:text(s.track_map_id)||null,
+  const laps=((bundle.laps??[]) as TelemetryRow[]).map((l):SavedLapRecord=>({id:text(l.id),sessionId:text(s.id),userId:text(s.user_id),trackId:text(l.track_map_id,text(s.track_map_id))||null,
+    traceCompatibility:compatibility(l),
     lapNumber:number(l.lap_number)??0,lapTimeMs:number(l.duration_ms)??0,startedAt:text(l.started_at),endedAt:text(l.ended_at),createdAt:text(l.created_at),isValid:l.is_valid!==false,excludedReason:text(l.excluded_reason)||null,
     averageSpeed:number(l.average_speed),maxSpeed:number(l.max_speed),maxLateralG:number(l.max_lateral_g),maxLongitudinalG:number(l.max_longitudinal_g),maxVerticalG:number(l.max_vertical_g),maxAccelG:number(l.max_accel_g),maxBrakingG:number(l.max_braking_g),
     sectorTimesMs:lapSectors(l,sectors),
     rawTrace:Array.isArray(l.raw_trace)?l.raw_trace as SavedLapRecord['rawTrace']:undefined,smoothedTrace:Array.isArray(l.smoothed_trace)?l.smoothed_trace as SavedLapRecord['smoothedTrace']:undefined,
     smoothingConfidence:l.smoothing_confidence as SavedLapRecord['smoothingConfidence'],smoothingSummary:l.smoothing_summary as SavedLapRecord['smoothingSummary'],smoothingWarning:text(l.smoothing_warning)||text(object(l.smoothing_summary).warning)||null}));
   const samples=mapTelemetryRows(rows,s,laps);
-  for(const lap of laps){
+  for(const lap of options.derive===false?[]:laps){
     if(!lap.smoothedTrace?.length){const smoothed=smoothLapTelemetry({samples:samples.filter(p=>p.lapNumber===lap.lapNumber),track,lapTimeMs:lap.lapTimeMs});
       lap.rawTrace=lap.rawTrace?.length?lap.rawTrace:smoothed.rawTrace;lap.smoothedTrace=smoothed.smoothedTrace;lap.smoothingConfidence=smoothed.confidence;lap.smoothingWarning=smoothed.warning;lap.smoothingSummary??=smoothed.summary;}
   }
@@ -79,6 +85,9 @@ export function mapReviewBundle(bundle:TelemetryRow,rows:TelemetryRow[]):SavedLa
     sectorCount:recordedSectorCount||number(layout.sectorCount)||0,sectorDefinitionVersion:storedSectorVersion??number(layout.version),sectorSourceKind:(sectors[0]?.source_kind??layout.source) as SavedLapSession['sectorSourceKind'],
     sectorResults:sectors.map(x=>({lapId:text(x.lap_id),sectorIndex:number(x.sector_index)??0,durationMs:number(x.duration_ms),crossingTimestamp:text(x.crossing_timestamp)||null,isValid:x.is_valid===true,sourceDefinitionVersion:number(x.source_definition_version)??0,sourceKind:x.source_kind as SavedLapSession['sectorSourceKind']})),
     cornerDefinitions:definitions(s.corner_definitions)??definitions(device.cornerDefinitions)??definitions(track?.corner_definitions),cornerAnalysis:analysis(s.corner_analysis)??analysis(device.cornerAnalysis)};
-  if(!result.cornerAnalysis){result.cornerAnalysis=buildSessionCornerAnalysis(result);result.cornerDefinitions??=result.cornerAnalysis?.definitions??null;}
+  result.hasStoredCornerDefinitions=!!(definitions(s.corner_definitions)??definitions(device.cornerDefinitions)??definitions(track?.corner_definitions)??result.cornerAnalysis?.definitions);
+  const recordedMapVersion=number(s.track_version)??number(device.trackVersion)??number(device.track_version);
+  result.geometryCompatibility=Object.keys(map).length?'snapshot':recordedMapVersion!==null&&recordedMapVersion===track?.version?'declared':'unverified';
+  if(options.derive!==false&&!result.cornerAnalysis){result.cornerAnalysis=buildSessionCornerAnalysis(result);result.cornerDefinitions??=result.cornerAnalysis?.definitions??null;}
   return result;
 }

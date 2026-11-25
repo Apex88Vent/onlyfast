@@ -1,5 +1,6 @@
+import { Button } from "@/components/ui/button";
 // Ported from Apex88Vent/OnlyLaps-app @ 22f372508582fb43d56b66947c26740233bcdb19.
-// Circuit-only adapter changes are documented in docs/ONLYFAST_2027_TRACK_TRACE_PARITY.md.
+// Circuit-only adapter changes are documented in docs/ONLYFAST_2027_TRACK_TRACE_BETA_REVIEW.md.
 import { useEffect, useRef } from "react";
 import { Play, Sparkles } from "lucide-react";
 import { formatLapTime } from "../circuit/lapFiltering.ts";
@@ -81,14 +82,14 @@ export function LapSectorTable({
   if (validLaps.length === 0 && !emptyMessage) return null;
 
   return (
-    <section className="rounded-[22px] bg-white p-4 text-[#071018] shadow-[0_14px_30px_rgba(0,0,0,0.28)]">
+    <section className="rounded-2xl bg-white p-4 text-[#071018] shadow-sm">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#5D6675]">Lap Table</p>
-          <h2 className="mt-1 text-xl font-black">{title}</h2>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#5D6675]">Lap Table</p>
+          <h2 className="mt-1 text-xl font-semibold">{title}</h2>
         </div>
         <div className="text-right">
-          {readOnly ? <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#5D6675]">Read only</p> : null}
+          {readOnly ? <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#5D6675]">Read only</p> : null}
           {sectorCount > 0 ? <p className="text-xs font-bold text-[#7E22CE]">Purple = session best</p> : null}
         </div>
       </div>
@@ -104,7 +105,7 @@ export function LapSectorTable({
         }`}
       >
         <table className="min-w-full border-collapse text-left text-sm">
-          <thead className="sticky top-0 z-10 bg-[#EFF6FF] text-[11px] font-black uppercase tracking-[0.1em] text-[#5D6675]">
+          <thead className="sticky top-0 z-10 bg-[#EFF6FF] text-[11px] font-semibold uppercase tracking-[0.1em] text-[#5D6675]">
             <tr>
               <th className="px-3 py-3">Lap</th>
               <th className="whitespace-nowrap px-3 py-3">Lap Time</th>
@@ -145,11 +146,11 @@ export function LapSectorTable({
                   selected ? "bg-[#EAF6FF]" : "bg-white hover:bg-[#F8FAFC]"
                 } ${selectable ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}
               >
-                <td className="whitespace-nowrap px-3 py-3 font-black">
+                <td className="whitespace-nowrap px-3 py-3 font-semibold">
                   {lap.lapNumber}
-                  {lap.lapTimeMs === session.fastestLapTimeMs ? <span className="ml-2 rounded-full bg-[#007DAE]/12 px-2 py-0.5 text-[9px] uppercase tracking-[0.1em] text-[#007DAE]">Fastest</span> : null}
+                  {lap.lapTimeMs === session.fastestLapTimeMs ? <span className="ml-2 rounded-lg bg-[#007DAE]/12 px-2 py-0.5 text-[11px] uppercase tracking-[0.1em] text-[#007DAE]">Fastest</span> : null}
                 </td>
-                <td className={`whitespace-nowrap px-3 py-3 font-black ${lap.lapTimeMs === session.fastestLapTimeMs ? "text-[#007DAE]" : ""}`}>
+                <td className={`whitespace-nowrap px-3 py-3 font-semibold ${lap.lapTimeMs === session.fastestLapTimeMs ? "text-[#007DAE]" : ""}`}>
                   {formatLapTime(lap.lapTimeMs)}
                 </td>
                 <td className="whitespace-nowrap px-3 py-3 font-bold text-[#5D6675]">
@@ -162,7 +163,7 @@ export function LapSectorTable({
                   const value = lap.sectorTimesMs?.[sectorIndex] ?? null;
                   const isValid = typeof value === "number" && Number.isFinite(value) && value > 0;
                   const isFastest = isValid && value === fastestBySector[sectorIndex];
-                  return <td key={sectorIndex} className={`whitespace-nowrap px-3 py-3 ${isFastest ? "font-black text-[#7E22CE]" : "font-bold text-[#5D6675]"}`}>{isValid ? formatLapTime(value) : "—"}</td>;
+                  return <td key={sectorIndex} className={`whitespace-nowrap px-3 py-3 ${isFastest ? "font-semibold text-[#7E22CE]" : "font-bold text-[#5D6675]"}`}>{isValid ? formatLapTime(value) : "—"}</td>;
                 })}
               </tr>
               );
@@ -177,25 +178,25 @@ export function LapSectorTable({
       ) : null}
 
       {showOptimumDetails && validLaps.length > 0 && optimum ? (
-        <div className="mt-4 rounded-[18px] border border-[#A855F7]/30 bg-purple-50 p-4">
+        <div className="mt-4 rounded-2xl border border-[#A855F7]/30 bg-purple-50 p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="flex items-center gap-2 text-lg font-black text-[#581C87]"><Sparkles className="size-4" />Optimum Lap</p>
-              <p className="mt-1 text-2xl font-black text-[#7E22CE]">{formatLapTime(optimum.lap.lapTimeMs)}</p>
+              <p className="flex items-center gap-2 text-lg font-semibold text-[#581C87]"><Sparkles className="size-4" />Optimum Lap</p>
+              <p className="mt-1 text-2xl font-semibold text-[#7E22CE]">{formatLapTime(optimum.lap.lapTimeMs)}</p>
               <p className="mt-1 text-xs font-bold text-[#6B21A8]">Fastest actual lap: {formatLapTime(session.fastestLapTimeMs)}</p>
               <p className="mt-1 text-xs font-bold text-[#6B21A8]">{formatLapTime(optimum.deltaToFastestLapMs)} faster than the fastest actual lap</p>
             </div>
-            <button type="button" onClick={() => onReplayOptimum(optimum)} disabled={!optimum.replayAvailable} className="flex min-h-10 items-center gap-2 rounded-full bg-[#7E22CE] px-3 text-xs font-black text-white disabled:cursor-not-allowed disabled:bg-[#AFA3B8]"><Play className="size-3.5" />{optimum.replayAvailable ? "Replay" : "Replay unavailable"}</button>
+            <Button variant="outline" type="button" onClick={() => onReplayOptimum(optimum)} disabled={!optimum.replayAvailable} className="flex min-h-11 items-center gap-2 rounded-lg bg-[#7E22CE] hover:bg-purple-900 hover:text-white px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#AFA3B8]"><Play className="size-3.5" />{optimum.replayAvailable ? "Replay" : "Replay unavailable"}</Button>
           </div>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {optimum.sectors.map((sector) => (
-              <div key={sector.sectorIndex} className="rounded-[12px] bg-white/80 p-2 text-xs font-bold text-[#581C87]">
-                Sector {sector.sectorIndex}: <span className="font-black">{formatLapTime(sector.durationMs)}</span> from Lap {sector.sourceLapNumber}
+              <div key={sector.sectorIndex} className="rounded-[12px] bg-muted/50 p-2 text-xs font-bold text-[#581C87]">
+                Sector {sector.sectorIndex}: <span className="font-semibold">{formatLapTime(sector.durationMs)}</span> from Lap {sector.sourceLapNumber}
                 {optimum.cornerContexts
                   .filter((corner) => corner.sectorIndex === sector.sectorIndex)
                   .map((corner) => (
                     <div key={`${sector.sectorIndex}-${corner.cornerNumber}`} className="mt-2 rounded-[10px] bg-purple-100/70 p-2 leading-5">
-                      <p className="font-black">Turn {corner.cornerNumber} · source Lap {corner.sourceLapNumber}</p>
+                      <p className="font-semibold">Turn {corner.cornerNumber} · source Lap {corner.sourceLapNumber}</p>
                       <p>
                         Entry {formatCornerSpeed(corner.entrySpeedMps)} · minimum{" "}
                         {formatCornerSpeed(corner.minimumSpeedMps)} · exit{" "}

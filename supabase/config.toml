@@ -423,6 +423,10 @@ verify_jwt = true
 [functions.track-trace-setup-context]
 verify_jwt = true
 
+# Isolated Track Trace driving analysis; separate from mechanical Setup Assist.
+[functions.track-trace-overall-assist]
+verify_jwt = true
+
 [functions.get-suggestions]
 verify_jwt = true
 

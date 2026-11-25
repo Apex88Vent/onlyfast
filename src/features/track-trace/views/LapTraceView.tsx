@@ -1,5 +1,6 @@
+import { Button } from "@/components/ui/button";
 // Ported from Apex88Vent/OnlyLaps-app @ 22f372508582fb43d56b66947c26740233bcdb19.
-// Circuit-only adapter changes are documented in docs/ONLYFAST_2027_TRACK_TRACE_PARITY.md.
+// Circuit-only adapter changes are documented in docs/ONLYFAST_2027_TRACK_TRACE_BETA_REVIEW.md.
 import { useEffect, useMemo, useState } from "react";
 import {
   GForceIndicator,
@@ -92,34 +93,34 @@ export function TraceModeSelector({
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Replay trace mode">
-        <button
+        <Button variant="outline"
           type="button"
           aria-pressed={mode === "raw"}
           onClick={() => onChange("raw")}
-          className={`rounded-full px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.12em] ${
+          className={`rounded-lg px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] ${
             mode === "raw"
               ? "bg-white text-[#071018]"
-              : "border border-white/[0.18] text-[#B8C0CC]"
+              : "border border-border text-muted-foreground"
           }`}
         >
           Raw Trace
-        </button>
-        <button
+        </Button>
+        <Button variant="outline"
           type="button"
           aria-pressed={mode === "smoothed"}
           disabled={!smoothedAvailable}
           onClick={() => onChange("smoothed")}
-          className={`rounded-full px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.12em] ${
+          className={`rounded-lg px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] ${
             mode === "smoothed"
-              ? "bg-[#007DAE] text-white"
-              : "border border-white/[0.18] text-[#B8C0CC] disabled:cursor-not-allowed disabled:opacity-45"
+              ? "bg-[#007DAE] text-white hover:bg-[#006B95] hover:text-white"
+              : "border border-border text-muted-foreground disabled:cursor-not-allowed disabled:opacity-45"
           }`}
         >
           Smoothed Trace
-        </button>
+        </Button>
       </div>
       {!smoothedAvailable ? (
-        <p className="mt-2 text-xs font-bold text-amber-100">
+        <p className="mt-2 text-xs font-bold text-amber-900">
           {unavailableMessage}
         </p>
       ) : null}
@@ -218,18 +219,18 @@ export function LapTraceView({
   }, [activeTraceMode, hasSmoothedTrace, onTraceModeChange]);
 
   return (
-    <section className="rounded-[20px] border border-white/[0.12] bg-[#050B11]/88 p-3 shadow-[0_18px_42px_rgba(0,0,0,0.34)]">
+    <section className="rounded-2xl border border-border bg-card p-3 shadow-sm">
       <div className="mb-2 flex items-center justify-between gap-3">
-        <p className="truncate text-[11px] font-black uppercase tracking-[0.18em] text-[#B8C0CC]">
+        <p className="truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
           {title}
         </p>
         <div className="flex shrink-0 items-center gap-2">
           {confidenceLabel ? (
-            <span className="rounded-full bg-[#007DAE]/12 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#00A8E8]">
+            <span className="rounded-lg bg-[#007DAE]/12 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#007DAE]">
               {confidenceLabel}
             </span>
           ) : null}
-          <span className="rounded-full bg-[#007DAE]/12 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#00A8E8]">
+          <span className="rounded-lg bg-[#007DAE]/12 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#007DAE]">
             Replay
           </span>
         </div>
@@ -282,7 +283,7 @@ export function LapTraceView({
         maxBrakingG={lap?.maxBrakingG}
       />
       {warning ? (
-        <p className="mt-3 rounded-[14px] border border-amber-300/24 bg-amber-300/12 p-3 text-xs font-bold leading-5 text-amber-50">
+        <p className="mt-3 rounded-[14px] border border-amber-300/24 bg-amber-300/12 p-3 text-xs font-bold leading-5 text-amber-900">
           {warning}
         </p>
       ) : null}

@@ -1,5 +1,6 @@
+import { Button } from "@/components/ui/button";
 // Ported from Apex88Vent/OnlyLaps-app @ 22f372508582fb43d56b66947c26740233bcdb19.
-// Circuit-only adapter changes are documented in docs/ONLYFAST_2027_TRACK_TRACE_PARITY.md.
+// Circuit-only adapter changes are documented in docs/ONLYFAST_2027_TRACK_TRACE_BETA_REVIEW.md.
 import { useId, useMemo } from "react";
 import type { GpsPoint, SavedTrackMap } from "../circuit/onlylapsTrackScanUtils.ts";
 import {
@@ -145,33 +146,33 @@ export function ReplayMap({
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <div className="inline-flex rounded-full border border-white/[0.16] bg-[#02060A] p-1" role="group" aria-label="Replay map view">
-          <button
+        <div className="inline-flex rounded-lg border border-border bg-card p-1" role="group" aria-label="Replay map view">
+          <Button variant="outline"
             type="button"
             onClick={() => onViewModeChange("full")}
-            className={`rounded-full px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.1em] ${
-              viewMode === "full" ? "bg-white text-[#071018]" : "text-[#B8C0CC]"
+            className={`rounded-lg px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] ${
+              viewMode === "full" ? "bg-white text-[#071018]" : "text-muted-foreground"
             }`}
           >
             Full Track
-          </button>
-          <button
+          </Button>
+          <Button variant="outline"
             type="button"
             onClick={() => onViewModeChange("follow")}
-            className={`rounded-full px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.1em] ${
-              viewMode === "follow" ? "bg-[#007DAE] text-white" : "text-[#B8C0CC]"
+            className={`rounded-lg px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] ${
+              viewMode === "follow" ? "bg-[#007DAE] text-white hover:bg-[#006B95] hover:text-white" : "text-muted-foreground"
             }`}
           >
             Follow Car - 4x
-          </button>
+          </Button>
         </div>
         {viewMode === "follow" && traces.length > 1 && onFollowTargetChange ? (
-          <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.1em] text-[#B8C0CC]">
+          <label className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
             Follow
             <select
               value={followTarget}
               onChange={(event) => onFollowTargetChange(event.target.value)}
-              className="min-h-9 rounded-full border border-white/[0.16] bg-[#071018] px-3 text-xs font-black text-white"
+              className="min-h-11 rounded-lg border border-border bg-card px-3 text-xs font-semibold text-foreground"
             >
               {traces.map((trace) => (
                 <option key={trace.id} value={trace.id}>{trace.label}</option>
@@ -187,7 +188,7 @@ export function ReplayMap({
         role="img"
         aria-label={title}
         data-replay-viewport="true"
-        className={`${className} w-full overflow-hidden rounded-[16px] border border-white/[0.08] bg-[#02060A]`}
+        className={`${className} w-full overflow-hidden rounded-[16px] border border-border bg-card`}
       >
         <defs>
           <filter id={filterId} x="-80%" y="-80%" width="260%" height="260%">
@@ -201,13 +202,13 @@ export function ReplayMap({
         <rect width="320" height="220" fill="rgba(255,255,255,0.02)" />
         <g transform={followTransform}>
           {projected.outside.length > 1 ? (
-            <path d={toSvgPath(projected.outside)} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
+            <path d={toSvgPath(projected.outside)} fill="none" stroke="#CBD5E1" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
           ) : null}
           {projected.inside.length > 1 ? (
-            <path d={toSvgPath(projected.inside)} fill="none" stroke="rgba(255,255,255,0.16)" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
+            <path d={toSvgPath(projected.inside)} fill="none" stroke="#94A3B8" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
           ) : null}
           {projected.startFinish.length > 1 ? (
-            <path d={toSvgPath(projected.startFinish)} fill="none" stroke="#FFFFFF" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d={toSvgPath(projected.startFinish)} fill="none" stroke="#475569" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
           ) : null}
           {projectedTracePaths.map((path, index) => {
             const trace = traces[index];
@@ -248,7 +249,7 @@ export function ReplayMap({
                   cx={point.x}
                   cy={point.y}
                   r={selected ? 11 : 9}
-                  fill={selected ? "#F59E0B" : "#071018"}
+                  fill={selected ? "#F59E0B" : "#E2E8F0"}
                   stroke="#FFFFFF"
                   strokeWidth="2"
                 />
@@ -258,7 +259,7 @@ export function ReplayMap({
                   textAnchor="middle"
                   fontSize="8.5"
                   fontWeight="900"
-                  fill="#FFFFFF"
+                  fill="#1A1B23"
                   pointerEvents="none"
                 >
                   {marker.label.replace(/^Turn\s*/i, "")}
@@ -269,7 +270,7 @@ export function ReplayMap({
           {currentPoints.map((point, index) => point && traces[index].showDot !== false && (!lockFollowDot || index !== followedTraceIndex) ? (
             <g
               key={`${traces[index].id}-dot`}
-              filter={`url(#${filterId})`}
+
               role="img"
               aria-label={`${traces[index].label} GPS position`}
             >
@@ -280,7 +281,7 @@ export function ReplayMap({
         </g>
         {lockFollowDot && followedTraceIndex >= 0 && traces[followedTraceIndex]?.showDot !== false ? (
           <g
-            filter={`url(#${filterId})`}
+
             role="img"
             aria-label={`${traces[followedTraceIndex].label} GPS position`}
           >

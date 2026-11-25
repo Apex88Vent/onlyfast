@@ -6,5 +6,5 @@ export function TrackTraceBetaBadge() {
 }
 
 export function TrackTraceBetaNotice() {
-  return TRACK_TRACE_CONFIG.beta ? <p className="rounded-xl bg-[#00A8E8]/5 px-4 py-3 text-xs leading-relaxed text-[#6B7280]" role="note">{TRACK_TRACE_CONFIG.betaMessage}</p> : null;
+  return TRACK_TRACE_CONFIG.beta ? <details className="rounded-xl bg-[#00A8E8]/5 px-3 py-1 text-xs leading-relaxed text-[#6B7280]"><summary className="min-h-11 cursor-pointer py-3 font-medium">About Track Trace BETA</summary><p role="note" className="pb-3">{TRACK_TRACE_CONFIG.betaMessage}</p></details> : null;
 }

@@ -56,7 +56,10 @@ test('Track Trace menu contains exactly four actions in a 2x2 grid with circuit 
   assert.equal((output.match(/<button /g)||[]).length,4);
   assert.match(output,/grid grid-cols-2/);
   for(const label of ['Start Session','Review Session','Track Library','Scan Track'])assert.match(output,new RegExp('>'+label+'<'));
-  assert.match(output,/Capture a private circuit scan with GPS/);
+  const labels=[...output.matchAll(/<button[^>]*>([\s\S]*?)<\/button>/g)].map(match=>match[1].replace(/<[^>]*>/g,'').trim());
+  assert.deepEqual(labels,['Start Session','Review Session','Track Library','Scan Track'],'each action contains only its title and decorative icon');
+  assert(output.includes(homeActionStyles.homeActionCardClassName));
+  assert.equal((output.match(/stroke-width="2.2"/g)||[]).length,4);
 });
 
 test('read-only users have a historical viewing path while recording actions stay locked',()=>{

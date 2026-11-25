@@ -1,477 +1,77 @@
-// Ported from OnlyLaps 22f372508582fb43d56b66947c26740233bcdb19; circuit branches only.
-import { useEffect, useMemo, useState } from "react";
-import Link from "./TraceLink";
-import { AlertTriangle, ChevronLeft, GitBranch, Library, Loader2, Pencil, RotateCcw, ScanLine } from "lucide-react";
-import { LapComparison } from "./LapComparison";
-import { LapSectorTable } from "./LapSectorTable";
-import { LapSessionShell } from "./LapSessionShell";
-import { LapTraceView } from "./LapTraceView";
-import { OptimumLapSummary } from "./OptimumLapSummary";
-import { ShareTelemetryPanel } from "./ShareTelemetryPanel";
-import { formatLapTime } from "../circuit/lapFiltering";
-import { fetchLapSessionDetail, regenerateSessionCornerAnalysis, renameLapSession } from "../reviewService";
-import { buildOptimumLap } from "../circuit/optimumLap";
-import { getDefaultSelectedLap } from "../circuit/sessionReview";
-import { getSessionDisplayName } from "../circuit/sessionNames";
-import type { SavedLapRecord, SavedLapSession } from "../circuit/types";
-type SessionDetailPageProps = {
-    authBypassEnabled?: boolean;
-    sessionId: string; readOnly?: boolean;
-};
-function formatDateTime(value: string) {
-    return new Intl.DateTimeFormat(undefined, {
-        dateStyle: "medium",
-        timeStyle: "short"
-    }).format(new Date(value));
-}
-function formatStat(value: number | null | undefined, suffix = "") {
-    return value == null || !Number.isFinite(value) ? "--" : `${value.toFixed(2)}${suffix}`;
-}
-function formatDuration(startedAt: string, endedAt: string) {
-    if (!endedAt || !Number.isFinite(Date.parse(startedAt)) || !Number.isFinite(Date.parse(endedAt))) return "--";
-    const durationMs = Math.max(0, Date.parse(endedAt) - Date.parse(startedAt));
-    const minutes = Math.floor(durationMs / 60000);
-    const seconds = Math.floor((durationMs % 60000) / 1000);
-    return `${minutes}m ${seconds}s`;
-}
-function formatDistanceMeters(value: number | null | undefined) {
-    if (value == null || !Number.isFinite(value)) {
-        return "--";
-    }
-    return value >= 1609.344 ? `${(value / 1609.344).toFixed(2)} mi` : `${value.toFixed(1)} m`;
-}
-function formatMilliseconds(value: number | null | undefined) {
-    if (value == null || !Number.isFinite(value)) {
-        return "--";
-    }
-    return value >= 1000 ? `${(value / 1000).toFixed(2)}s` : `${Math.round(value)}ms`;
-}
-function formatAccuracyRange(minValue: number | null | undefined, averageValue: number | null | undefined, maxValue: number | null | undefined) {
-    if (minValue == null && averageValue == null && maxValue == null) {
-        return "--";
-    }
-    return `${formatStat(minValue, "m")} / ${formatStat(averageValue, "m")} / ${formatStat(maxValue, "m")}`;
-}
-function formatShortTime(value: string) {
-    const parsed = Date.parse(value);
-    if (!Number.isFinite(parsed)) {
-        return value;
-    }
-    return new Intl.DateTimeFormat(undefined, {
-        hour: "numeric",
-        minute: "2-digit",
-        second: "2-digit"
-    }).format(new Date(parsed));
-}
-function formatCoordinate(value: number | null | undefined) {
-    return typeof value === "number" && Number.isFinite(value) ? value.toFixed(6) : "--";
-}
-function formatDetectionConfidence(value: number | null | undefined) {
-    return value == null || !Number.isFinite(value) ? "Unavailable" : `${Math.round(value * 100)}%`;
-}
-function formatMetersPerSecond(value: number | null | undefined) {
-    return value == null || !Number.isFinite(value) ? "--" : `${(value * 2.2369362921).toFixed(1)} mph`;
-}
-function getSessionStatusBadge(session: SavedLapSession) {
-    if (!session.endedAt && session.status!=='failed') return {label:"Unfinished session",className:"border-amber-300/24 bg-amber-300/12 text-amber-50"};
-    if (session.reviewStatus === "recording_error" || session.status === "failed") {
-        return {
-            label: "Recording Error",
-            className: "border-red-300/24 bg-red-400/12 text-red-50"
-        };
-    }
-    if (session.reviewStatus === "no_gps_data" || session.gpsSampleCount === 0) {
-        return {
-            label: "No GPS Data",
-            className: "border-amber-300/24 bg-amber-300/12 text-amber-50"
-        };
-    }
-    return {
-        label: "Complete",
-        className: "border-emerald-300/24 bg-emerald-300/12 text-emerald-50"
-    };
-}
-export function SessionDetailPage({ authBypassEnabled = false, sessionId, readOnly = true }: SessionDetailPageProps) {
-    const [session, setSession] = useState<SavedLapSession | null>(null);
-    const [selectedReplayLap, setSelectedReplayLap] = useState<SavedLapRecord | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [actionMessage, setActionMessage] = useState<string | null>(null);
-    const [actionBusy, setActionBusy] = useState(false);
-    useEffect(() => {
-        let active = true;
-        async function loadSession() {
-            setLoading(true);
-            const result = await fetchLapSessionDetail(sessionId);
-            if (!active) {
-                return;
-            }
-            setSession(result.data);
-            setError(result.error);
-            setLoading(false);
-            setSelectedReplayLap(getDefaultSelectedLap(result.data?.laps?.filter((lap) => lap.isValid) ?? []));
-        }
-        void loadSession();
-        return () => {
-            active = false;
-        };
-    }, [sessionId]);
-    const validLaps = useMemo(() => (session?.laps ?? []).filter((lap) => lap.isValid), [session?.laps]);
-    const optimumLap = useMemo(() => session ? buildOptimumLap(session) : null, [session]);
-    const isOptimumSelected = Boolean(selectedReplayLap && optimumLap?.lap.id === selectedReplayLap.id);
-    const excludedLaps = useMemo(() => (session?.laps ?? []).filter((lap) => !lap.isValid), [session?.laps]);
-    const telemetrySampleCount = session?.telemetrySamples?.length ?? session?.gpsSampleCount ?? 0;
-    const hasNoGpsData = Boolean(session &&
-        (session.reviewStatus === "no_gps_data" ||
-            (telemetrySampleCount === 0 && validLaps.length === 0)));
-    const hasSessionTrace = Boolean(session && !hasNoGpsData && validLaps.length === 0 && telemetrySampleCount > 1);
-    const sessionStatusBadge = session ? getSessionStatusBadge(session) : null;
-    const diagnostics = session?.recordingDiagnostics ?? null;
-    const renameSession = async () => {
-        if (!session)
-            return;
-        const nextName = window.prompt("Session name (leave blank to use the default)", session.sessionName ?? "");
-        if (nextName === null || nextName.trim() === (session.sessionName ?? "")) {
-            return;
-        }
-        setActionBusy(true);
-        const result = await renameLapSession(session.id, nextName);
-        setActionBusy(false);
-        if (result.data)
-            setSession(result.data);
-        setActionMessage(result.data
-            ? result.data.sessionName
-                ? "Session renamed."
-                : "Using the default session name."
-            : result.error);
-    };
-    const regenerateCorners = async () => {
-        if (!session)
-            return;
-        setActionBusy(true);
-        const result = await regenerateSessionCornerAnalysis(session.id);
-        setActionBusy(false);
-        if (result.data)
-            setSession(result.data);
-        setActionMessage(result.data
-            ? `Detected ${result.data.cornerDefinitions?.corners.length ?? 0} numbered corners in this preview. Stored analysis is unchanged.`
-            : result.error);
-    };
-    return (<LapSessionShell authBypassEnabled={authBypassEnabled}>
-      <section className="space-y-4">
-        <Link href="/review-sessions" className="inline-flex items-center gap-2 text-sm font-black text-[#9CE2FF]">
-          <ChevronLeft className="size-4" aria-hidden="true"/>
-          Review Sessions
-        </Link>
+import {useMemo,useState,type ReactNode} from 'react';
+import {useQuery,useQueryClient} from '@tanstack/react-query';
+import {Button} from '@/components/ui/button';
+import {Card} from '@/components/ui/card';
+import {Skeleton} from '@/components/ui/skeleton';
+import {fetchLapSessionDetail,regenerateSessionCornerAnalysis,renameLapSession} from '../reviewService';
+import {mapReviewBundle} from '../telemetryModel';
+import {buildCompatibleOptimum} from '../circuit/overallAssist';
+import {lapCompatibility} from '../circuit/cornerBenchmarks';
+import {formatLapTime} from '../circuit/lapFiltering';
+import type {TraceContext} from '../api';
+import {ReviewSection} from './ReviewSection';
+import {LapSectorTable} from './LapSectorTable';
+import {LapComparison} from './LapComparison';
+import {ReplayMap} from './ReplayMap';
+import {ReplayTelemetryPanel} from './ReplayTelemetryPanel';
+import {OptimumLapSummary} from './OptimumLapSummary';
+import {CornerBenchmarkReview} from './CornerBenchmarkReview';
+import {OverallAssistPanel} from './OverallAssistPanel';
+import {ShareTelemetryPanel} from './ShareTelemetryPanel';
+import {RecordedTelemetryChart} from './RecordedTelemetryChart';
+import {getLapReplayPath} from './LapTraceView';
 
-        {loading ? (<div className="rounded-[22px] border border-white/[0.12] bg-[#050B11]/86 p-6 text-center">
-            <Loader2 className="mx-auto size-8 animate-spin text-[#00A8E8]" aria-hidden="true"/>
-            <p className="mt-3 font-black">Loading session</p>
-          </div>) : null}
-
-        {error && !loading ? (<p className="rounded-[16px] border border-red-300/24 bg-red-400/12 p-3 text-sm font-bold leading-6 text-red-50">
-            {error}
-          </p>) : null}
-
-        {session ? (<>
-            <div className="rounded-[24px] border border-white/[0.12] bg-[#050B11]/86 p-5 shadow-[0_22px_55px_rgba(0,0,0,0.36)]">
-              <p className="text-[11px] font-black uppercase tracking-[0.22em] text-[#00A8E8]">
-                Session Detail
-              </p>
-              {session.isDemo ? (<p className="mt-3 w-fit rounded-full border border-[#00A8E8]/30 bg-[#007DAE]/15 px-3 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-blue-50">
-                  Demo test data
-                </p>) : null}
-              {null}
-              {sessionStatusBadge ? (<p className={`mt-3 w-fit rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.14em] ${sessionStatusBadge.className}`}>
-                  {sessionStatusBadge.label}
-                </p>) : null}
-              <div className="mt-2 flex items-start gap-2">
-                <h1 className="min-w-0 text-[32px] font-black leading-tight text-white">
-                  {getSessionDisplayName(session)}
-                </h1>
-                <button type="button" onClick={renameSession} disabled={actionBusy || readOnly} className="mt-1 flex size-9 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white transition hover:bg-white/15 disabled:opacity-60" aria-label="Rename session" title="Rename session">
-                  <Pencil className="size-4" aria-hidden="true"/>
-                </button>
-              </div>
-              {session.sessionName?.trim() ? (<p className="mt-2 text-sm font-bold text-[#9CE2FF]">
-                  {session.trackName}
-                </p>) : null}
-              <p className="mt-3 text-sm font-semibold leading-6 text-[#D7DEE8]">
-                {formatDateTime(session.startedAt)}
-              </p>
-            </div>
-
-            <ShareTelemetryPanel session={session}/>
-
-            {(<>
-                <section className="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Session summary">
-                  {[
-                    ["Fastest Lap", formatLapTime(session.fastestLapTimeMs)],
-                    ["Average", formatLapTime(session.averageLapTimeMs)],
-                    ["Laps", String(validLaps.length)],
-                    ["Duration", formatDuration(session.startedAt, session.endedAt)]
-                ].map(([label, value]) => (<div key={label} className="rounded-[18px] bg-white p-3 text-[#071018]">
-                      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#5D6675]">
-                        {label}
-                      </p>
-                      <p className="mt-1 text-lg font-black sm:text-xl">{value}</p>
-                    </div>))}
-                </section>
-
-                <LapSectorTable session={session} validLaps={validLaps} optimum={optimumLap} onReplayLap={setSelectedReplayLap} onReplayOptimum={(optimum) => setSelectedReplayLap(optimum.lap)} selectedLapId={isOptimumSelected ? null : selectedReplayLap?.id} showOptimumDetails={false}/>
-
-                <OptimumLapSummary session={session} optimum={optimumLap} onReplay={(optimum) => setSelectedReplayLap(optimum.lap)}/>
-
-                {!hasNoGpsData ? (<LapComparison session={session} validLaps={validLaps} selectedLap={selectedReplayLap} optimum={optimumLap} selectedSamplesOverride={isOptimumSelected ? optimumLap?.samples : undefined} selectedLabel={isOptimumSelected ? "Optimum Lap · Virtual Composite" : undefined}/>) : null}
-              </>)}
-
-            {actionMessage ? (<p className="rounded-[16px] border border-[#00A8E8]/24 bg-[#007DAE]/12 p-3 text-sm font-bold leading-6 text-blue-50">
-                {actionMessage}
-              </p>) : null}
-
-            {session.cornerDefinitions?.corners.length ? (<section className="rounded-[18px] border border-white/[0.12] bg-[#071018]/90 p-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#9CE2FF]">
-                      Numbered corners
-                    </p>
-                    <p className="mt-1 text-sm font-bold text-white">
-                      {session.cornerDefinitions.corners.map((corner) => `Turn ${corner.cornerNumber}`).join(" · ")}
-                    </p>
-                  </div>
-                  <button type="button" onClick={() => void regenerateCorners()} disabled={actionBusy || readOnly} className="min-h-10 rounded-full border border-white/[0.2] px-3 text-xs font-black text-white disabled:opacity-60">
-                    Regenerate Corners
-                  </button>
-                </div>
-              </section>) : null}
-
-            {null}
-
-            {null}
-
-            {diagnostics ? (<details className="rounded-[22px] bg-white p-4 text-[#071018] shadow-[0_14px_30px_rgba(0,0,0,0.28)]">
-                <summary className="cursor-pointer list-none text-base font-black [&::-webkit-details-marker]:hidden">
-                  Lap Detection Diagnostics
-                </summary>
-                <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                  <div className="rounded-[12px] bg-[#EFF6FF] p-2">
-                    <dt className="font-black text-[#5D6675]">Total GPS points recorded</dt>
-                    <dd className="mt-1 font-black">{diagnostics.totalGpsPoints}</dd>
-                  </div>
-                  <div className="rounded-[12px] bg-[#EFF6FF] p-2">
-                    <dt className="font-black text-[#5D6675]">Total distance recorded</dt>
-                    <dd className="mt-1 font-black">
-                      {formatDistanceMeters(diagnostics.totalDistanceMeters)}
-                    </dd>
-                  </div>
-                  <div className="rounded-[12px] bg-[#EFF6FF] p-2">
-                    <dt className="font-black text-[#5D6675]">Line-plane intersections</dt>
-                    <dd className="mt-1 font-black">
-                      {diagnostics.linePlaneIntersectionsDetected ??
-                    diagnostics.startFinishCrossingsDetected}
-                    </dd>
-                  </div>
-                  <div className="rounded-[12px] bg-[#EFF6FF] p-2">
-                    <dt className="font-black text-[#5D6675]">Inside extended gate</dt>
-                    <dd className="mt-1 font-black">
-                      {diagnostics.startFinishGateCrossingsDetected ?? "--"}
-                    </dd>
-                  </div>
-                  <div className="rounded-[12px] bg-[#EFF6FF] p-2">
-                    <dt className="font-black text-[#5D6675]">Valid directional crossings</dt>
-                    <dd className="mt-1 font-black">
-                      {diagnostics.validDirectionalCrossingsDetected ?? "--"}
-                    </dd>
-                  </div>
-                  <div className="rounded-[12px] bg-[#EFF6FF] p-2">
-                    <dt className="font-black text-[#5D6675]">Completed laps</dt>
-                    <dd className="mt-1 font-black">{diagnostics.completedLaps ?? validLaps.length}</dd>
-                  </div>
-                  <div className="rounded-[12px] bg-[#EFF6FF] p-2">
-                    <dt className="font-black text-[#5D6675]">Too far beyond endpoint</dt>
-                    <dd className="mt-1 font-black">
-                      {diagnostics.rejectedTooFarBeyondEndpointCount ?? "--"}
-                    </dd>
-                  </div>
-                  <div className="rounded-[12px] bg-[#EFF6FF] p-2">
-                    <dt className="font-black text-[#5D6675]">Wrong direction rejects</dt>
-                    <dd className="mt-1 font-black">
-                      {diagnostics.rejectedWrongDirectionCount ?? "--"}
-                    </dd>
-                  </div>
-                  <div className="rounded-[12px] bg-[#EFF6FF] p-2">
-                    <dt className="font-black text-[#5D6675]">Cooldown/min lap rejects</dt>
-                    <dd className="mt-1 font-black">
-                      {diagnostics.rejectedCooldownOrMinLapCount ?? "--"}
-                    </dd>
-                  </div>
-                  <div className="rounded-[12px] bg-[#EFF6FF] p-2">
-                    <dt className="font-black text-[#5D6675]">GPS accuracy rejects</dt>
-                    <dd className="mt-1 font-black">
-                      {diagnostics.rejectedGpsAccuracyCount ?? "--"}
-                    </dd>
-                  </div>
-                  <div className="rounded-[12px] bg-[#EFF6FF] p-2">
-                    <dt className="font-black text-[#5D6675]">GPS gaps over 2s</dt>
-                    <dd className="mt-1 font-black">{diagnostics.gpsGapsOverTwoSeconds}</dd>
-                  </div>
-                  <div className="rounded-[12px] bg-[#EFF6FF] p-2">
-                    <dt className="font-black text-[#5D6675]">Longest GPS gap</dt>
-                    <dd className="mt-1 font-black">
-                      {formatMilliseconds(diagnostics.longestGpsGapMs)}
-                    </dd>
-                  </div>
-                  <div className="rounded-[12px] bg-[#EFF6FF] p-2">
-                    <dt className="font-black text-[#5D6675]">Average sample interval</dt>
-                    <dd className="mt-1 font-black">
-                      {formatMilliseconds(diagnostics.averageGpsSampleIntervalMs)}
-                    </dd>
-                  </div>
-                  <div className="rounded-[12px] bg-[#EFF6FF] p-2">
-                    <dt className="font-black text-[#5D6675]">Accuracy min / avg / max</dt>
-                    <dd className="mt-1 font-black">
-                      {formatAccuracyRange(diagnostics.minGpsAccuracyMeters, diagnostics.averageGpsAccuracyMeters, diagnostics.maxGpsAccuracyMeters)}
-                    </dd>
-                  </div>
-                  <div className="col-span-2 rounded-[12px] bg-[#EFF6FF] p-2">
-                    <dt className="font-black text-[#5D6675]">Lap detection gate status</dt>
-                    <dd className="mt-1 font-black">{diagnostics.lapDetectionGateStatus}</dd>
-                  </div>
-                  {diagnostics.startFinishLine ? (<>
-                      <div className="rounded-[12px] bg-[#EFF6FF] p-2">
-                        <dt className="font-black text-[#5D6675]">Gate segment length</dt>
-                        <dd className="mt-1 font-black">
-                          {formatDistanceMeters(diagnostics.startFinishLine.segmentLengthMeters)}
-                        </dd>
-                      </div>
-                      <div className="rounded-[12px] bg-[#EFF6FF] p-2">
-                        <dt className="font-black text-[#5D6675]">Base endpoint extension</dt>
-                        <dd className="mt-1 font-black">
-                          {formatDistanceMeters(diagnostics.startFinishLine.baseEndpointExtensionMeters)}
-                        </dd>
-                      </div>
-                      <div className="rounded-[12px] bg-[#EFF6FF] p-2">
-                        <dt className="font-black text-[#5D6675]">Expected direction</dt>
-                        <dd className="mt-1 font-black">
-                          {diagnostics.startFinishLine.expectedDirection ?? "--"}
-                        </dd>
-                      </div>
-                      <div className="rounded-[12px] bg-[#EFF6FF] p-2">
-                        <dt className="font-black text-[#5D6675]">Perpendicular heading</dt>
-                        <dd className="mt-1 font-black">
-                          {formatStat(diagnostics.startFinishLine.perpendicularHeadingDegrees, " deg")}
-                        </dd>
-                      </div>
-                      <div className="col-span-2 rounded-[12px] bg-[#EFF6FF] p-2">
-                        <dt className="font-black text-[#5D6675]">Gate endpoint A</dt>
-                        <dd className="mt-1 font-black">
-                          {formatCoordinate(diagnostics.startFinishLine.endpointA.lat)},{" "}
-                          {formatCoordinate(diagnostics.startFinishLine.endpointA.lng)}
-                        </dd>
-                      </div>
-                      <div className="col-span-2 rounded-[12px] bg-[#EFF6FF] p-2">
-                        <dt className="font-black text-[#5D6675]">Gate endpoint B</dt>
-                        <dd className="mt-1 font-black">
-                          {formatCoordinate(diagnostics.startFinishLine.endpointB.lat)},{" "}
-                          {formatCoordinate(diagnostics.startFinishLine.endpointB.lng)}
-                        </dd>
-                      </div>
-                      <div className="col-span-2 rounded-[12px] bg-[#EFF6FF] p-2">
-                        <dt className="font-black text-[#5D6675]">Gate midpoint</dt>
-                        <dd className="mt-1 font-black">
-                          {formatCoordinate(diagnostics.startFinishLine.gateMidpoint?.lat)},{" "}
-                          {formatCoordinate(diagnostics.startFinishLine.gateMidpoint?.lng)}
-                        </dd>
-                      </div>
-                    </>) : null}
-                </dl>
-                <div className="mt-3 rounded-[14px] border border-[#D7DEE8] p-3">
-                  <p className="text-[11px] font-black uppercase tracking-[0.14em] text-[#5D6675]">
-                    Line-plane / Gate Events
-                  </p>
-                  {diagnostics.crossingEvents.length === 0 ? (<p className="mt-2 text-sm font-bold text-[#5D6675]">
-                      No line-plane intersections were detected.
-                    </p>) : (<div className="mt-2 max-h-64 space-y-2 overflow-y-auto pr-1">
-                      {diagnostics.crossingEvents.map((event, index) => (<div key={`${event.timestamp}-${index}`} className="rounded-[12px] bg-[#EFF6FF] p-2">
-                          <p className="text-sm font-black">
-                            {formatShortTime(event.timestamp)} -{" "}
-                            {event.createdLap
-                            ? `Created lap ${event.lapNumber ?? "--"}`
-                            : event.gateCrossing
-                                ? event.reason ?? "Gate crossing evaluated"
-                                : event.reason ?? "Line-plane intersection"}
-                          </p>
-                          <p className="mt-1 text-xs font-bold leading-5 text-[#5D6675]">
-                            Speed {formatStat(event.speed, " m/s")} | Heading{" "}
-                            {formatStat(event.heading, " deg")} | Beyond endpoint{" "}
-                            {formatStat(event.distanceBeyondEndpointMeters ?? event.distanceFromLineMeters, " m")}{" "}
-                            | Tolerance {formatStat(event.endpointToleranceMeters, " m")} | Accuracy{" "}
-                            {formatStat(event.gpsAccuracy, " m")} | Category{" "}
-                            {event.rejectionCategory ?? "--"}
-                          </p>
-                        </div>))}
-                    </div>)}
-                </div>
-                {diagnostics.ignoredCrossingReasons.length > 0 ? (<div className="mt-3 rounded-[14px] border border-amber-300 bg-amber-50 p-3">
-                    <p className="text-[11px] font-black uppercase tracking-[0.14em] text-amber-900">
-                      Rejected Intersection Reasons
-                    </p>
-                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm font-bold leading-6 text-amber-950">
-                      {diagnostics.ignoredCrossingReasons.map((reason, index) => (<li key={`${reason}-${index}`}>{reason}</li>))}
-                    </ul>
-                  </div>) : null}
-              </details>) : null}
-
-            {session.notes ? (<p className="rounded-[16px] border border-[#00A8E8]/24 bg-[#007DAE]/12 p-3 text-sm font-bold leading-6 text-blue-50">
-                {session.notes}
-              </p>) : null}
-
-            {hasNoGpsData ? (<section className="rounded-[22px] bg-white p-4 text-[#071018] shadow-[0_14px_30px_rgba(0,0,0,0.28)]">
-                <div className="flex gap-3">
-                  <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-600" aria-hidden="true"/>
-                  <div>
-                    <p className="text-lg font-black">
-                      No GPS data was recorded for this session.
-                    </p>
-                    <p className="mt-3 text-sm font-bold text-[#5D6675]">
-                      Possible reasons:
-                    </p>
-                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm font-bold leading-6 text-[#5D6675]">
-                      <li>GPS watcher did not start</li>
-                      <li>GPS permission was denied</li>
-                      <li>Phone lost GPS signal</li>
-                      <li>Browser/app was suspended</li>
-                      <li>Device did not provide location updates</li>
-                    </ul>
-                    {session.gpsErrorMessage ? (<p className="mt-3 rounded-[14px] border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-900">
-                        {session.gpsErrorMessage}
-                      </p>) : null}
-                  </div>
-                </div>
-              </section>) : null}
-
-            {!hasNoGpsData && hasSessionTrace && true ? (<LapTraceView track={session.trackMap} samples={session.telemetrySamples ?? []} progress={1} title="Session GPS Trace"/>) : null}
-
-            {null}
-
-            {null}
-
-            {(<details className="rounded-[20px] bg-white p-4 text-[#071018] shadow-[0_14px_30px_rgba(0,0,0,0.28)]">
-                <summary className="cursor-pointer list-none text-base font-black [&::-webkit-details-marker]:hidden">
-                  Excluded Laps ({excludedLaps.length})
-                </summary>
-                <div className="mt-3 space-y-2">
-                  {excludedLaps.length === 0 ? (<p className="text-sm font-bold text-[#5D6675]">No excluded laps.</p>) : (excludedLaps.map((lap) => (<div key={lap.id} className="rounded-[16px] border border-[#D7DEE8] p-3">
-                        <p className="font-black">
-                          Lap {lap.lapNumber}: {formatLapTime(lap.lapTimeMs)}
-                        </p>
-                        <p className="mt-1 text-sm font-bold text-[#5D6675]">
-                          {lap.excludedReason}
-                        </p>
-                      </div>)))}
-                </div>
-              </details>)}
-          </>) : null}
-      </section>
-    </LapSessionShell>);
+const sections=[['timing','Lap timing details'],['sectors','Sector comparison'],['trace','GPS track trace'],['speed','Speed analysis'],['gforce','G-force analysis'],['comparison','Lap comparisons'],['corners','Corner analysis'],['optimum','Optimum lap analysis'],['overall','Lap Blueprint'],['observations','Session observations']] as const;
+const sampleSections=new Set(['trace','speed','gforce','comparison','corners','optimum','overall']);
+export function SessionDetailPage({sessionId,userId,revision,summary,readOnly=true}:{sessionId:string;userId:string;revision:string;summary:TraceContext;readOnly?:boolean}){
+ const metadata=useMemo(()=>mapReviewBundle({...summary},[],{derive:false}),[summary]);
+ const [ids,setIds]=useState<string[]>([]),[activeId,setActiveId]=useState(''),[open,setOpen]=useState<Set<string>>(()=>new Set());
+ const [units,setUnits]=useState<'imperial'|'metric'>('imperial'),[progress,setProgress]=useState(0),[mapMode,setMapMode]=useState<'full'|'follow'>('full'),[replayOptimum,setReplayOptimum]=useState(false),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
+ const cache=useQueryClient(),key=['track_trace','detail',userId,revision,sessionId];
+ const sessionLevel=!metadata.laps?.length;
+ const needsDetail=[...open].some(id=>sampleSections.has(id)&&(id==='overall'||id==='optimum'||ids.length>0||sessionLevel&&['trace','speed','gforce'].includes(id)));
+ const detail=useQuery({queryKey:key,queryFn:async({signal})=>{const response=await fetchLapSessionDetail(sessionId,signal);if(!response.data)throw Error(response.error??'Telemetry unavailable');return response.data;},enabled:needsDetail,staleTime:300000,gcTime:0,retry:false,refetchOnWindowFocus:false});
+ const session=detail.data??metadata,selected=(session.laps??[]).filter(l=>ids.includes(l.id)),active=selected.find(l=>l.id===activeId)??selected[0];
+ const visualSession=useMemo(()=>session.hasStoredCornerDefinitions===false||session.geometryCompatibility==='unverified'?{...session,cornerDefinitions:null,cornerAnalysis:null}:session,[session]);
+ const optimum=useMemo(()=>detail.data?buildCompatibleOptimum(session):null,[detail.data,session]);
+ const samples=(session.telemetrySamples??[]).filter(p=>sessionLevel||selected.some(l=>l.lapNumber===p.lapNumber)),valid=(session.laps??[]).filter(l=>l.isValid);
+ function toggleLap(id:string){setIds(old=>old.includes(id)?old.filter(i=>i!==id):[...old,id]);setActiveId(id);setReplayOptimum(false);}
+ function toggle(id:string){setOpen(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next;});}
+ async function action(kind:'rename'|'corners'){
+  const name=kind==='rename'?window.prompt('Session name (leave blank to use the default)',session.sessionName??''):'';if(name===null)return;
+  setBusy(true);try{const result=kind==='rename'?await renameLapSession(sessionId,name):await regenerateSessionCornerAnalysis(sessionId);if(result.data){cache.setQueryData(key,result.data);setMessage(kind==='rename'?'Session renamed.':'Corner preview regenerated; stored telemetry and definitions are unchanged.');}else setMessage(result.error??'Action unavailable.');}finally{setBusy(false);}
+ }
+ function content(id:string):ReactNode{
+  if(!selected.length&&!['overall','optimum','observations'].includes(id)&&!(sessionLevel&&['trace','speed','gforce'].includes(id)))return <p className="text-sm text-muted-foreground">Select at least one lap above to review this section.</p>;
+  if(sampleSections.has(id)&&detail.isPending)return <div role="status" className="space-y-2"><p className="text-sm">Loading recorded telemetry…</p><Skeleton className="h-24 rounded-xl"/></div>;
+  if(sampleSections.has(id)&&detail.isError)return <p role="alert" className="text-sm text-red-800">Recorded telemetry could not be loaded. Lap totals and selections are retained. <Button variant="link" onClick={()=>void detail.refetch()}>Retry</Button></p>;
+  if(id==='timing')return <ul className="space-y-3 text-sm">{selected.map(l=><li key={l.id}><strong>Lap {l.lapNumber}: {formatLapTime(l.lapTimeMs)}</strong><p>{l.startedAt||'Start timestamp unavailable'} → {l.endedAt||'End timestamp unavailable'}</p>{l.excludedReason&&<p>{l.excludedReason}</p>}</li>)}</ul>;
+  if(id==='sectors')return <LapSectorTable session={session} validLaps={selected.filter(l=>l.isValid)} optimum={null} onReplayLap={lap=>setActiveId(lap.id)} onReplayOptimum={()=>undefined} selectedLapId={active?.id} showOptimumDetails={false} readOnly/>;
+  if(id==='trace'){
+   if(selected.length===1&&active&&(samples.length||active.rawTrace?.length||active.smoothedTrace?.length))return <LapComparison session={visualSession} validLaps={selected.filter(l=>l.isValid)} selectedLap={active} optimum={null} showCornerAnalysis={false} showTelemetry={false}/>;
+   const traces=sessionLevel?[{id:'session',label:'Session trace · no completed laps',path:samples.map(p=>({lat:p.latitude,lng:p.longitude,timestamp:p.timestamp,accuracy:p.gpsAccuracy,altitude:p.altitude,heading:p.heading,speed:p.speed})),progress:1,color:'#007DAE'}]:selected.map((lap,i)=>({id:lap.id,label:'Lap '+lap.lapNumber,path:getLapReplayPath({lap,samples:samples.filter(p=>p.lapNumber===lap.lapNumber),traceMode:'raw'}),progress:1,color:i%2?'#7E22CE':'#007DAE'}));
+   return traces.some(t=>t.path.length)?<ReplayMap track={session.trackMap} traces={traces} title="Recorded GPS traces" viewMode={mapMode} onViewModeChange={setMapMode}/>:<p>No GPS trace is stored for this selection.</p>;
+  }
+  if(id==='speed'||id==='gforce')return <div className="space-y-3">
+   {id==='gforce'?<p className="text-sm text-muted-foreground">0.75 G yellow · 1.50 G red/outer limit. Numeric measurements remain unchanged above the limit.</p>:selected.map(lap=>{const speeds=samples.filter(s=>s.lapNumber===lap.lapNumber).map(s=>s.speed).filter((n):n is number=>n!==null&&Number.isFinite(n));const speed=(n:number|null)=>n===null?'Unavailable':`${(n*(units==='metric'?3.6:2.2369362921)).toFixed(1)} ${units==='metric'?'km/h':'mph'}`;return <p className="rounded-xl bg-muted/50 p-3 text-sm" key={lap.id}>Lap {lap.lapNumber}: stored average {speed(lap.averageSpeed)} · maximum {speed(speeds.length?Math.max(...speeds):lap.maxSpeed)}</p>;})}
+   <RecordedTelemetryChart samples={samples.filter(p=>sessionLevel||p.lapNumber===active?.lapNumber)} series={id==='speed'?[{key:'speed',label:'Speed',color:'#007DAE',factor:units==='metric'?3.6:2.2369362921}]:[{key:'lateralG',label:'Lateral G',color:'#007DAE'},{key:'longitudinalG',label:'Longitudinal G (+ braking / − acceleration)',color:'#475569'}]} unit={id==='speed'?(units==='metric'?'km/h':'mph'):'G'} title={id==='speed'?'Recorded speed trace':'Recorded G-force trace'}/>
+   {(active||sessionLevel)&&<><label className="block text-sm">Recorded position<input aria-label={id==='gforce'?'G-force trace position':'Speed trace position'} type="range" min={0} max={1000} value={progress*1000} onChange={e=>setProgress(Number(e.target.value)/1000)} className="min-h-11 w-full"/></label><ReplayTelemetryPanel title={active?'Lap '+active.lapNumber+' recorded telemetry':'Session recorded telemetry'} samples={samples.filter(p=>sessionLevel||p.lapNumber===active?.lapNumber)} progress={progress} lap={active}/></>}
+   {id==='gforce'&&!samples.some(s=>s.longitudinalG!==null||s.lateralG!==null)&&<p>No stored motion/G-force samples. Missing readings are not estimated.</p>}
+  </div>;
+  if(id==='comparison'){
+   const comparable=selected.filter(l=>!lapCompatibility(session,l));
+   if(comparable.length<2)return <p>Select two or more compatible valid laps above, then enable Compare Laps. Invalid or incompatible laps cannot be compared. Selections remain when this section is collapsed.</p>;
+   return <LapComparison session={visualSession} selectedLap={comparable.find(l=>l.id===active?.id)??comparable[0]} validLaps={comparable} optimum={null} showCornerAnalysis={false} showTelemetry={false}/>;
+  }
+  if(id==='corners')return active?<CornerBenchmarkReview session={session} lapId={active.id} units={units}/>:null;
+  if(id==='optimum')return optimum?<><p className="text-sm">Theoretical sector sum across all compatible valid laps; not necessarily an achievable connected lap.</p><OptimumLapSummary optimum={optimum} session={session} onReplay={()=>setReplayOptimum(true)}/>{replayOptimum&&<LapComparison session={session} selectedLap={optimum.lap} selectedSamplesOverride={optimum.samples} selectedLabel="Theoretical optimum sector composite" validLaps={valid} optimum={optimum} showCornerAnalysis={false}/>}</>:<p>Complete compatible sector timings and lap timestamps are required for an optimum lap.</p>;
+  if(id==='overall')return <OverallAssistPanel session={session} units={units} allowAi={!readOnly}/>;
+  return <div className="space-y-3 text-sm"><p>{session.notes||'No session notes stored.'}</p>{summary.analysis.map(a=><article key={a.id}>{a.summary_text&&<p className="whitespace-pre-wrap">{a.summary_text}</p>}{a.optimum_lap_time_ms!==null&&<p>Stored optimum: {formatLapTime(a.optimum_lap_time_ms)}</p>}</article>)}{session.gpsErrorMessage&&<p role="alert">{session.gpsErrorMessage}</p>}<ShareTelemetryPanel session={session}/>{!readOnly&&<div className="flex flex-wrap gap-2"><Button variant="outline" disabled={busy} onClick={()=>void action('rename')}>Rename session</Button><Button variant="outline" disabled={busy} onClick={()=>void action('corners')}>Regenerate corner preview</Button></div>}{message&&<p role="status">{message}</p>}<details><summary className="min-h-11 cursor-pointer py-3">Stored statistics, exclusions and diagnostics</summary><p className="mb-2">Stored measurements are retained in their original units (speed: m/s; loads: G).</p><pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs">{JSON.stringify({laps:session.laps?.map(({rawTrace,smoothedTrace,...lap})=>lap),diagnostics:session.recordingDiagnostics},null,2)}</pre></details></div>;
+ }
+ const duration=Date.parse(session.endedAt)-Date.parse(session.startedAt);
+ return <div className="min-w-0 space-y-3" aria-label="Collapsible session review"><header><h2 className="break-words text-xl font-bold">{session.sessionName||session.trackName}</h2><p className="mt-1 text-sm text-muted-foreground">{session.endedAt?'Saved circuit session':'Unfinished session'} · {Number.isFinite(Date.parse(session.startedAt))?new Date(session.startedAt).toLocaleString():'Date unavailable'}</p></header>
+  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{[['Fastest lap',formatLapTime(metadata.fastestLapTimeMs)],['Average lap',formatLapTime(metadata.averageLapTimeMs)],['Valid laps',String(valid.length)],['Duration',Number.isFinite(duration)?`${Math.max(0,duration)/1000} s`:'Unavailable']].map(([label,value])=><Card key={label} className="min-w-0 rounded-2xl p-3"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 break-words text-lg font-bold tabular-nums">{value}</p></Card>)}</div>
+  <Card className="space-y-3 rounded-2xl p-3"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">Select laps</h3><label className="text-sm">Units <select aria-label="Review units" value={units} onChange={e=>setUnits(e.target.value as typeof units)} className="min-h-11 rounded-lg border border-input bg-card px-2"><option value="imperial">Yards / mph</option><option value="metric">Meters / km/h</option></select></label></div><p className="text-xs text-muted-foreground">Select one lap for individual review or multiple laps to compare. Detailed sections start collapsed.</p>{session.laps?.length?<ul className="grid max-h-64 gap-2 overflow-y-auto sm:grid-cols-2">{session.laps.map(l=><li key={l.id}><label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-border p-3 text-sm"><input type="checkbox" checked={ids.includes(l.id)} onChange={()=>toggleLap(l.id)} aria-label={'Select Lap '+l.lapNumber} className="h-5 w-5 shrink-0 accent-[#007DAE]"/><span>Lap {l.lapNumber} · {formatLapTime(l.lapTimeMs)}{!l.isValid?' · Excluded':''}</span></label></li>)}</ul>:<p className="text-sm">No completed laps. Session observations remain accessible.</p>}{selected.length>1&&<label className="block text-sm">Individual review lap<select aria-label="Individual review lap" value={active?.id} onChange={e=>setActiveId(e.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-input bg-card px-3">{selected.map(l=><option key={l.id} value={l.id}>Lap {l.lapNumber}</option>)}</select></label>}</Card>
+  {sections.map(([id,title])=><ReviewSection key={id} id={id} title={title} open={open.has(id)} onToggle={()=>toggle(id)}>{open.has(id)?content(id):null}</ReviewSection>)}
+ </div>;
 }

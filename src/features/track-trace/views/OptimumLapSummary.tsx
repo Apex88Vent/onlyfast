@@ -1,5 +1,6 @@
+import { Button } from "@/components/ui/button";
 // Ported from Apex88Vent/OnlyLaps-app @ 22f372508582fb43d56b66947c26740233bcdb19.
-// Circuit-only adapter changes are documented in docs/ONLYFAST_2027_TRACK_TRACE_PARITY.md.
+// Circuit-only adapter changes are documented in docs/ONLYFAST_2027_TRACK_TRACE_BETA_REVIEW.md.
 import { useState } from "react";
 import { ChevronDown, Play, Sparkles } from "lucide-react";
 import { formatLapTime } from "../circuit/lapFiltering.ts";
@@ -32,14 +33,14 @@ export function OptimumLapSummary({
   if (!optimum) return null;
 
   return (
-    <section className="rounded-[20px] border border-[#A855F7]/30 bg-purple-50 p-4 text-[#581C87]">
+    <section className="rounded-2xl border border-[#A855F7]/30 bg-purple-50 p-4 text-[#581C87]">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.16em]">
+          <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em]">
             <Sparkles className="size-4" aria-hidden="true" />
             Optimum Lap
           </p>
-          <p className="mt-1 text-2xl font-black text-[#7E22CE]">
+          <p className="mt-1 text-2xl font-semibold text-[#7E22CE]">
             {formatLapTime(optimum.lap.lapTimeMs)}
           </p>
           <p className="mt-1 text-xs font-bold text-[#6B21A8]">
@@ -47,29 +48,29 @@ export function OptimumLapSummary({
             ({formatLapTime(session.fastestLapTimeMs)})
           </p>
         </div>
-        <button
+        <Button variant="outline"
           type="button"
           aria-expanded={expanded}
           aria-controls="optimum-lap-details"
           onClick={() => setExpanded((current) => !current)}
-          className="flex min-h-10 items-center gap-2 rounded-full border border-[#7E22CE]/35 bg-white px-3 text-xs font-black text-[#7E22CE]"
+          className="flex min-h-11 items-center gap-2 rounded-lg border border-[#7E22CE]/35 bg-white px-3 text-xs font-semibold text-[#7E22CE]"
         >
           {expanded ? "Hide optimum details" : "Show optimum details"}
           <ChevronDown
             className={`size-4 transition ${expanded ? "rotate-180" : ""}`}
             aria-hidden="true"
           />
-        </button>
+        </Button>
       </div>
 
       {expanded ? (
         <div id="optimum-lap-details" className="mt-4 border-t border-[#A855F7]/20 pt-4">
           <div className="grid gap-2 sm:grid-cols-2">
             {optimum.sectors.map((sector) => (
-              <div key={sector.sectorIndex} className="rounded-[12px] bg-white/80 p-3 text-xs font-bold">
+              <div key={sector.sectorIndex} className="rounded-[12px] bg-muted/50 p-3 text-xs font-bold">
                 <p>
                   Sector {sector.sectorIndex}:{" "}
-                  <span className="font-black">{formatLapTime(sector.durationMs)}</span> from
+                  <span className="font-semibold">{formatLapTime(sector.durationMs)}</span> from
                   Lap {sector.sourceLapNumber}
                 </p>
                 {optimum.cornerContexts
@@ -79,7 +80,7 @@ export function OptimumLapSummary({
                       key={`${sector.sectorIndex}-${corner.cornerNumber}`}
                       className="mt-2 rounded-[10px] bg-purple-100/70 p-2 leading-5"
                     >
-                      <p className="font-black">
+                      <p className="font-semibold">
                         Turn {corner.cornerNumber} · source Lap {corner.sourceLapNumber}
                       </p>
                       <p>
@@ -100,15 +101,15 @@ export function OptimumLapSummary({
               </div>
             ))}
           </div>
-          <button
+          <Button variant="outline"
             type="button"
             onClick={() => onReplay(optimum)}
             disabled={!optimum.replayAvailable}
-            className="mt-3 flex min-h-10 items-center gap-2 rounded-full bg-[#7E22CE] px-4 text-xs font-black text-white disabled:cursor-not-allowed disabled:bg-[#AFA3B8]"
+            className="mt-3 flex min-h-11 items-center gap-2 rounded-lg bg-[#7E22CE] hover:bg-purple-900 hover:text-white px-4 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#AFA3B8]"
           >
             <Play className="size-3.5" aria-hidden="true" />
             {optimum.replayAvailable ? "Replay optimum lap" : "Optimum replay unavailable"}
-          </button>
+          </Button>
           {!optimum.replayAvailable ? (
             <p className="mt-2 text-xs font-bold">
               One or more source sectors do not contain usable replay telemetry.

@@ -1,0 +1,28 @@
+import {build} from 'esbuild';
+import {readFile,readdir,mkdir,writeFile,cp,copyFile} from 'node:fs/promises';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+const out='tmp/track-trace-beta/preview',root=process.cwd();await mkdir(out,{recursive:true});
+const historical=await readFile('tmp/track-trace-beta/historical-fixture.json','utf8').catch(()=> 'null');
+const permission=`import{useSyncExternalStore}from'react';export const useTrackTraceIdentity=()=> 'owner';export function useTrackTracePermission(){const tier=useSyncExternalStore(fn=>{addEventListener('trace-tier',fn);return()=>removeEventListener('trace-tier',fn)},()=>window.__traceTier);return{allowed:true,fullAccess:tier!=='sportsman',navigationLocked:tier==='sportsman',revision:tier,data:{feature:'track_trace',tier,can_record:tier!=='sportsman',can_read_history:true}}}`;
+await build({entryPoints:['qa/previews/track-trace-beta/Preview.tsx'],outfile:out+'/ui.js',bundle:true,format:'esm',platform:'browser',target:'es2022',jsx:'automatic',minify:true,alias:{'@':path.join(root,'src')},define:{'import.meta.env.DEV':'false','process.env.NODE_ENV':'"production"'},plugins:[{name:'isolated-qa',setup(b){b.onResolve({filter:/.*/},args=>{
+ const candidate=path.resolve(path.dirname(args.importer),args.path).replaceAll('\\','/');
+ if(args.path==='@/lib/supabase'||candidate.endsWith('/src/features/track-trace/api'))return{path:path.resolve('qa/previews/track-trace-beta/data.ts')};
+ if(candidate.endsWith('/src/features/track-trace/useTrackTrace'))return{path:'permission',namespace:'qa'};
+ if(args.path==='qa:historical-fixture')return{path:'historical',namespace:'qa'};
+ });b.onLoad({filter:/.*/,namespace:'qa'},args=>({contents:args.path==='historical'?'export default '+historical:permission,loader:'js',resolveDir:root}));}}],metafile:true}).then(async r=>{assert(!Object.keys(r.metafile.inputs).includes('src/lib/supabase.ts'));await writeFile('tmp/track-trace-beta/preview-metafile.json',JSON.stringify(r.metafile));});
+const assets='tmp/track-trace-beta/app-build/assets',cssFiles=(await readdir(assets)).filter(f=>f.endsWith('.css'));let css=(await Promise.all(cssFiles.map(f=>readFile(assets+'/'+f,'utf8')))).join('\n').replace(/@import\s*(?:url\()?["'][^"']*["']\)?[^;]*;/g,'');await writeFile(out+'/ui.css',css);
+await writeFile(out+'/index.html','<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta http-equiv="Content-Security-Policy" content="default-src \'self\';script-src \'self\';style-src \'self\' \'unsafe-inline\';connect-src \'none\';img-src \'self\' data:;font-src \'self\' data:"><title>OnlyFast Track Trace BETA · synthetic review</title><link rel="stylesheet" href="/ui.css"></head><body><div id="root"></div><script type="module" src="/ui.js"></script></body></html>');
+console.log('Actual Track Trace components packaged with isolated, labelled fixtures.');
+const screenshots='tmp/track-trace-beta/screenshots';
+if(await readdir(screenshots).catch(()=>null)){
+ await cp(screenshots,out+'/screenshots',{recursive:true});
+ const comparisons=[];
+ for(const [title,file] of [['Home buttons · exact reference','home-actions-390'],['Track Trace buttons · shared Home styling','trace-actions-390']]){
+  const source='tmp/track-trace-parity/navigation/'+file+'.png';
+  if(await readFile(source).catch(()=>null)){await copyFile(source,out+'/screenshots/'+file+'.png');comparisons.push([title,file]);}
+ }
+ if(await readFile('tmp/lap-blueprint/home-root-200-390.png').catch(()=>null)){await copyFile('tmp/lap-blueprint/home-root-200-390.png',out+'/screenshots/home-root-200-390.png');comparisons.push(['Original Home · 200% root-font limitation','home-root-200-390']);}
+ const views=[['Mobile menu','android-390-menu'],...comparisons,['Collapsed review','android-390-review-collapsed'],['Independent corner references','android-390-corner-references'],['Lap Blueprint','android-390-overall-assist'],['G-force review','android-390-gforce'],['Historical-format review','android-390-historical-review'],['Telemetry error state','android-390-telemetry-error'],['200% text only · no overlap','android-390-text-only-200'],['200% root font · inherited Home overlap','android-390-text-200'],['Desktop menu','desktop-1280-menu'],['Desktop review','desktop-1280-review-collapsed']];
+ await writeFile(out+'/gallery.html',`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Track Trace BETA visual review</title><style>body{font:16px/1.5 system-ui;background:#f5f6f8;color:#101820;margin:0;padding:20px}main{max-width:1000px;margin:auto}a,summary{color:#007dae}details{background:white;border:1px solid #dce1e8;border-radius:16px;margin:16px 0;padding:16px}summary{cursor:pointer;padding:8px 0;font-weight:600}img{display:block;max-width:100%;height:auto;margin:16px auto;border:1px solid #e5e7eb}p{max-width:70ch}</style></head><body><main><h1>OnlyFast Track Trace BETA</h1><p>Local visual review of actual integrated components using explicitly synthetic fixtures. No backend, physical GPS or production session data.</p><p><a href="/track-trace">Open interactive menu</a> · <a href="/track-trace?view=review&session=10000000-0000-4000-8000-000000000001">Open session review</a> · <a href="http://127.0.0.1:4201/app">Authenticated testing app</a></p>${views.map(([title,file],i)=>`<details${i===0?' open':''}><summary>${title}</summary><img loading="lazy" alt="${title}" src="/screenshots/${file}.png"></details>`).join('')}</main></body></html>`);
+}

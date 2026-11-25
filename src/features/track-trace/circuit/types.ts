@@ -74,6 +74,7 @@ export type MotionTelemetrySnapshot = {
 };
 
 export type LapTelemetrySample = {
+  interruptionBefore?:boolean;
   id?: string | number;
   sessionId?: string;
   lapId?: string | null;
@@ -160,6 +161,7 @@ export type CompletedLapDraft = {
 };
 
 export type SavedLapRecord = CompletedLapDraft & {
+  traceCompatibility?: {trackId?:string;trackVersion?:number;direction?:string;sectorVersion?:number;cornerVersion?:string};
   id: string;
   sessionId: string;
   userId: string;
@@ -438,6 +440,8 @@ export type LapSessionRecordingDiagnostics = {
 };
 
 export type SavedLapSession = {
+  hasStoredCornerDefinitions?: boolean;
+  geometryCompatibility?:'snapshot'|'declared'|'unverified';
   id: string;
   rawId?: string;
   userId: string;

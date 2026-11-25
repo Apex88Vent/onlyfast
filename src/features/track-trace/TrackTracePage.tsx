@@ -52,7 +52,7 @@ function TraceWorkspace({ userId, revision, setupId, canRecord, trackId, unlinke
     finally { setSaving(false); }
   }
   return <div className="space-y-5">
-    <p className="text-sm text-slate-600">{canRecord ? 'Pro and Factory include the same circuit timing and telemetry access, with no session limit.' : 'Your saved telemetry is read-only. Pro or Factory is required to record sessions or change telemetry. Archived setup contents remain restricted.'}</p>
+    {(mode!=='review'||!canRecord)&&<p className="text-sm text-slate-600">{canRecord ? 'Pro and Factory include the same circuit timing and telemetry access, with no session limit.' : 'Your saved telemetry is read-only. Pro or Factory is required to record sessions or change telemetry. Archived setup contents remain restricted.'}</p>}
     {setupId && canRecord && <p className="text-sm" role="status">{assistContext.isError ? 'Setup Assist telemetry access could not be verified.' : assistContext.data?.linked ? 'Saved telemetry is linked for Setup Assist. Recommendations will become available with the testing AI integration.' : 'Setup Assist will use telemetry linked to this exact race session.'}</p>}
     {!unlinked && !(mode==='review'&&selected) && <section className="rounded-2xl border bg-white p-5">
       <h2 className="text-lg font-bold">Saved circuit sessions</h2>
@@ -86,7 +86,7 @@ function TraceWorkspace({ userId, revision, setupId, canRecord, trackId, unlinke
       {!unlinked&&!!sessions.data?.length && <p className="mt-2 text-sm">This setup already has a linked session. Its existing association is preserved.</p>}
       {error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}</form>
     </section> : <p className="rounded-xl bg-white p-5 text-sm">{setupId ? 'This setup is read-only or its editing permission is being checked.' : 'Open an editable saved race setup to prepare a linked session.'}</p>)}
-    {selected && canRecord && <button className="rounded-lg border px-4 py-3 font-semibold text-[#007DAE]" onClick={()=>onRecord(selected)}>Open recording controls</button>}
+    {selected && canRecord && sessions.data?.some(s=>s.id===selected&&!s.ended_at) && <button className="rounded-lg border px-4 py-3 font-semibold text-[#007DAE]" onClick={()=>onRecord(selected)}>Open recording controls</button>}
     {selected && <TrackTraceSessionReview userId={userId} revision={revision} sessionId={selected} canModify={canRecord}/>}
   </div>;
 }
@@ -142,12 +142,11 @@ export default function TrackTracePage() {
   function openRecorder(id:string) {const next=new URLSearchParams(params);next.set('view','start');next.set('record',id);setParams(next);}
   function reviewRecording(id:string) {const next=new URLSearchParams(params);next.delete('record');next.delete('setup');next.set('view','review');next.set('session',id);setParams(next);}
   const workspace = (unlinked=false) => <TraceWorkspace key={userId + ':' + permissionKey + ':' + (unlinked ? 'unlinked' : setupId) + ':' + view+':'+params.get('session')} userId={userId!} revision={permissionKey} setupId={unlinked ? null : setupId} canRecord={canRecord} trackId={trackId} unlinked={unlinked} onRecord={openRecorder} initialSessionId={params.get('session')} onSelectTrack={id => {const next=new URLSearchParams(params);if(id)next.set('track',id);else next.delete('track');setParams(next);}} mode={view === 'review' ? 'review' : view === 'start' ? 'start' : 'all'} />;
-  return <main className="min-h-screen bg-[#F5F5F7] px-4 py-6 text-[#1A1B23]">
-    <div className="mx-auto max-w-3xl space-y-5">
-      <Link to="/app" className="inline-block py-2 text-[#007DAE] underline">Back to OnlyFast</Link>
+  return <main className={'min-h-dvh bg-background pt-[max(.75rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] text-foreground sm:pt-6 ' + (view==='menu'?'mx-auto max-w-7xl px-4 sm:px-6 lg:px-8':'px-3 sm:px-4')}>
+    <div className={'mx-auto space-y-3 sm:space-y-5 ' + (view==='menu'?'max-w-5xl':'max-w-4xl')}>
+      <Link to={view==='menu'?'/app':'/track-trace'} className="inline-flex min-h-11 items-center text-[#007DAE] underline">{view==='menu'?'Back to OnlyFast':'Back to Track Trace menu'}</Link>
       <div className="flex flex-wrap items-center gap-2"><h1 className="text-2xl font-bold">{TRACK_TRACE_NAME}</h1><TrackTraceBetaBadge /></div>
       {access.allowed && userId && (canRecord || ['review','session'].includes(view)) ? <>
-        {view !== 'menu' && <button onClick={() => selectView('menu')} className="py-2 text-[#007DAE] underline">Back to Track Trace menu</button>}
         {canRecord && !recordingId && <TrackTraceRecovery key={userId+permissionKey+view} userId={userId} onResume={openRecorder}/>}
         {!canRecord && ['start','scan'].includes(view) ? <section className="rounded-2xl border bg-white p-5" role="status">Historical telemetry is read-only. Pro or Factory is required to prepare or record a session. <button className="underline" onClick={() => selectView('review')}>Review saved sessions</button></section>
           : recordingId && view==='start' ? <TrackTraceRecorder key={userId+permissionKey+recordingId} userId={userId} sessionId={recordingId} onSaved={reviewRecording}/>

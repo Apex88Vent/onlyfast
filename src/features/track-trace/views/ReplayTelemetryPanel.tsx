@@ -1,5 +1,5 @@
 // Ported from Apex88Vent/OnlyLaps-app @ 22f372508582fb43d56b66947c26740233bcdb19.
-// Circuit-only adapter changes are documented in docs/ONLYFAST_2027_TRACK_TRACE_PARITY.md.
+// Circuit-only adapter changes are documented in docs/ONLYFAST_2027_TRACK_TRACE_BETA_REVIEW.md.
 import {
   GForceIndicator,
   GForceTelemetryReadouts
@@ -59,19 +59,19 @@ export function ReplayTelemetryPanel({
   return (
     <section
       className={`min-w-0 rounded-[16px] ${compact ? "border-2 p-2" : "border p-3"}`}
-      style={{ borderColor: accentColor, backgroundColor: "#050B11" }}
+      style={{ borderColor: accentColor, backgroundColor: "hsl(var(--card))" }}
       aria-label={`${title} telemetry, matched to ${title} GPS position`}
     >
       <div className={`${compact ? "mb-1.5 justify-center text-center" : "mb-3"} flex items-center gap-2`}>
-        <span className="size-2.5 rounded-full" style={{ backgroundColor: accentColor }} aria-hidden="true" />
-        <h3 className="truncate text-xs font-black sm:text-sm" style={{ color: accentColor }}>
+        <span className="size-2.5 rounded-lg" style={{ backgroundColor: accentColor }} aria-hidden="true" />
+        <h3 className="truncate text-xs font-semibold sm:text-sm" style={{ color: accentColor }}>
           {title}
         </h3>
       </div>
       {compact ? (
         <div className="flex flex-col items-center">
           <div
-            className="w-[108px] rounded-full border-2 p-0.5 sm:w-[128px]"
+            className="w-full max-w-[128px] rounded-lg border-2 p-0.5"
             style={{ borderColor: accentColor }}
             aria-label={`${title} G-force: lateral ${formatSignedMetric(lateralG)}, longitudinal ${formatSignedMetric(longitudinalG)}`}
           >
@@ -87,26 +87,26 @@ export function ReplayTelemetryPanel({
               maxBrakingG={lap?.maxBrakingG}
             />
           </div>
-          <dl className="mt-1.5 grid w-full grid-cols-2 gap-x-2 gap-y-1 text-center text-[9px] leading-4 text-[#D7DEE8] sm:text-[11px]">
+          <dl className="mt-1.5 grid w-full grid-cols-2 gap-x-2 gap-y-1 text-center text-[11px] leading-4 text-muted-foreground sm:text-[11px]">
             <div className="min-w-0">
-              <dt className="text-[#8D99A8]">Speed</dt>
-              <dd className="truncate font-black text-white">
+              <dt className="text-muted-foreground">Speed</dt>
+              <dd className="truncate font-semibold text-foreground">
                 {speedMph == null ? "—" : `${formatCompactMetric(speedMph, 1)} mph`}
               </dd>
             </div>
             <div className="min-w-0">
-              <dt className="text-[#8D99A8]">Lat G</dt>
-              <dd className="truncate font-black text-white">{formatSignedMetric(lateralG)}</dd>
+              <dt className="text-muted-foreground">Lat G</dt>
+              <dd className="truncate font-semibold text-foreground">{formatSignedMetric(lateralG)}</dd>
             </div>
             <div className="min-w-0">
-              <dt className="text-[#8D99A8]">Long G</dt>
-              <dd className="truncate font-black text-white">{formatSignedMetric(longitudinalG)}</dd>
+              <dt className="text-muted-foreground">Long G</dt>
+              <dd className="truncate font-semibold text-foreground">{formatSignedMetric(longitudinalG)}</dd>
             </div>
             <div className="min-w-0">
-              <dt className="text-[#8D99A8]">
+              <dt className="text-muted-foreground">
                 {positionLabel?.startsWith("Turn ") ? "Turn" : "Position"}
               </dt>
-              <dd className="truncate font-black" style={{ color: accentColor }}>
+              <dd className="truncate font-semibold" style={{ color: accentColor }}>
                 {positionLabel?.replace(/^Turn\s*/i, "") ?? `${Math.round(progress * 100)}%`}
               </dd>
             </div>

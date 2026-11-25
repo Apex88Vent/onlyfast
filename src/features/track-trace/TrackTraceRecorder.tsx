@@ -1,17 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { traceRpc, type TraceContext } from './api';
 import { CircuitRecorder, samplePoint, type RecordingTrack } from './circuit/recorder';
 import { emptyMotionTelemetry } from './circuit/telemetryMath';
-import { formatLapTime } from './circuit/lapFiltering';
+
 import { listDrafts, loadSamples, putDraft, putSample, removeDraft, type RecordingDraft } from './recordingJournal';
 import { useCircuitGps } from './useCircuitGps';
-import { SessionActiveScreen } from './views/SessionActiveScreen';
-import { ReplayMap, type ReplayViewMode } from './views/ReplayMap';
+import {LiveCircuitReadouts} from './LiveCircuitReadouts';
+import {Button} from '@/components/ui/button';
+import {Card} from '@/components/ui/card';
+import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from '@/components/ui/dialog';
+
 import type { PhoneMountOrientation } from './circuit/types';
 import { PhoneOrientationCalibration } from './views/PhoneOrientationCalibration';
 import GpsReadiness from './GpsReadiness';
 
-const button = 'rounded-lg bg-[#007DAE] px-4 py-3 font-semibold text-white disabled:opacity-50';
+const button = 'min-h-12 rounded-lg bg-[#007DAE] px-4 py-3 font-semibold text-white disabled:opacity-50';
 export default function TrackTraceRecorder({ userId, sessionId, onSaved }: { userId: string; sessionId: string; onSaved: (id: string) => void }) {
   const draft = useRef<RecordingDraft | null>(null);
   const engine = useRef<CircuitRecorder | null>(null);
@@ -28,9 +31,8 @@ export default function TrackTraceRecorder({ userId, sessionId, onSaved }: { use
   const [completed, setCompleted] = useState(false);
   const [name, setName] = useState('Circuit session');
   const [canStart, setCanStart] = useState(false);
-  const [now, setNow] = useState(Date.now());
+  const [, setNow] = useState(Date.now());
   const [mountOrientation,setMountOrientation]=useState<PhoneMountOrientation|null>(null);
-  const [mapView,setMapView]=useState<ReplayViewMode>('full');
   function interrupt() {
     if (!draft.current || !engine.current) return;
     const index = engine.current.samples.length;
@@ -184,48 +186,26 @@ export default function TrackTraceRecorder({ userId, sessionId, onSaved }: { use
     const link=document.createElement('a'); link.href=url; link.download=`track-trace-${sessionId}.json`; link.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
   const e=engine.current, d=draft.current;
-  const completedLapCount=e?.laps.length??0;
-  const completedLaps=useMemo(()=>completedLapCount?e!.finish(sessionId,userId):[],[e,completedLapCount,sessionId,userId]);
-  const validLapTimes=completedLaps.filter(l=>l.isValid).map(l=>l.lapTimeMs);
-  const timing=<div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-slate-950 p-4 text-white" aria-label="Circuit timing">
-    <p>Current lap<span className="block font-mono text-xl">{e?.lapStarted&&gps.state==='active'?formatLapTime(Math.max(0,now-Date.parse(e.lapStarted))):'--'}</span></p>
-    <p>Last lap<span className="block font-mono text-xl">{formatLapTime(e?.laps.at(-1)?.lapTimeMs)}</span></p>
-    <p>Fastest lap<span className="block font-mono text-xl">{formatLapTime(validLapTimes.length?Math.min(...validLapTimes):null)}</span></p>
-    <p>Completed laps<span className="block text-xl">{completedLapCount}</span></p>
-    <div className="col-span-2 text-sm">{completedLaps.at(-1)?.sectors.length?completedLaps.at(-1)!.sectors.map(s=><p key={s.sectorIndex}>Last lap sector {s.sectorIndex}: {formatLapTime(s.durationMs)}</p>):'Sector times appear after a valid lap when sector lines are configured.'}</div>
-  </div>;
-  const liveMap=!!e?.samples.length&&<ReplayMap track={d?.track?.map} traces={[{id:'live',label:'Live GPS',path:e.samples.map(samplePoint),progress:1,color:'#00A8E8'}]} title="Live track trace" viewMode={mapView} onViewModeChange={setMapView}/>;
-  return <section className="space-y-3 rounded-2xl border bg-white p-5" aria-label="Live circuit recorder" data-recording-revision={version}>
-    <h2 className="text-lg font-bold">{name}</h2>
-    <p className="text-sm">{d?.track ? `${d.track.map.track_name} · Version ${d.track.map.version}` : 'Free Record captures real circuit GPS. Automatic laps require a saved circuit with a start/finish line.'}</p>
-    {!ready && !error && <p role="status">Loading recording…</p>}
-    {completed ? <button className={button} onClick={()=>onSaved(sessionId)}>Review saved recording</button> : <>
-      <p role="status">{gps.running ? gps.state==='active' ? e?.lapStarted ? 'Timing active' : d?.track ? 'GPS recording · waiting for first start/finish crossing' : 'GPS recording · Free Record' : gps.error || 'Waiting for GPS · no current fix' : d?.ended ? 'Recording stopped · save pending' : d ? 'Retained recording · GPS paused' : 'Ready to arm GPS'}</p>
-      {!d&&<><PhoneOrientationCalibration selectedOrientation={mountOrientation} onChange={setMountOrientation} warning={null}/><GpsReadiness/></>}
-      {gps.running?<SessionActiveScreen latestGpsPoint={gps.state==='active'?gps.fix:null} gpsError={gps.error||null} liveStartedAt={d?.started??null} courseName={d?.track?.map.track_name??'Free Record · circuit GPS'} motionSnapshot={gps.motionSnapshot} motionPermissionStatus={gps.motionPermission} mountOrientationWarning={mountOrientation?null:'No phone direction selected. G-force data may be inaccurate.'} wakeLockMessage={gps.wake} ending={busy} onEndSession={()=>{setAnswer('');setConfirmCode(String(1000+crypto.getRandomValues(new Uint32Array(1))[0]%9000));}}>{timing}{liveMap}</SessionActiveScreen>:<>{d&&timing}{liveMap}</>}
-      <p className="text-sm">{e?.samples.length ?? 0} GPS samples · {e?.laps.length ?? 0} completed laps</p>
-      <p className="text-sm">GPS accuracy: {gps.fix?.accuracy != null ? `±${Math.round(gps.fix.accuracy)} m${gps.fix.accuracy>75 ? ' · poor accuracy; timing gates rejected' : ''}` : 'Waiting for a fix'}</p>
-      <p className="text-sm text-slate-600">{gps.wake} Background GPS is not guaranteed by this browser. Interrupted laps restart at the next valid crossing.</p>
-      <p className="text-sm">{gps.motionStatus}</p>
-      <div className="flex flex-wrap gap-3">
-        {!gps.running && !d?.ended && <button className={button} disabled={!ready||busy||!canStart} onClick={()=>void arm()}>{busy?'Starting…':d?'Resume GPS':'Arm and start GPS'}</button>}
-        {gps.running && <button className="rounded-lg border px-4 py-3" onClick={()=>void gps.enableMotion()}>Enable motion sensors</button>}
-        {d && !d.ended && !gps.running && <button className="rounded-lg border px-4 py-3" disabled={busy} onClick={()=>{setAnswer('');setConfirmCode(String(1000+crypto.getRandomValues(new Uint32Array(1))[0]%9000));}}>End and save session</button>}
-        {d?.ended && <button className={button} disabled={busy} onClick={()=>void save()}>{busy?'Saving…':'Retry save'}</button>}
-        {d && <button className="underline" onClick={download}>Download retained recording</button>}
-      </div>
-      {confirmCode && <form className="space-y-2 rounded-xl border p-4" onSubmit={event=>{event.preventDefault();void save();}} aria-label="Confirm end session">
-        <p>To end this session, enter <strong className="font-mono">{confirmCode}</strong>. GPS continues until you confirm.</p>
-        <label className="block" htmlFor="trace-end-code">Four-digit confirmation</label>
-        <input id="trace-end-code" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} value={answer} onChange={event=>setAnswer(event.target.value)} className="w-full rounded-lg border p-3" autoComplete="off" />
-        <div className="flex flex-wrap gap-3"><button className={button} disabled={answer!==confirmCode||busy}>Confirm end and save</button><button type="button" className="underline" onClick={()=>setConfirmCode('')}>Keep recording</button></div>
-      </form>}
-      {sync && <p role="status" className="text-sm">{sync} <button className="underline" onClick={()=>void upload()}>Retry upload</button></p>}
-    </>}
-    {(error||gps.error) && <p role="alert" className="text-sm text-red-700">{error||gps.error}</p>}
+  const controls=<Card className="space-y-3 rounded-2xl p-4">
+    <p role="status" className="text-sm">{gps.running?gps.state==='active'?'GPS recording active':'Waiting for GPS · no current fix':d?.ended?'Recording stopped · save pending':d?'Retained recording · GPS paused':'Ready to arm GPS'}</p>
+    {!d&&<><PhoneOrientationCalibration selectedOrientation={mountOrientation} onChange={setMountOrientation} warning={null}/><GpsReadiness/></>}
+    <div className="flex flex-wrap gap-3">
+      {!gps.running&&!d?.ended&&<Button className={button} disabled={!ready||busy||!canStart} onClick={()=>void arm()}>{busy?'Starting…':d?'Resume GPS':'Arm and start GPS'}</Button>}
+      {gps.running&&<Button variant="outline" className="min-h-12" onClick={()=>void gps.enableMotion()}>Enable motion sensors</Button>}
+      {d&&!d.ended&&<Button variant="outline" className="min-h-12" disabled={busy} onClick={()=>{setAnswer('');setConfirmCode(String(1000+crypto.getRandomValues(new Uint32Array(1))[0]%9000));}}>End and save session</Button>}
+      {d?.ended&&<Button className={button} disabled={busy} onClick={()=>void save()}>Retry save</Button>}
+      {d&&<Button variant="outline" className="min-h-11" onClick={download}>Download retained recording</Button>}
+    </div><p className="text-xs leading-5 text-muted-foreground">{gps.wake} Background GPS may pause; interrupted laps restart at a valid crossing.</p><p className="text-xs text-muted-foreground">{gps.motionStatus}</p>
+  </Card>;
+  return <section className="min-w-0 space-y-3" aria-label="Live circuit recorder" data-recording-revision={version}>
+    {!ready&&!error&&<p role="status">Loading recording…</p>}
+    <LiveCircuitReadouts engine={e} started={d?.started??null} name={name} running={gps.running} fix={gps.state==='active'?gps.fix:null} error={gps.error} userId={userId} sessionId={sessionId} controls={completed?<Button onClick={()=>onSaved(sessionId)}>Review saved recording</Button>:controls}/>
+    <p className="text-xs text-muted-foreground">G-force visual guide: 0.75 G yellow · 1.50 G red. Actual measured numbers are preserved.</p>
+    <Dialog open={!!confirmCode} onOpenChange={open=>{if(!open)setConfirmCode('');}}><DialogContent className="max-h-[85dvh] overflow-y-auto rounded-2xl"><DialogHeader><DialogTitle>End recording</DialogTitle><DialogDescription>GPS continues until you confirm. Recorded samples are retained.</DialogDescription></DialogHeader><form className="space-y-3" aria-label="Confirm end session" onSubmit={event=>{event.preventDefault();void save();}}><p>To end this session, enter <strong className="font-mono">{confirmCode}</strong>.</p><label htmlFor="trace-end-code" className="block">Four-digit confirmation</label><input id="trace-end-code" inputMode="numeric" maxLength={4} pattern="[0-9]{4}" autoComplete="off" className="min-h-12 w-full rounded-lg border p-3" value={answer} onChange={e=>setAnswer(e.target.value)}/><div className="flex flex-wrap gap-3"><Button className={button} disabled={answer!==confirmCode||busy||!e?.samples.length}>Confirm end and save</Button><Button variant="outline" type="button" onClick={()=>setConfirmCode('')}>Keep recording</Button></div>{!e?.samples.length&&<p className="text-sm text-amber-900">No GPS samples have arrived. Resume GPS and wait for a fix before saving.</p>}</form></DialogContent></Dialog>
+    {sync&&!!e?.samples.length&&<p role="status" className="text-sm">{sync} <Button variant="link" onClick={()=>void upload()}>Retry sync</Button></p>}
+    {(error||gps.error)&&<p role="alert" className="text-sm text-red-700">{error||gps.error}</p>}
   </section>;
 }
-
 export function TrackTraceRecovery({userId,onResume}:{userId:string;onResume:(id:string)=>void}) {
   const [drafts,setDrafts]=useState<RecordingDraft[]>([]);
   useEffect(()=>{let active=true;void listDrafts(userId).then(rows=>{if(active)setDrafts(rows);}).catch(()=>undefined);return()=>{active=false;};},[userId]);

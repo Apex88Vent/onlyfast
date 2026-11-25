@@ -1,5 +1,13 @@
 # OnlyFast Track Trace foundation
 
+Latest presentation update: [Lap Blueprint naming and exact Home menu styling](ONLYFAST_2027_TRACK_TRACE_LAP_BLUEPRINT_UI.md).
+Customer-facing Overall Assist is now Lap Blueprint; internal analysis/API names remain compatible.
+
+Previous BETA update: [compact mobile review, independent corner benchmarks and driving analysis](ONLYFAST_2027_TRACK_TRACE_BETA_REVIEW.md).
+This November 25 update supersedes the review presentation below. Recording,
+timing, calibration, ownership and setup-link algorithms remain intact. The report
+separates local fixture checks, testing-backend checks and outstanding device tests.
+
 Current corrective update: [OnlyLaps circuit parity, GPS status and historical telemetry](ONLYFAST_2027_TRACK_TRACE_PARITY.md).
 Original recording/review/replay and graphical timing-marker components now run
 inside the existing integration. The report distinguishes verified compatibility

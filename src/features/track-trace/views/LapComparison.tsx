@@ -1,5 +1,6 @@
+import { Button } from "@/components/ui/button";
 // Ported from Apex88Vent/OnlyLaps-app @ 22f372508582fb43d56b66947c26740233bcdb19.
-// Circuit-only adapter changes are documented in docs/ONLYFAST_2027_TRACK_TRACE_PARITY.md.
+// Circuit-only adapter changes are documented in docs/ONLYFAST_2027_TRACK_TRACE_BETA_REVIEW.md.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pause, Play, RotateCcw } from "lucide-react";
 import { CornerComparisonCards } from "./CornerComparisonCards";
@@ -42,6 +43,8 @@ type LapComparisonProps = {
   optimum: OptimumLapResult | null;
   selectedSamplesOverride?: LapTelemetrySample[];
   selectedLabel?: string;
+  showCornerAnalysis?: boolean;
+  showTelemetry?: boolean;
 };
 
 const primaryColor = getReplayLapColor("primary");
@@ -60,7 +63,9 @@ export function LapComparison({
   selectedLap,
   optimum,
   selectedSamplesOverride,
-  selectedLabel
+  selectedLabel,
+  showCornerAnalysis=true,
+  showTelemetry=true
 }: LapComparisonProps) {
   const [compareEnabled, setCompareEnabled] = useState(false);
   const [comparisonTargetId, setComparisonTargetId] = useState("");
@@ -323,14 +328,14 @@ export function LapComparison({
 
   return (
     <section className="space-y-3" aria-label="Selected lap replay and analysis">
-      <section className="rounded-[22px] bg-white p-4 text-[#071018] shadow-[0_14px_30px_rgba(0,0,0,0.28)]">
+      <section className="rounded-2xl bg-white p-4 text-[#071018] shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#5D6675]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#5D6675]">
               Replay Analysis
             </p>
-            <h2 className="mt-1 text-2xl font-black">Selected Lap Replay</h2>
-            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-black">
+            <h2 className="mt-1 text-2xl font-semibold">Selected Lap Replay</h2>
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-semibold">
               <span style={{ color: primaryColor }}>{primaryPanelLabel}</span>
               <span>{formatLapTime(selectedLap.lapTimeMs)}</span>
               <span>
@@ -338,7 +343,7 @@ export function LapComparison({
               </span>
             </div>
           </div>
-          <button
+          <Button variant="outline"
             type="button"
             role="switch"
             aria-checked={compareEnabled}
@@ -355,18 +360,18 @@ export function LapComparison({
               setCompareEnabled((current) => !current);
               reset();
             }}
-            className={`min-h-11 rounded-full px-4 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-45 ${
+            className={`min-h-11 rounded-lg px-4 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-45 ${
               compareEnabled
-                ? "bg-[#7E22CE] text-white"
+                ? "bg-[#7E22CE] text-white hover:bg-purple-900 hover:text-white"
                 : "border border-[#7E22CE]/35 text-[#7E22CE]"
             }`}
           >
             {compareEnabled ? "Compare Laps On" : "Compare Laps"}
-          </button>
+          </Button>
         </div>
 
         {compareEnabled ? (
-          <label className="mt-3 block text-xs font-black text-[#5D6675]">
+          <label className="mt-3 block text-xs font-semibold text-[#5D6675]">
             Compare to
             <select
               value={comparisonTargetId}
@@ -374,7 +379,7 @@ export function LapComparison({
                 setComparisonTargetId(event.target.value);
                 reset();
               }}
-              className="mt-1 min-h-11 w-full rounded-[14px] border border-[#C8D1DD] bg-white px-3 text-sm font-black text-[#071018]"
+              className="mt-1 min-h-11 w-full rounded-[14px] border border-[#C8D1DD] bg-white px-3 text-sm font-semibold text-[#071018]"
               aria-label="Comparison lap"
             >
               {optimum ? <option value="optimum">Optimum Lap</option> : null}
@@ -388,12 +393,12 @@ export function LapComparison({
         ) : null}
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#D7DEE8] pt-3">
-          <label className="text-xs font-black text-[#5D6675]">
+          <label className="text-xs font-semibold text-[#5D6675]">
             Playback speed
             <select
               value={playbackSpeed}
               onChange={(event) => setPlaybackSpeed(Number(event.target.value))}
-              className="ml-2 min-h-9 rounded-full border border-[#C8D1DD] bg-white px-3 text-sm font-black text-[#071018]"
+              className="ml-2 min-h-11 rounded-lg border border-[#C8D1DD] bg-white px-3 text-sm font-semibold text-[#071018]"
             >
               {[0.5, 1, 1.5, 2].map((speed) => (
                 <option key={speed} value={speed}>{speed}x</option>
@@ -401,18 +406,18 @@ export function LapComparison({
             </select>
           </label>
           <div className="flex items-center gap-2">
-            <button
+            <Button variant="outline"
               type="button"
               onClick={reset}
-              className="flex size-10 items-center justify-center rounded-full border border-[#C8D1DD] text-[#007DAE]"
+              className="flex size-10 items-center justify-center rounded-lg border border-[#C8D1DD] text-[#007DAE]"
               aria-label="Restart replay"
             >
               <RotateCcw className="size-4" aria-hidden="true" />
-            </button>
-            <button
+            </Button>
+            <Button variant="outline"
               type="button"
               onClick={() => setPlaying((current) => !current)}
-              className="flex size-11 items-center justify-center rounded-full bg-[#007DAE] text-white"
+              className="flex size-11 items-center justify-center rounded-lg bg-[#007DAE] text-white hover:bg-[#006B95] hover:text-white"
               aria-label={playing ? "Pause replay" : "Play replay"}
             >
               {playing ? (
@@ -420,7 +425,7 @@ export function LapComparison({
               ) : (
                 <Play className="size-5" aria-hidden="true" />
               )}
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -437,17 +442,17 @@ export function LapComparison({
           aria-label="Normalized track-position timeline"
         />
 
-        <div className="mt-3 bg-[#050B11] p-2 sm:p-3">
+        <div className="mt-3 bg-card p-2 sm:p-3">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <TraceModeSelector
               mode={effectiveTraceMode}
               onChange={setTraceMode}
               smoothedAvailable={smoothedAvailable}
             />
-            <div className="flex flex-wrap gap-3 text-[11px] font-black text-[#D7DEE8]">
+            <div className="flex flex-wrap gap-3 text-[11px] font-semibold text-muted-foreground">
               <span className="flex items-center gap-1.5" style={{ color: primaryColor }}>
                 <span
-                  className="size-2.5 rounded-full"
+                  className="size-2.5 rounded-lg"
                   style={{ backgroundColor: primaryColor }}
                   aria-hidden="true"
                 />
@@ -456,7 +461,7 @@ export function LapComparison({
               {compareEnabled && comparisonLap ? (
                 <span className="flex items-center gap-1.5" style={{ color: comparisonColor }}>
                   <span
-                    className="size-2.5 rounded-full"
+                    className="size-2.5 rounded-lg"
                     style={{ backgroundColor: comparisonColor }}
                     aria-hidden="true"
                   />
@@ -504,7 +509,7 @@ export function LapComparison({
           </div>
         </div>
 
-        <div
+        {showTelemetry&&<div
           className={`mt-2 grid gap-2 ${
             compareEnabled ? "grid-cols-2" : "max-w-sm grid-cols-1"
           }`}
@@ -530,7 +535,7 @@ export function LapComparison({
               compact
             />
           ) : null}
-        </div>
+        </div>}
 
         <SelectedLapDetails
           lap={selectedLap}
@@ -539,7 +544,7 @@ export function LapComparison({
         />
       </section>
 
-      {cornerComparison ? (
+      {showCornerAnalysis&&(cornerComparison ? (
         <CornerComparisonCards
           comparison={cornerComparison}
           selectedCornerNumber={selectedCornerNumber}
@@ -555,11 +560,11 @@ export function LapComparison({
           analysisPersistence={analysisPersistence}
         />
       ) : (
-        <p className="rounded-[18px] border border-white/[0.12] bg-[#071018]/90 p-4 text-sm font-bold text-[#D7DEE8]">
+        <p className="rounded-2xl border border-border bg-card p-4 text-sm font-bold text-muted-foreground">
           Corner analysis will appear when this selected lap and a reference lap have
           saved corner telemetry.
         </p>
-      )}
+      ))}
     </section>
   );
 }
