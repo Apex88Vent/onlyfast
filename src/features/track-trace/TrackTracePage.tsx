@@ -9,6 +9,10 @@ import TrackTraceSessionReview from './TrackTraceSessionReview';
 import TrackTraceLibrary from './TrackTraceLibrary';
 import TrackTraceRecorder, { TrackTraceRecovery } from './TrackTraceRecorder';
 import TrackTraceScanner from './TrackTraceScanner';
+import { ReviewSessionsPage } from './views/ReviewSessionsPage';
+import { TrackEditPage } from './views/TrackEditPage';
+import { CornerEditorPage } from './views/CornerEditorPage';
+import { SectorEditorPage } from './views/SectorEditorPage';
 
 // Keyed by identity/membership revision: switching accounts or tiers unmounts
 // all session data and pending writes before any new access decision is shown.
@@ -37,6 +41,7 @@ function TraceWorkspace({ userId, revision, setupId, canRecord, trackId, unlinke
   });
   const canPrepare = canRecord && (unlinked || (!!setupAccess.data && !setupAccess.isError &&
     (setupAccess.data.editable === true || (!('editable' in setupAccess.data) && typeof (setupAccess.data as { created_at?: unknown }).created_at === 'string'))));
+  if(mode==='review'&&!setupId&&!selected)return <ReviewSessionsPage/>;
   async function create(event: React.FormEvent) {
     event.preventDefault(); setSaving(true); setError('');
     if (!canPrepare) { setSaving(false); setError('This setup is read-only.'); return; }
@@ -49,7 +54,7 @@ function TraceWorkspace({ userId, revision, setupId, canRecord, trackId, unlinke
   return <div className="space-y-5">
     <p className="text-sm text-slate-600">{canRecord ? 'Pro and Factory include the same circuit timing and telemetry access, with no session limit.' : 'Your saved telemetry is read-only. Pro or Factory is required to record sessions or change telemetry. Archived setup contents remain restricted.'}</p>
     {setupId && canRecord && <p className="text-sm" role="status">{assistContext.isError ? 'Setup Assist telemetry access could not be verified.' : assistContext.data?.linked ? 'Saved telemetry is linked for Setup Assist. Recommendations will become available with the testing AI integration.' : 'Setup Assist will use telemetry linked to this exact race session.'}</p>}
-    {!unlinked && <section className="rounded-2xl border bg-white p-5">
+    {!unlinked && !(mode==='review'&&selected) && <section className="rounded-2xl border bg-white p-5">
       <h2 className="text-lg font-bold">Saved circuit sessions</h2>
       {sessions.isPending ? <p role="status">Loading sessions…</p> : sessions.isError ? <p role="alert">Sessions could not be loaded. <button className="underline" onClick={() => void sessions.refetch()}>Try again</button></p> : <>
         {!sessions.data?.length && <p className="mt-2 text-sm text-slate-600">No saved circuit sessions {setupId ? 'linked to this setup' : 'yet'}.</p>}
@@ -82,7 +87,7 @@ function TraceWorkspace({ userId, revision, setupId, canRecord, trackId, unlinke
       {error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}</form>
     </section> : <p className="rounded-xl bg-white p-5 text-sm">{setupId ? 'This setup is read-only or its editing permission is being checked.' : 'Open an editable saved race setup to prepare a linked session.'}</p>)}
     {selected && canRecord && <button className="rounded-lg border px-4 py-3 font-semibold text-[#007DAE]" onClick={()=>onRecord(selected)}>Open recording controls</button>}
-    {selected && <TrackTraceSessionReview userId={userId} revision={revision} sessionId={selected} />}
+    {selected && <TrackTraceSessionReview userId={userId} revision={revision} sessionId={selected} canModify={canRecord}/>}
   </div>;
 }
 
@@ -125,7 +130,9 @@ export default function TrackTracePage() {
     const next = new URLSearchParams(params);
     next.set('view', nextView);
     next.delete('record');
-    if (nextSetupId) next.set('setup', nextSetupId);
+    next.delete('session');
+    if(nextView==='menu'){next.delete('setup');next.delete('prepare');}
+    else if (nextSetupId) next.set('setup', nextSetupId);
     setParams(next);
   }
   function selectPreparation(kind: 'linked' | 'unlinked') {
@@ -144,6 +151,7 @@ export default function TrackTracePage() {
         {canRecord && !recordingId && <TrackTraceRecovery key={userId+permissionKey+view} userId={userId} onResume={openRecorder}/>}
         {!canRecord && ['start','scan'].includes(view) ? <section className="rounded-2xl border bg-white p-5" role="status">Historical telemetry is read-only. Pro or Factory is required to prepare or record a session. <button className="underline" onClick={() => selectView('review')}>Review saved sessions</button></section>
           : recordingId && view==='start' ? <TrackTraceRecorder key={userId+permissionKey+recordingId} userId={userId} sessionId={recordingId} onSaved={reviewRecording}/>
+          : canRecord && trackId && ['track-edit','corners','sectors'].includes(view) ? view==='corners'?<CornerEditorPage key={userId+permissionKey+trackId} trackId={trackId}/>:view==='sectors'?<SectorEditorPage key={userId+permissionKey+trackId} trackId={trackId}/>:<TrackEditPage key={userId+permissionKey+trackId+params.get('saved')} trackId={trackId} saved={params.get('saved')==='corners'?'corners':params.get('saved')==='sectors'?'sectors':null} savedCount={params.has('count')?Number(params.get('count')):null}/>
           : view === 'library' ? <TrackTraceLibrary userId={userId} revision={permissionKey} onSelect={track => { const next=new URLSearchParams(params); next.set('track',track.id);next.set('view','start');setParams(next); }} />
           : view === 'scan' ? <TrackTraceScanner key={userId+permissionKey} userId={userId} revision={permissionKey}/> : view === 'start' ? <>
           <section className="rounded-2xl border bg-white p-5" aria-label="Start Session options"><h2 className="text-lg font-bold">Start Session</h2><p className="mt-2 text-sm text-[#6B7280]">Choose how to prepare your circuit recording.</p><div className="mt-4 grid gap-3 sm:grid-cols-2">

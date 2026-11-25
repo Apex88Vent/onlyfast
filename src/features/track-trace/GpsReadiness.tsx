@@ -18,8 +18,8 @@ export default function GpsReadiness() {
   }
   return <section className="rounded-xl border border-[#E5E7EB] bg-white p-4">
     <h3 className="font-semibold">GPS availability</h3>
-    <p className="mt-1 text-sm text-[#6B7280]">This checks one location fix. It does not arm a session, record GPS, or create lap times. Live recording still requires circuit-engine integration and device validation.</p>
-    <button type="button" onClick={() => void check()} disabled={busy} className="mt-3 rounded-lg border border-[#00A8E8] px-3 py-2 text-sm font-semibold text-[#007DAE] disabled:opacity-50">{busy ? 'Checking GPS…' : 'Check GPS availability'}</button>
+    <p className="mt-1 text-sm text-[#6B7280]">Test a precise location fix before arming. A successful fix confirms location access; it does not validate lap timing or begin recording.</p>
+    <button type="button" onClick={() => void check()} disabled={busy} className="mt-3 rounded-lg border border-[#00A8E8] px-3 py-2 text-sm font-semibold text-[#007DAE] disabled:opacity-50">{busy ? 'Checking GPS…' : 'Test GPS'}</button>
     {status && <p role="status" className="mt-2 text-sm text-[#6B7280]">{status}</p>}
   </section>;
 }

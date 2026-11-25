@@ -4,6 +4,7 @@ import type { LapTelemetrySample } from './circuit/types.ts';
 export interface RecordingDraft {
   owner: string; session: string; recorder: string; started: string; track: RecordingTrack | null;
   ended: string | null; acknowledged: number; interruptions: number[];
+  mountOrientation?:import('./circuit/types.ts').PhoneMountOrientation;
 }
 const databaseName = 'onlyfast-track-trace-recording-v1';
 function open(): Promise<IDBDatabase> {

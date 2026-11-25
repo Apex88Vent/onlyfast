@@ -1,5 +1,5 @@
-// Circuit extraction from Apex88Vent/OnlyLaps-app @ 22f372508582fb43d56b66947c26740233bcdb19.
-// See README.md for provenance and compatibility changes.
+// Ported from Apex88Vent/OnlyLaps-app @ 22f372508582fb43d56b66947c26740233bcdb19.
+// Circuit-only adapter changes are documented in docs/ONLYFAST_2027_TRACK_TRACE_PARITY.md.
 export type TrackScanStage =
   | "intro"
   | "permission_check"
@@ -120,7 +120,7 @@ export type SavedTrackMap = {
   base_layer: TelemetryBaseLayer | null;
   preview_bounds: PreviewBounds | null;
   geojson: Record<string, unknown> | null;
-  map_source: string | null;
+  map_source: "track_scan" | "gumball" | string | null;
   scan_status: "scanned" | "unscanned";
   map_confidence: number | null;
   start_finish_source: "scanned" | "automatic" | "manual" | null;
@@ -1074,4 +1074,3 @@ export function findNearbySavedTrack(
     .filter(({ distanceMeters }) => distanceMeters <= thresholdMeters)
     .sort((a, b) => a.distanceMeters - b.distanceMeters)[0]?.track ?? null;
 }
-

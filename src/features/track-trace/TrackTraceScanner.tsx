@@ -4,13 +4,19 @@ import { useCircuitGps } from './useCircuitGps';
 import { loadScanDraft, saveScanDraft } from './recordingJournal';
 import { calculateBoundingBox, calculateCenterPoint, calculateDistanceMeters, generateAreaKey, generateFacilityKey, shouldAddGpsPoint, summarizeGpsAccuracy, type GpsPoint } from './circuit/onlylapsTrackScanUtils';
 import type { CornerDefinition, SectorLineDefinition } from './circuit/types';
-import TracePathPreview from './TracePathPreview';
+import { Link } from 'react-router-dom';
 import TrackTracePublication from './TrackTracePublication';
 import type { TraceTrack } from './api';
+import { TrackScanRecorder } from './views/TrackScanRecorder';
+import { TrackScanPreview } from './views/TrackScanPreview';
+import { TrackScanDetails } from './views/TrackScanDetails';
+import { TrackScanReview } from './views/TrackScanReview';
+import { TrackScanStepper } from './views/TrackScanStepper';
+import type { TrackScanMetadata } from './circuit/onlylapsTrackScanUtils';
 
 type PathKind='outside'|'inside'|'finish';
-interface ScanDraft { id:string; name:string; location:string; type:string; direction:string; outside:GpsPoint[]; inside:GpsPoint[]; finish:GpsPoint[]; corners:CornerDefinition[]; lines:SectorLineDefinition[]; broken:PathKind[]; savedId?:string; recordingPath?:PathKind|null; }
-const fresh=():ScanDraft=>({id:crypto.randomUUID(),name:'',location:'',type:'dirt_oval',direction:'counterclockwise',outside:[],inside:[],finish:[],corners:[],lines:[],broken:[]});
+interface ScanDraft { id:string; name:string; location:string; type:string; direction:string; outside:GpsPoint[]; inside:GpsPoint[]; finish:GpsPoint[]; corners:CornerDefinition[]; lines:SectorLineDefinition[]; broken:PathKind[]; savedId?:string; recordingPath?:PathKind|null; shape?:TrackScanMetadata['trackShape']; length?:string; notes?:string; detailsConfirmed?:boolean; review?:boolean; }
+const fresh=():ScanDraft=>({id:crypto.randomUUID(),name:'',location:'',type:'dirt_oval',direction:'counterclockwise',shape:'custom_unknown',length:'Custom / Unknown',outside:[],inside:[],finish:[],corners:[],lines:[],broken:[]});
 const button='rounded-lg border border-[#007DAE] px-3 py-3 text-sm font-semibold text-[#007DAE] disabled:opacity-50';
 function pathLength(points:GpsPoint[]) {return points.slice(1).reduce((sum,p,i)=>sum+calculateDistanceMeters(points[i],p),0);}
 function atProgress(path:GpsPoint[],progress:number) {
@@ -59,8 +65,8 @@ export default function TrackTraceScanner({userId,revision}:{userId:string;revis
       if(!center||!bbox)throw new Error('Capture the outside, inside and start/finish paths before saving.');
       if(d.broken.length)throw new Error('Clear and recapture interrupted boundaries before saving this scan.');
       if(!d.name.trim()||!d.location.trim())throw new Error('Track name and location are required.');
-      const result=await traceRpc<{saved:boolean;id?:string;errors?:string[]}>('save_track_trace_scan',{p_scan_id:d.id,p_scan:{
-        track_name:d.name.trim(),community_location:d.location.trim(),track_type:d.type,track_shape:'custom_unknown',direction:d.direction,
+      const result=await traceRpc<{saved:boolean;id?:string;errors?:string[]}>('save_track_trace_scan_details',{p_scan_id:d.id,p_scan:{
+        track_name:d.name.trim(),community_location:d.location.trim(),track_type:d.type,track_shape:d.shape??'custom_unknown',track_length:d.length??null,notes:d.notes??null,direction:d.direction,
         source:'track_scan',map_source:'track_scan',scan_status:'scanned',is_open_route:false,center_lat:center.lat,center_lng:center.lng,bbox,
         area_key:generateAreaKey(center.lat,center.lng),facility_key:generateFacilityKey(center.lat,center.lng),outside_path:d.outside,inside_path:d.inside,start_finish_path:d.finish,
         gps_summary:summarizeGpsAccuracy(d.outside,d.finish,d.inside),track_length_meters:(pathLength(d.outside)+pathLength(d.inside))/2,
@@ -88,26 +94,45 @@ export default function TrackTraceScanner({userId,revision}:{userId:string;revis
     update({...d,lines});setSectorA(null);setSectorProgress('');setError('');
   }
   function download() {const url=URL.createObjectURL(new Blob([JSON.stringify(current.current)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='track-trace-scan.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+  function beginBoundary(k:PathKind){
+    const d=current.current;if(!d)return;
+    if(d.broken.includes(k)){setError('Clear and restart this interrupted boundary before continuing.');return;}
+    update({...d,recordingPath:k});path.current=k;setCapturing(k);setGpsGap(false);setError('');gps.start();
+  }
+  function endBoundary(k:PathKind,next:PathKind|null){
+    const d=current.current;if(!d)return;
+    if(d[k].length<(k==='finish'?2:3)){setError('Record enough real GPS points before ending this boundary.');return;}
+    if(next)beginBoundary(next);else{path.current=null;setCapturing(null);gps.stop();update({...d,recordingPath:null,review:true});}
+  }
   if(!draft)return <section className="rounded-2xl border bg-white p-5"><p role={error?'alert':'status'}>{error||'Loading retained scan…'}</p></section>;
   return <section className="space-y-4 rounded-2xl border bg-white p-5" aria-label="Circuit scanner">
     <h2 className="text-lg font-bold">Scan circuit track</h2>
+    <TrackScanStepper stage={draft.savedId?'saved':draft.review?'review':!draft.detailsConfirmed&&!draft.outside.length?'track_characteristics':capturing==='outside'?'outside_recording':capturing==='finish'?'start_finish_recording':capturing==='inside'?'inside_recording':'outside_ready'}/>
     <p className="text-sm">Walk the outside and inside boundaries and across the start/finish line. Each boundary must return within 50 m of its start. Only fixes with accuracy of 25 m or better enter the scan. Scans save privately for review before community submission.</p>
-    {draft.savedId ? <><p role="status">Private scan saved. Open Track Library to select it or submit it for approval.</p>{savedTrack&&<TrackTracePublication key={savedTrack.id+revision} track={savedTrack}/>}<button className={button} onClick={()=>{current.current=fresh();update(current.current);setSavedTrack(null);}}>Start another scan</button></> : <>
-      <div className="grid gap-3 sm:grid-cols-2"><label>Track name<input className="mt-1 w-full rounded-lg border p-3" value={draft.name} maxLength={80} onChange={e=>update({...draft,name:e.target.value})}/></label><label>Location<input className="mt-1 w-full rounded-lg border p-3" value={draft.location} maxLength={160} onChange={e=>update({...draft,location:e.target.value})}/></label>
-      <label>Circuit type<select className="mt-1 w-full rounded-lg border p-3" value={draft.type} onChange={e=>update({...draft,type:e.target.value})}><option value="dirt_oval">Dirt oval</option><option value="pavement_oval">Pavement oval</option><option value="road_course">Closed road course</option></select></label>
-      <label>Travel direction<select className="mt-1 w-full rounded-lg border p-3" value={draft.direction} onChange={e=>update({...draft,direction:e.target.value})}><option value="counterclockwise">Counterclockwise</option><option value="clockwise">Clockwise</option></select></label></div>
+    {draft.savedId ? <><Link className="block py-3 text-[#007DAE] underline" to={'/track-trace?view=track-edit&track='+draft.savedId}>Open track map, corners and sectors</Link><p role="status">Private scan saved. Open Track Library to select it or submit it for approval.</p>{savedTrack&&<TrackTracePublication key={savedTrack.id+revision} track={savedTrack}/>}<button className={button} onClick={()=>{current.current=fresh();update(current.current);setSavedTrack(null);}}>Start another scan</button></> : <>
+      {!draft.review&&<div className="grid gap-3 sm:grid-cols-2"><label>Track name<input className="mt-1 w-full rounded-lg border p-3" value={draft.name} maxLength={80} onChange={e=>update({...draft,name:e.target.value})}/></label><label>Location<input className="mt-1 w-full rounded-lg border p-3" value={draft.location} maxLength={160} onChange={e=>update({...draft,location:e.target.value})}/></label>
+      <label>Travel direction<select className="mt-1 w-full rounded-lg border p-3" value={draft.direction} onChange={e=>update({...draft,direction:e.target.value})}><option value="counterclockwise">Counterclockwise</option><option value="clockwise">Clockwise</option></select></label></div>}
+      {!draft.detailsConfirmed&&!draft.outside.length?<TrackScanDetails error={error||null} trackType={draft.type as TrackScanMetadata['trackType']} trackShape={draft.shape??'custom_unknown'} trackLength={draft.length??'Custom / Unknown'} onTrackTypeChange={type=>update({...draft,type:type||'dirt_oval'})} onTrackShapeChange={shape=>update({...draft,shape:shape||null})} onTrackLengthChange={length=>update({...draft,length})} onCancel={()=>{gps.stop();update(fresh());}} onContinue={()=>{if(!draft.name.trim()||!draft.location.trim()){setError('Track name and location are required.');return;}setError('');update({...draft,detailsConfirmed:true});}}/>:draft.review?<TrackScanReview fallbackTrackName="Circuit" trackName={draft.name} notes={draft.notes??''} onTrackNameChange={name=>update({...draft,name:name.slice(0,80)})} onNotesChange={notes=>update({...draft,notes:notes.slice(0,2000)})} trackDetails={{trackType:draft.type,trackShape:draft.shape??'custom_unknown',trackLength:draft.length??null} as TrackScanMetadata} outsidePath={draft.outside} insidePath={draft.inside} startFinishPath={draft.finish} gpsSummary={summarizeGpsAccuracy(draft.outside,draft.finish,draft.inside)} saving={busy} saveError={error||null} onSave={()=>void save()} onCancel={()=>update({...draft,review:false})} onRetake={()=>update({...draft,outside:[],inside:[],finish:[],corners:[],lines:[],broken:[],review:false})}/>:<>
       {!gps.running&&<button className={button} onClick={()=>gps.start()}>Enable scan GPS</button>}
       <p role="status" className="text-sm">GPS accuracy: {gps.fix?.accuracy!=null?`±${Math.round(gps.fix.accuracy)} m`:'Waiting for a fix'} · {capturing?`Capturing ${capturing} path`:'Boundary capture paused'}</p>
       <p className="text-sm text-slate-600">{gps.wake}</p>
-      <div className="flex flex-wrap gap-3">{(['outside','inside','finish'] as PathKind[]).map(k=><button key={k} className={button} disabled={!gps.running||!!capturing||draft.broken.includes(k)} onClick={()=>{update({...draft,recordingPath:k});path.current=k;setCapturing(k);setGpsGap(false);}}>{draft[k].length?'Continue':'Capture'} {k==='finish'?'start/finish':k} ({draft[k].length})</button>)}
-        {capturing&&<button className={button} onClick={()=>{path.current=null;setCapturing(null);update({...draft,recordingPath:null});}}>Pause boundary capture</button>}
-      </div>
+      <TrackScanRecorder stage={capturing==='outside'?'outside_recording':capturing==='finish'?'start_finish_recording':capturing==='inside'?'inside_recording':'outside_ready'}
+        outsidePath={draft.outside} startFinishPath={draft.finish} insidePath={draft.inside} currentPoint={gps.state==='active'?gps.fix:null}
+        elapsedSeconds={capturing&&draft[capturing].length?Math.max(0,Math.round((Date.now()-Date.parse(draft[capturing][0].timestamp))/1000)):0}
+        gpsError={gps.error||error||null} isPaused={!!capturing&&!path.current} isWatching={gps.state==='active'}
+        trackDetails={{trackType:draft.type,trackShape:draft.shape??'custom_unknown',trackLength:draft.length??null} as TrackScanMetadata}
+        wakeLockMessage={gps.wake} wakeLockStatus={gps.wake.includes('active')?'active':'unavailable'}
+        onCancel={()=>{path.current=null;setCapturing(null);gps.stop();update({...draft,recordingPath:null});}}
+        onStartOutside={()=>beginBoundary('outside')} onEndOutside={()=>endBoundary('outside','finish')}
+        onEndStartFinish={()=>endBoundary('finish','inside')} onEndInside={()=>endBoundary('inside',null)}
+        onTogglePause={()=>{if(path.current){path.current=null;update({...draft,recordingPath:null});}else if(capturing)beginBoundary(capturing);}}/>
+      <details className="text-sm"><summary>Resume or inspect individual captured boundaries</summary><div className="flex flex-wrap gap-2">{(['outside','finish','inside'] as PathKind[]).map(k=><button key={k} className={button} disabled={!!capturing||draft.broken.includes(k)} onClick={()=>beginBoundary(k)}>Continue {k} capture</button>)}</div></details>
       {(gpsGap||!capturing)&&<details className="text-sm"><summary className="cursor-pointer py-2">Restart an incomplete boundary</summary><div className="flex flex-wrap gap-3">{(['outside','inside','finish'] as PathKind[]).map(k=><button key={k} className={button} onClick={()=>update({...draft,[k]:[],broken:draft.broken.filter(x=>x!==k),recordingPath:null,...(k==='outside'?{corners:[],lines:[]}: {})})}>Clear {k} capture</button>)}</div></details>}
-      <fieldset className="space-y-2 rounded-xl border p-3"><legend className="font-semibold">Corner definitions</legend><p className="text-sm">Mark each corner's range as percentages of distance along the outside capture, starting from its first point. Apex positions use your recorded geometry.</p><div className="grid grid-cols-3 gap-2">{(['start','apex','end'] as const).map(k=><label key={k} className="text-sm">{k} %<input type="number" min="0" max="100" step="0.1" className="mt-1 w-full rounded-lg border p-2" value={cornerRange[k]} onChange={e=>setCornerRange({...cornerRange,[k]:e.target.value})}/></label>)}</div><button className={button} disabled={!draft.outside.length||draft.corners.length>=40} onClick={addCorner}>Add corner</button><ul className="text-sm">{draft.corners.map((c,i)=><li key={i}>Corner {c.cornerNumber}: {(c.startProgress*100).toFixed(1)}–{(c.endProgress*100).toFixed(1)}% <button className="underline" onClick={()=>update({...draft,corners:draft.corners.filter((_,n)=>n!==i).map((x,n)=>({...x,cornerNumber:n+1}))})}>Remove</button></li>)}</ul></fieldset>
+      <details><summary className="py-2 text-sm">Optional boundary-based marker capture</summary><fieldset className="space-y-2 rounded-xl border p-3"><legend className="font-semibold">Corner definitions</legend><p className="text-sm">Mark each corner's range as percentages of distance along the outside capture, starting from its first point. Apex positions use your recorded geometry.</p><div className="grid grid-cols-3 gap-2">{(['start','apex','end'] as const).map(k=><label key={k} className="text-sm">{k} %<input type="number" min="0" max="100" step="0.1" className="mt-1 w-full rounded-lg border p-2" value={cornerRange[k]} onChange={e=>setCornerRange({...cornerRange,[k]:e.target.value})}/></label>)}</div><button className={button} disabled={!draft.outside.length||draft.corners.length>=40} onClick={addCorner}>Add corner</button><ul className="text-sm">{draft.corners.map((c,i)=><li key={i}>Corner {c.cornerNumber}: {(c.startProgress*100).toFixed(1)}–{(c.endProgress*100).toFixed(1)}% <button className="underline" onClick={()=>update({...draft,corners:draft.corners.filter((_,n)=>n!==i).map((x,n)=>({...x,cornerNumber:n+1}))})}>Remove</button></li>)}</ul></fieldset>
       <fieldset className="space-y-2 rounded-xl border p-3"><legend className="font-semibold">Sector gates (optional, up to 5 sectors)</legend><p className="text-sm">For each gate, capture one endpoint, walk across the timing line, then capture the other. With no gates, the full lap is one sector.</p><label className="block text-sm">Progress along circuit %<input type="number" min="1" max="99" className="ml-2 w-24 rounded-lg border p-2" value={sectorProgress} onChange={e=>setSectorProgress(e.target.value)}/></label><div className="flex flex-wrap gap-3"><button className={button} disabled={!gps.running||draft.lines.length>=4} onClick={()=>{if(gps.fix?.accuracy!=null&&gps.fix.accuracy<=25&&Date.now()-Date.parse(gps.fix.timestamp)<=10000)setSectorA(gps.fix);else setError('Wait for a precise current GPS fix.');}}>Capture first gate endpoint{sectorA?' again':''}</button><button className={button} disabled={!sectorA||draft.lines.length>=4||!gps.running} onClick={addSector}>Capture second endpoint and add gate</button></div><p className="text-sm">{draft.lines.length+1} sectors configured</p>{draft.lines.map((l,i)=><button key={l.id} className="mr-3 text-sm underline" onClick={()=>update({...draft,lines:draft.lines.filter((_,n)=>n!==i).map((x,n)=>({...x,sectorIndex:n+1}))})}>Remove gate {i+1}</button>)}</fieldset>
-      <button className="rounded-lg bg-[#007DAE] px-4 py-3 font-semibold text-white disabled:opacity-50" disabled={busy||!!capturing} onClick={()=>void save()}>{busy?'Saving private scan…':'Save private circuit scan'}</button>
+      </details><button className="rounded-lg bg-[#007DAE] px-4 py-3 font-semibold text-white disabled:opacity-50" disabled={busy||!!capturing} onClick={()=>update({...draft,review:true})}>Review circuit scan</button></>}
     </>}
-    <TracePathPreview paths={[{label:'Outside',points:draft.outside,color:'#007DAE'},{label:'Inside',points:draft.inside,color:'#64748b'},{label:'Start/finish',points:draft.finish,color:'#b45309'}]}/>
+    {!draft.review&&<TrackScanPreview outsidePath={draft.outside} insidePath={draft.inside} startFinishLinePath={draft.finish} label="Circuit scan geometry" trackType={draft.type as TrackScanMetadata['trackType']} trackShape={draft.shape??'custom_unknown'}/>}
     <button className="text-sm underline" onClick={download}>Download retained scan</button>
     {(error||gps.error)&&<p role="alert" className="text-sm text-red-700">{error||gps.error}</p>}
   </section>;

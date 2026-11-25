@@ -81,7 +81,7 @@ function TrackTraceSessionLink({ userId, setupId }: { userId: string | null; set
     </DialogContent></Dialog>
     <Dialog open={reviewOpen&&access.allowed} onOpenChange={setReviewOpen}><DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto rounded-2xl">
       <DialogHeader><DialogTitle>OnlyFast Track Trace review</DialogTitle><DialogDescription>Saved telemetry for this individual setup session. Closing this view returns to your setup edits.</DialogDescription></DialogHeader>
-      {userId&&setupId&&<TrackTraceSessionReview userId={userId} revision={String(access.revision)} setupId={setupId} />}
+      {userId&&setupId&&<TrackTraceSessionReview userId={userId} revision={String(access.revision)} setupId={setupId} canModify={access.fullAccess}/>}
     </DialogContent></Dialog>
   </section>;
 }

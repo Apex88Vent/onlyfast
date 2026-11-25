@@ -5,7 +5,8 @@ import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {createClient} from '@supabase/supabase-js';
-const ref='mfzajhnfonrfuiwxgvhe',url='https://'+ref+'.supabase.co',out='tmp/track-trace-phase2d/hosted';
+const ref='mfzajhnfonrfuiwxgvhe',url='https://'+ref+'.supabase.co',out=process.env.ONLYFAST_TRACE_QA_OUTPUT||'tmp/track-trace-phase2d/hosted';
+const preview=process.env.ONLYFAST_TRACE_PREVIEW||'http://127.0.0.1:4196';assert(new URL(preview).hostname==='127.0.0.1');
 await mkdir(out,{recursive:true});
 const key=process.env.VITE_ONLYFAST_2027_SUPABASE_PUBLISHABLE_KEY;assert(/^sb_publishable_/.test(key||''));
 const credentials=JSON.parse(await readFile(process.env.ONLYFAST_2027_CREDENTIALS,'utf8'));assert.equal(credentials.projectRef,ref);
@@ -48,18 +49,32 @@ try{
           Object.defineProperty(navigator,'geolocation',{configurable:true,value:{getCurrentPosition(success){success(fix({lat:35,lng:-118,accuracy:4,altitude:null,speed:null,heading:null,timestamp:new RealDate().toISOString()}));},watchPosition(success,error){const id=next++;watches.set(id,{success,error});return id;},clearWatch(id){watches.delete(id);}}});
           window.syntheticGpsEmit=p=>{window.__gpsTime=RealDate.parse(p.timestamp);for(const w of watches.values())w.success(fix(p));};
           window.syntheticGpsError=code=>{for(const w of watches.values())w.error({code,message:'Synthetic permission/timeout test'});};
+          window.syntheticMotion=()=>window.dispatchEvent(new DeviceMotionEvent('devicemotion',{acceleration:{x:1,y:2,z:3},rotationRate:{alpha:.1,beta:.2,gamma:.3},interval:16}));
           window.syntheticWatchCount=()=>watches.size;
         },{storageKey:'onlyfast-2027-'+ref+'-auth',session:actor.session});
         const page=await context.newPage(),errors=[],external=[];
         page.on('response',async response=>{if(response.url()===url+'/rest/v1/rpc/complete_track_trace_recording'&&!response.ok())await writeFile(out+'/completion-error.json',await response.text());});
         page.on('pageerror',e=>errors.push(e.message));
         page.on('request',r=>{const address=r.url(),host=new URL(address).hostname;if(host.includes('thpyjvwtfvfxiufchrxn')||/revenuecat|googlesyndication|doubleclick/.test(host))external.push(address);});
-        await page.goto('http://127.0.0.1:4194/track-trace?view=start&prepare=unlinked'+(free?'':'&track='+state.map));await settle(page);
+        await page.goto(preview+'/track-trace?view=start&prepare=unlinked'+(free?'':'&track='+state.map));await settle(page);
         const name='QA synthetic GPS '+actor.tier+' '+(free?'Free Record':'shared circuit')+' '+state.tag;
         await page.getByLabel('Session name',{exact:true}).fill(name);
         const [response]=await Promise.all([page.waitForResponse(r=>r.url()===url+'/rest/v1/rpc/create_track_trace_session'),page.getByRole('button',{name:'Save circuit session',exact:true}).click()]);
         const id=await response.json();assert.equal(typeof id,'string');createdSessions.push({actor,id});
+        if(free)await page.getByRole('button',{name:'Left side of phone points toward front of car',exact:true}).click();
         await page.getByRole('button',{name:'Arm and start GPS',exact:true}).click();await page.waitForFunction(()=>window.syntheticWatchCount()===1);
+        await page.evaluate(()=>window.syntheticGpsError(3));await page.getByRole('heading',{name:'Session Armed',exact:true}).waitFor();assert.equal(await page.getByRole('heading',{name:'Session Live',exact:true}).count(),0);
+        checks.push(actor.tier+': a failed GPS watch never produces Session Live before any fix');
+        await page.getByRole('button',{name:'End Session',exact:true}).click();
+        const emptyForm=page.getByRole('form',{name:'Confirm end session'});
+        await emptyForm.getByLabel('Four-digit confirmation').fill(await emptyForm.locator('strong').innerText());
+        await emptyForm.getByRole('button',{name:'Confirm end and save',exact:true}).click();
+        await page.getByRole('alert').filter({hasText:'No GPS recording was captured'}).waitFor();
+        assert.equal((await rpc(actor.client,'get_track_trace_session',{p_session_id:id})).session.ended_at,null);
+        assert.equal(await page.evaluate(()=>window.syntheticWatchCount()),0);
+        await page.getByRole('button',{name:'Resume GPS',exact:true}).click();await page.waitForFunction(()=>window.syntheticWatchCount()===1);
+        checks.push(actor.tier+': zero-fix completion blocked; session remains resumable without a false saved recording');
+        await page.getByRole('button',{name:'Enable motion sensors',exact:true}).click();
         let offline=true,loseResponse=true;
         await page.route(url+'/rest/v1/rpc/append_track_trace_samples',async route=>{
           if(offline)return route.abort('internetdisconnected');
@@ -67,7 +82,12 @@ try{
           return route.continue();
         });
         const started=Date.now();
-        for(let i=0;i<64;i++){const theta=(i-.5)*Math.PI/10;await page.evaluate(p=>window.syntheticGpsEmit(p),point(35+Math.sin(theta)*.001,-118+Math.cos(theta)*.001,started+i*1000));}
+        for(let i=0;i<64;i++){const theta=(i-.5)*Math.PI/10;await page.evaluate(p=>{window.syntheticMotion();window.syntheticGpsEmit(p);},point(35+Math.sin(theta)*.001,-118+Math.cos(theta)*.001,started+i*1000));}
+        await page.getByRole('heading',{name:'Session Live',exact:true}).waitFor();await page.getByRole('img',{name:'Live track trace',exact:true}).waitFor();
+        await page.getByText('55.9',{exact:true}).first().waitFor();
+        await page.waitForFunction(()=>[...document.querySelectorAll('p')].some(p=>p.textContent?.startsWith('Session Time: ')&&!p.textContent.endsWith('00:00')));
+        assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Live recording fits this viewport');
+        await page.screenshot({path:out+'/live-'+actor.tier+'-'+width+'-'+(free?'free':'circuit')+'.png',fullPage:true});
         await page.getByText(/64 GPS samples/).waitFor();
         await page.getByText(/Upload pending/).waitFor();
         assert.equal((await rpc(actor.client,'get_track_trace_samples',{p_session_id:id})).length,0);
@@ -80,43 +100,48 @@ try{
           await page.reload();await settle(page);await page.getByText(/64 GPS samples/).waitFor();assert.equal(await page.evaluate(()=>window.syntheticWatchCount()),0);
           checks.push('Server recovery restores original recording after the local journal is removed (synthetic browser context only)');
           await page.getByRole('button',{name:'Resume GPS',exact:true}).click();await page.waitForFunction(()=>window.syntheticWatchCount()===1);
+          await page.getByRole('button',{name:'Enable motion sensors',exact:true}).click();await page.getByText('Motion enabled · phone orientation: left forward.',{exact:true}).waitFor();
+          assert.equal((await rpc(actor.client,'get_track_trace_samples',{p_session_id:id}))[0].phoneMountOrientation,'left_forward');
           await page.evaluate(time=>{window.__gpsTime=time;},started+64000);checks.push('Free Record recovery after reload retains all GPS samples, resumes only by user action, no automatic laps');
         }
-        await page.getByRole('button',{name:'End and save session',exact:true}).click();
+        await page.getByRole('button',{name:/^End (Session|and save session)$/}).click();
         const form=page.getByRole('form',{name:'Confirm end session'}),code=await form.locator('strong').innerText();
         assert(await form.getByRole('button',{name:'Confirm end and save',exact:true}).isDisabled());
         await form.getByLabel('Four-digit confirmation').fill(code);
         await form.getByRole('button',{name:'Confirm end and save',exact:true}).click();
         try{await page.getByRole('region',{name:'Session review'}).waitFor();}catch(cause){await page.screenshot({path:out+'/failure.png',fullPage:true});await writeFile(out+'/failure.txt',await page.locator('body').innerText());throw cause;}
-        await page.getByRole('img',{name:'Recorded GPS geometry preview'}).waitFor();
+        await page.getByRole('img',{name:free?'Session GPS Trace':'Selected lap track replay',exact:true}).waitFor();
         const detail=await rpc(actor.client,'get_track_trace_session',{p_session_id:id});
-        assert(detail.session.ended_at);assert.equal(detail.session.track_map_id,free?null:state.map);assert.equal(detail.laps.length,free?0:3);assert.equal(detail.sectors.length,free?0:6);
+        if(!free){await page.getByRole('button',{name:'Play replay',exact:true}).click();await page.getByRole('button',{name:'Pause replay',exact:true}).click();await page.getByRole('switch',{name:'Compare Laps',exact:true}).click();await page.getByLabel('Comparison lap',{exact:true}).selectOption(detail.laps[1].id);}
+        assert(detail.session.ended_at);assert.equal(detail.session.track_map_id,free?null:state.map);assert.equal(detail.laps.length,free?0:3);assert.equal(detail.sectors.length,free?0:3*detail.session.device_info.track_trace_recording.track.sectors.sectorCount);
+        if(!free&&detail.session.device_info.track_trace_recording.track.sectors.sectorCount===2)assert(detail.sectors.every(s=>s.is_valid&&s.duration_ms===10000),'Original synthetic circuit has six valid measured 10-second sectors');
         assert.equal(await page.evaluate(()=>window.syntheticWatchCount()),0);
         assert((await factory.client.rpc('get_track_trace_samples',{p_session_id:pro===actor?id:createdSessions[0].id})).error);
         assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
         await page.screenshot({path:out+'/'+actor.tier+'-'+width+'-'+(free?'free':'circuit')+'.png',fullPage:true});
         checks.push(actor.tier+': deliberate confirmation → atomic completion → saved GPS/lap/sector review with watcher cleanup');
         if(free){
-          await page.goto('http://127.0.0.1:4194/track-trace?view=scan');await settle(page);
+          await page.goto(preview+'/track-trace?view=scan');await settle(page);
           const scanner=page.getByRole('region',{name:'Circuit scanner'});
           await scanner.getByLabel('Track name',{exact:true}).fill('QA browser scan '+state.tag);
           await scanner.getByLabel('Location',{exact:true}).fill('Synthetic browser circuit');
+          await scanner.getByLabel('Track Shape',{exact:true}).selectOption('paperclip_oval');await scanner.getByLabel('Track Length',{exact:true}).selectOption('1/4 mile');await scanner.getByRole('button',{name:'Continue to GPS Scan',exact:true}).click();
           await scanner.getByRole('button',{name:'Enable scan GPS',exact:true}).click();await page.waitForFunction(()=>window.syntheticWatchCount()===1);
           let scanTime=Date.now();
-          for(const [kind,path] of [['outside',ring()],['inside',ring(.0001)],['start/finish',[point(35,-117.9994),point(35,-117.9986)]]]){
-            await scanner.getByRole('button',{name:new RegExp('^Capture '+kind+' \\(0\\)')}).click();
+          await scanner.getByRole('button',{name:'Start Outside Trace',exact:true}).click();
+          for(const [kind,path,end] of [['outside',ring(),'End Outside Lap'],['start/finish',[point(35,-117.9994),point(35,-117.9986)],'End Start/Finish Line'],['inside',ring(.0001),'End Inside Lap']]){
             for(const p of path){scanTime+=1000;await page.evaluate(p=>window.syntheticGpsEmit(p),{...p,timestamp:new Date(scanTime).toISOString()});}
-            await scanner.getByRole('button',{name:'Pause boundary capture',exact:true}).click();
+            await scanner.getByRole('button',{name:end,exact:true}).click();
           }
-          await scanner.getByLabel('start %',{exact:true}).fill('10');await scanner.getByLabel('apex %',{exact:true}).fill('25');await scanner.getByLabel('end %',{exact:true}).fill('40');await scanner.getByRole('button',{name:'Add corner',exact:true}).click();
-          const [saveResponse]=await Promise.all([page.waitForResponse(r=>r.url()===url+'/rest/v1/rpc/save_track_trace_scan'),scanner.getByRole('button',{name:'Save private circuit scan',exact:true}).click()]);
+          await scanner.getByLabel('Notes',{exact:true}).fill('Synthetic scan notes retained');
+          const [saveResponse]=await Promise.all([page.waitForResponse(r=>r.url()===url+'/rest/v1/rpc/save_track_trace_scan_details'),scanner.getByRole('button',{name:'Save Track',exact:true}).click()]);
           const saveResult=await saveResponse.json();assert(saveResult.saved,JSON.stringify(saveResult));createdMaps.push({actor,id:saveResult.id});
           await scanner.getByText(/Private scan saved/).waitFor();
           const saved=(await rpc(actor.client,'search_track_trace_tracks',{p_search:'QA browser scan '+state.tag,p_scope:'mine'})).find(t=>t.id===saveResult.id);
-          assert(saved);assert.equal(saved.publication_status,'private');assert.equal(saved.corner_definitions.corners.length,1);assert.equal(saved.outside_path.length,5);assert.equal(saved.inside_path.length,5);assert.equal(saved.start_finish_path.length,2);
+          assert(saved);assert.equal(saved.publication_status,'private');assert.equal(saved.corner_definitions.corners.length,0);const full=await rpc(actor.client,'get_track_trace_edit_map',{p_track_id:saveResult.id});assert.equal(full.track_shape,'paperclip_oval');assert.equal(full.track_length,'1/4 mile');assert.equal(full.notes,'Synthetic scan notes retained');assert.equal(saved.outside_path.length,5);assert.equal(saved.inside_path.length,5);assert.equal(saved.start_finish_path.length,2);
           await scanner.locator('summary').filter({hasText:'Submit'}).click();await scanner.getByLabel('Layout name',{exact:true}).fill('Synthetic browser layout');await scanner.getByRole('button',{name:'Submit for review',exact:true}).click();await scanner.getByText(/Submitted for review/).waitFor();
-          await page.screenshot({path:out+'/private-scan-390.png',fullPage:true});checks.push('390 px browser scanner captures real GPS callbacks, closed boundaries, finish line, manual corner, private save and moderation submission (synthetic input)');
-          await scanner.getByRole('button',{name:'Start another scan',exact:true}).click();await scanner.getByRole('button',{name:'Enable scan GPS',exact:true}).click();await page.evaluate(()=>window.syntheticGpsError(1));await scanner.getByRole('alert').filter({hasText:'permission denied'}).waitFor();assert.equal(await page.evaluate(()=>window.syntheticWatchCount()),0);checks.push('Permission denial stops GPS and leaves retained scan data available');
+          await page.screenshot({path:out+'/private-scan-390.png',fullPage:true});checks.push('390 px browser scanner captures real GPS callbacks, closed boundaries, finish line, original metadata/review, private save and moderation submission (synthetic input)');
+          await scanner.getByRole('button',{name:'Start another scan',exact:true}).click();await scanner.getByLabel('Track name',{exact:true}).fill('QA denied scan');await scanner.getByLabel('Location',{exact:true}).fill('Synthetic');await scanner.getByRole('button',{name:'Continue to GPS Scan',exact:true}).click();await scanner.getByRole('button',{name:'Enable scan GPS',exact:true}).click();await page.evaluate(()=>window.syntheticGpsError(1));await scanner.getByRole('alert').filter({hasText:'permission denied'}).waitFor();assert.equal(await page.evaluate(()=>window.syntheticWatchCount()),0);checks.push('Permission denial stops GPS and leaves retained scan data available');
         }
         await context.close();
       }

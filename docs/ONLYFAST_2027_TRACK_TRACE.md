@@ -1,6 +1,11 @@
 # OnlyFast Track Trace foundation
 
-Current implementation: [Phase 2D live circuit recording and scanning](ONLYFAST_2027_TRACK_TRACE_PHASE2D.md).
+Current corrective update: [OnlyLaps circuit parity, GPS status and historical telemetry](ONLYFAST_2027_TRACK_TRACE_PARITY.md).
+Original recording/review/replay and graphical timing-marker components now run
+inside the existing integration. The report distinguishes verified compatibility
+from remaining device/provider/cleanup dependencies. No production release is implied.
+
+Previous implementation: [Phase 2D live circuit recording and scanning](ONLYFAST_2027_TRACK_TRACE_PHASE2D.md).
 The testing route records actual GPS, saves/reviews circuit laps and captures
 private scans using the existing catalog. BETA remains; physical device testing
 and unscanned automatic lap timing are outstanding. Older phase status below is
